@@ -1,1 +1,91 @@
 @import "tailwindcss";
+
+[dir="rtl"] {
+  font-family: 'Cairo', 'Tajawal', 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+[dir="rtl"] h1,
+[dir="rtl"] h2,
+[dir="rtl"] h3,
+[dir="rtl"] h4,
+[dir="rtl"] h5,
+[dir="rtl"] h6,
+[dir="rtl"] .font-serif {
+  font-family: 'Cairo', 'Tajawal', system-ui, sans-serif;
+}
+
+/* Rich Text Content Formatting Styles */
+.rich-text-content h1 {
+  font-size: 1.75rem;
+  line-height: 2.25rem;
+  font-weight: 700;
+  margin-top: 1.25rem;
+  margin-bottom: 0.75rem;
+  color: #1A3326;
+}
+
+.rich-text-content h2 {
+  font-size: 1.35rem;
+  line-height: 1.85rem;
+  font-weight: 700;
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+  color: #213C2D;
+}
+
+.rich-text-content h3 {
+  font-size: 1.15rem;
+  line-height: 1.6rem;
+  font-weight: 600;
+  margin-top: 0.85rem;
+  margin-bottom: 0.4rem;
+  color: #284736;
+}
+
+.rich-text-content p {
+  margin-bottom: 0.85rem;
+  line-height: 1.75;
+}
+
+.rich-text-content ul {
+  list-style-type: disc;
+  padding-inline-start: 1.5rem;
+  margin-top: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.rich-text-content ol {
+  list-style-type: decimal;
+  padding-inline-start: 1.5rem;
+  margin-top: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.rich-text-content li {
+  margin-bottom: 0.35rem;
+  line-height: 1.6;
+}
+
+.rich-text-content blockquote {
+  border-inline-start: 4px solid #284939;
+  padding-inline-start: 1rem;
+  font-style: italic;
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+  color: #3C5044;
+  background-color: #F6F3ED;
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+  border-radius: 0.375rem;
+}
+
+.rich-text-content b,
+.rich-text-content strong {
+  font-weight: 700;
+  color: #162B20;
+}
+
+.rich-text-content u {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}

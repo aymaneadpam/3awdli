@@ -1,4 +1,9 @@
-import { UserAccount } from '../types';
+import { UserAccount, Gender } from '../types';
+import { 
+  saveUserToFirestore, 
+  fetchUsersFromFirestore, 
+  subscribeToUsers 
+} from '../lib/firestoreService';
 
 export interface StoredUser extends UserAccount {
   password?: string;
@@ -7,7 +12,89 @@ export interface StoredUser extends UserAccount {
 const USERS_STORAGE_KEY = '3awdli_users';
 const CURRENT_USER_STORAGE_KEY = '3awdli_current_user';
 
-export const ADMIN_EMAIL = 'aymaneoumlala@gmail.com';
+export const ADMIN_EMAIL = 'aymane.habbo@gmail.com';
+export const LEGACY_ADMIN_EMAIL = 'aymaneoumlala@gmail.com';
+
+/**
+ * Super Admin Permission Checker
+ * The dedicated super-account: aymane.habbo@gmail.com / aymaneoumlala@gmail.com (role: 'admin')
+ * Has ultimate authority across the platform, including the unique capability
+ * to grant and revoke the Administrator role to/from any registered member.
+ */
+export function isSuperAdmin(user?: UserAccount | null): boolean {
+  if (!user) return false;
+  const email = user.email?.toLowerCase();
+  return (
+    email === ADMIN_EMAIL.toLowerCase() ||
+    email === LEGACY_ADMIN_EMAIL.toLowerCase() ||
+    user.role === 'admin'
+  );
+}
+
+// Global alias for the single super-admin account checker
+export const isAdmin = isSuperAdmin;
+
+/**
+ * Administrator Permission Checker
+ * Evaluates whether a user has full Administrator privileges (assignable role,
+ * previously known as Founder) or is the super Admin account.
+ * Administrators have full authority over The Lounge (articles, sessions, queue, hidden archive)
+ * and can manage member roles (assigning Head of Listeners, Listener, Expert Facilitator).
+ * Note: Administrators CANNOT grant or revoke the Administrator role (only Admin can).
+ */
+export function isAdministrator(user?: UserAccount | null): boolean {
+  if (!user) return false;
+  if (isSuperAdmin(user)) return true;
+  return (
+    user.role === 'administrator' ||
+    Boolean(user.is_administrator) ||
+    Boolean(user.is_founder)
+  );
+}
+
+// Backward-compatible alias for previous Founder references
+export const isFounder = isAdministrator;
+
+/**
+ * Expert Facilitator Permission Checker for The Lounge
+ * A user with the "Expert Facilitator" role (role: 'facilitator' / 'host', is_facilitator: true, is_host: true),
+ * the site Administrator / Admin, or the article author can write, edit, delete articles, open/close the queue,
+ * call participants, and manage the lounge room.
+ */
+export function isExpertFacilitator(
+  user?: UserAccount | null, 
+  article?: { authorId?: string } | null
+): boolean {
+  if (!user) return false;
+  if (
+    user.role === 'facilitator' ||
+    user.role === 'host' ||
+    Boolean(user.is_facilitator) ||
+    Boolean(user.is_host)
+  ) {
+    return true;
+  }
+  if (isAdministrator(user)) return true;
+  if (article && article.authorId === user.id) return true;
+  return false;
+}
+
+// Backward-compatible alias for existing imports
+export const isLoungeHost = isExpertFacilitator;
+
+/**
+ * Writer Permission Checker for Teen Space
+ * Users with the "Writer" role, the site Administrator, or the Admin super-account
+ * can create, edit, delete, and republish Teen Space articles.
+ */
+export function isWriter(user?: UserAccount | null): boolean {
+  if (!user) return false;
+  if (isAdministrator(user)) return true;
+  return (
+    user.role === 'writer' ||
+    Boolean(user.is_writer)
+  );
+}
 
 // Generate a random one-time secure listener badge key
 export function generateOneTimeListenerKey(): string {
@@ -17,7 +104,7 @@ export function generateOneTimeListenerKey(): string {
   return `3AW-LISTEN-${segment1}-${segment2}`;
 }
 
-// Initial sample users so the admin has users to browse, search, and manage
+// Initial platform users: verified team members (no fake sample discussions)
 const DEFAULT_INITIAL_USERS: StoredUser[] = [
   {
     id: 'user_admin_01',
@@ -26,82 +113,57 @@ const DEFAULT_INITIAL_USERS: StoredUser[] = [
     password: 'adminpassword',
     createdAt: 'Sep 1, 2026',
     role: 'admin',
+    is_founder: true,
+    is_administrator: true,
+    is_facilitator: true,
+    is_host: true,
     gender: 'Male',
-    profession: 'Platform Director & Administrator',
+    profession: 'Platform Director & Admin',
   },
   {
-    id: 'user_sample_02',
-    name: 'Salma Benali',
-    email: 'salma.benali@example.com',
-    password: 'password123',
-    createdAt: 'Sep 2, 2026',
-    role: 'user',
-    gender: 'Female',
-  },
-  {
-    id: 'user_sample_03',
-    name: 'Dr. Youssef El Alami',
-    email: 'dr.youssef@example.com',
-    password: 'password123',
-    createdAt: 'Sep 3, 2026',
+    id: 'team_listener_amina',
+    name: 'Dr. Amina Mansouri',
+    email: 'amina.mansouri@3awdli.org',
+    password: 'listenerpassword',
+    createdAt: 'Sep 1, 2026',
     role: 'listener',
     is_listener: true,
     isListener: true,
     is_head_of_listeners: true,
-    profession: 'Clinical Psychologist & Consultant',
-    gender: 'Male',
-    listener_granted_at: 'Sep 3, 2026',
-    listener_key_code: '3AW-LISTEN-7X4K-9M2Q',
+    gender: 'Female',
+    profession: 'Clinical Psychologist & Supervisor',
   },
   {
-    id: 'user_sample_06',
-    name: 'Dr. Amina Mansouri',
-    email: 'dr.amina@example.com',
-    password: 'password123',
-    createdAt: 'Sep 3, 2026',
+    id: 'team_listener_youssef',
+    name: 'Youssef Benali',
+    email: 'youssef.benali@3awdli.org',
+    password: 'listenerpassword',
+    createdAt: 'Sep 2, 2026',
     role: 'listener',
     is_listener: true,
     isListener: true,
     is_head_of_listeners: false,
-    profession: 'Cognitive Behavioral Specialist',
-    gender: 'Female',
-    listener_granted_at: 'Sep 3, 2026',
-    listener_key_code: '3AW-LISTEN-4B8T-1X9M',
-  },
-  {
-    id: 'user_sample_07',
-    name: 'Mehdi Benjelloun',
-    email: 'mehdi.b@example.com',
-    password: 'password123',
-    createdAt: 'Sep 4, 2026',
-    role: 'listener',
-    is_listener: true,
-    isListener: true,
-    is_head_of_listeners: false,
-    profession: 'Mental Health Peer Counselor',
     gender: 'Male',
-    listener_granted_at: 'Sep 4, 2026',
-    listener_key_code: '3AW-LISTEN-9L3K-5N7V',
+    profession: 'Psychological Support Counselor',
   },
-  {
-    id: 'user_sample_04',
-    name: 'Nadia Cherkaoui',
-    email: 'nadia.cherkaoui@example.com',
-    password: 'password123',
-    createdAt: 'Sep 4, 2026',
-    role: 'user',
-    gender: 'Female',
-  },
-  {
-    id: 'user_sample_05',
-    name: 'Karim Tazi',
-    email: 'karim.tazi@example.com',
-    password: 'password123',
-    createdAt: 'Sep 5, 2026',
-    role: 'user',
-    gender: 'Male',
-  }
 ];
+
+const SAMPLE_USER_EMAILS = new Set([
+  'salma.benali@example.com',
+  'dr.youssef@example.com',
+  'nadia.cherkaoui@example.com',
+  'karim.tazi@example.com',
+  'dr.amina@example.com',
+  'mehdi.b@example.com',
+  'sofia.berrada@example.com',
+]);
+
+export function isFakeUser(u: Partial<StoredUser> | null | undefined): boolean {
+  if (!u) return true;
+  if (u.id && (u.id.startsWith('user_sample_') || u.id === 'listener_other_leila')) return true;
+  if (u.email && SAMPLE_USER_EMAILS.has(u.email.trim().toLowerCase())) return true;
+  return false;
+}
 
 export function getStoredUsers(): StoredUser[] {
   try {
@@ -110,12 +172,15 @@ export function getStoredUsers(): StoredUser[] {
       localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(DEFAULT_INITIAL_USERS));
       return DEFAULT_INITIAL_USERS;
     }
-    const users: StoredUser[] = JSON.parse(raw);
+    const rawUsers: StoredUser[] = JSON.parse(raw);
+    if (!Array.isArray(rawUsers)) return DEFAULT_INITIAL_USERS;
+
+    // Filter out any demo / test users from localStorage
+    const users = rawUsers.filter((u) => !isFakeUser(u));
     
-    // Ensure admin email always has admin role and listeners have key codes & gender
-    let hasUpdated = false;
+    let hasUpdated = users.length !== rawUsers.length;
     
-    // Check if new initial listeners need to be merged into stored users
+    // Check if initial admin needs to be merged into stored users
     for (const initU of DEFAULT_INITIAL_USERS) {
       if (!users.some(u => u.id === initU.id || u.email.toLowerCase() === initU.email.toLowerCase())) {
         users.push(initU);
@@ -127,9 +192,13 @@ export function getStoredUsers(): StoredUser[] {
       let updatedUser = { ...u };
       const isAdminByEmail = u.email.toLowerCase() === ADMIN_EMAIL.toLowerCase();
       const isFirstAccount = idx === 0;
-      if ((isAdminByEmail || isFirstAccount) && updatedUser.role !== 'admin') {
-        hasUpdated = true;
-        updatedUser.role = 'admin';
+      if (isAdminByEmail || isFirstAccount) {
+        if (updatedUser.role !== 'admin' || !updatedUser.is_founder || !updatedUser.is_administrator) {
+          hasUpdated = true;
+          updatedUser.role = 'admin';
+          updatedUser.is_founder = true;
+          updatedUser.is_administrator = true;
+        }
       }
 
       const isListener = updatedUser.is_listener || updatedUser.isListener || updatedUser.role === 'listener';
@@ -161,12 +230,76 @@ export function getStoredUsers(): StoredUser[] {
   }
 }
 
-export function saveStoredUsers(users: StoredUser[]): void {
+export function saveStoredUsers(users: StoredUser[], changedUser?: StoredUser): void {
   try {
-    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
+    const cleanUsers = users.filter((u) => !isFakeUser(u));
+    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(cleanUsers));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('3awdli_users_updated'));
+    }
+    // Only persist single changed user to prevent quota exhaustion
+    if (changedUser && !isFakeUser(changedUser)) {
+      saveUserToFirestore(changedUser).catch((e) => console.warn('Firestore single user save notice:', e));
+    }
   } catch (err) {
     console.error('Failed to save users:', err);
   }
+}
+
+let isUsersSyncInitialized = false;
+
+// Initialize real-time Firestore sync for users
+export function initFirestoreUsersSync(): () => void {
+  if (isUsersSyncInitialized) {
+    return () => {};
+  }
+  isUsersSyncInitialized = true;
+
+  // 1. Initial population from Firestore
+  fetchUsersFromFirestore()
+    .then((remoteUsers) => {
+      if (remoteUsers && remoteUsers.length > 0) {
+        const cleanRemote = remoteUsers.filter((u) => !isFakeUser(u));
+        const localUsers = getStoredUsers();
+        const mergedMap = new Map<string, StoredUser>();
+        localUsers.forEach((u) => mergedMap.set(u.id, u));
+        cleanRemote.forEach((u) => {
+          const existing = mergedMap.get(u.id);
+          mergedMap.set(u.id, { ...existing, ...u });
+        });
+        const merged = Array.from(mergedMap.values());
+        localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(merged));
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('3awdli_users_updated'));
+        }
+      }
+    })
+    .catch((err) => {
+      console.warn('Initial Firestore user fetch notice:', err);
+    });
+
+  // 2. Real-time Firestore subscription
+  const unsubscribeFirestore = subscribeToUsers((remoteUsers) => {
+    if (!remoteUsers) return;
+    const cleanRemote = remoteUsers.filter((u) => !isFakeUser(u));
+    const localUsers = getStoredUsers();
+    const mergedMap = new Map<string, StoredUser>();
+    localUsers.forEach((u) => mergedMap.set(u.id, u));
+    cleanRemote.forEach((u) => {
+      const existing = mergedMap.get(u.id);
+      mergedMap.set(u.id, { ...existing, ...u });
+    });
+    const merged = Array.from(mergedMap.values());
+    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(merged));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('3awdli_users_updated'));
+    }
+  });
+
+  return () => {
+    isUsersSyncInitialized = false;
+    unsubscribeFirestore();
+  };
 }
 
 export function getCurrentUser(): UserAccount | null {
@@ -179,19 +312,34 @@ export function getCurrentUser(): UserAccount | null {
     const stored = getStoredUsers();
     const matched = stored.find(u => u.id === user.id || u.email.toLowerCase() === user.email.toLowerCase());
     if (matched) {
+      // If user account has been banned, immediately terminate session
+      if (matched.is_banned) {
+        localStorage.removeItem(CURRENT_USER_STORAGE_KEY);
+        return null;
+      }
+
       const refreshed: UserAccount = {
         id: matched.id,
         name: matched.name,
         email: matched.email,
         createdAt: matched.createdAt,
         role: matched.role,
+        is_administrator: matched.is_administrator || (matched.role === 'admin' || matched.role === 'administrator'),
+        is_founder: matched.is_founder,
+        is_facilitator: matched.is_facilitator,
+        is_host: matched.is_host,
         is_listener: matched.is_listener,
         isListener: matched.isListener || matched.is_listener,
         is_head_of_listeners: matched.is_head_of_listeners,
+        is_writer: matched.is_writer || matched.role === 'writer',
         profession: matched.profession,
         gender: matched.gender,
         listener_granted_at: matched.listener_granted_at,
         listener_key_code: matched.listener_key_code,
+        is_banned: matched.is_banned,
+        bannedAt: matched.bannedAt,
+        banReason: matched.banReason,
+        bannedBy: matched.bannedBy,
       };
       localStorage.setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify(refreshed));
       return refreshed;
@@ -244,7 +392,7 @@ export function grantListenerBadge(
   };
 
   users[index] = updated;
-  saveStoredUsers(users);
+  saveStoredUsers(users, updated);
 
   // If this happens to be the currently logged-in user, refresh their session
   const current = getCurrentUser();
@@ -290,7 +438,7 @@ export function updateListenerProfession(
   };
 
   users[index] = updated;
-  saveStoredUsers(users);
+  saveStoredUsers(users, updated);
 
   const current = getCurrentUser();
   if (current && current.id === userId) {
@@ -314,7 +462,7 @@ export function toggleHeadOfListeners(userId: string, isHead: boolean): UserAcco
   };
 
   users[index] = updated;
-  saveStoredUsers(users);
+  saveStoredUsers(users, updated);
 
   const current = getCurrentUser();
   if (current && current.id === userId) {
@@ -334,16 +482,20 @@ export function revokeListenerBadge(userId: string): UserAccount {
 
   const updated: StoredUser = {
     ...users[index],
-    role: users[index].role === 'admin' ? 'admin' : 'user',
+    role: users[index].role === 'admin' 
+      ? 'admin' 
+      : (users[index].is_administrator || users[index].role === 'administrator' 
+          ? 'administrator' 
+          : (users[index].is_facilitator ? 'facilitator' : 'user')),
     is_listener: false,
     isListener: false,
     is_head_of_listeners: false,
-    profession: undefined,
+    profession: users[index].is_administrator ? users[index].profession : undefined,
     listener_key_code: undefined,
   };
 
   users[index] = updated;
-  saveStoredUsers(users);
+  saveStoredUsers(users, updated);
 
   const current = getCurrentUser();
   if (current && current.id === userId) {
@@ -351,6 +503,294 @@ export function revokeListenerBadge(userId: string): UserAccount {
   }
 
   return updated;
+}
+
+// Assign Expert Facilitator role to a user
+export function assignExpertFacilitatorRole(userId: string, customProfession?: string): UserAccount {
+  const users = getStoredUsers();
+  const index = users.findIndex(u => u.id === userId);
+  if (index === -1) {
+    throw new Error('User not found');
+  }
+
+  const user = users[index];
+  const updated: StoredUser = {
+    ...user,
+    role: user.role === 'admin' ? 'admin' : (user.is_listener ? 'listener' : 'facilitator'),
+    is_facilitator: true,
+    is_host: true,
+    ...(customProfession && customProfession.trim() ? { profession: customProfession.trim() } : {}),
+  };
+
+  users[index] = updated;
+  saveStoredUsers(users, updated);
+
+  const current = getCurrentUser();
+  if (current && current.id === userId) {
+    setCurrentUser(updated);
+  }
+
+  return updated;
+}
+
+// Revoke Expert Facilitator role from a user
+export function revokeExpertFacilitatorRole(userId: string): UserAccount {
+  const users = getStoredUsers();
+  const index = users.findIndex(u => u.id === userId);
+  if (index === -1) {
+    throw new Error('User not found');
+  }
+
+  const user = users[index];
+  const updated: StoredUser = {
+    ...user,
+    role: user.role === 'admin' 
+      ? 'admin' 
+      : (user.is_administrator || user.role === 'administrator' 
+          ? 'administrator' 
+          : (user.is_listener ? 'listener' : 'user')),
+    is_facilitator: false,
+    is_host: false,
+  };
+
+  users[index] = updated;
+  saveStoredUsers(users, updated);
+
+  const current = getCurrentUser();
+  if (current && current.id === userId) {
+    setCurrentUser(updated);
+  }
+
+  return updated;
+}
+
+/**
+ * Assign Administrator role (Admin super-account only)
+ * Grants full administrative management privileges (The Lounge + member role assignment)
+ */
+export function assignAdministratorRole(userId: string, profession?: string): StoredUser {
+  const users = getStoredUsers();
+  const index = users.findIndex(u => u.id === userId);
+  if (index === -1) {
+    throw new Error('User not found');
+  }
+
+  const user = users[index];
+  const updated: StoredUser = {
+    ...user,
+    role: user.role === 'admin' ? 'admin' : 'administrator',
+    is_administrator: true,
+    is_founder: true, // preserve compatibility
+    profession: profession?.trim() || user.profession || 'Platform Administrator',
+  };
+
+  users[index] = updated;
+  saveStoredUsers(users, updated);
+
+  const current = getCurrentUser();
+  if (current && current.id === userId) {
+    setCurrentUser(updated);
+  }
+
+  return updated;
+}
+
+/**
+ * Revoke Administrator role (Admin super-account only)
+ */
+export function revokeAdministratorRole(userId: string): StoredUser {
+  const users = getStoredUsers();
+  const index = users.findIndex(u => u.id === userId);
+  if (index === -1) {
+    throw new Error('User not found');
+  }
+
+  const user = users[index];
+  // Protect super-admin account from losing administrative privileges
+  if (user.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
+    return user;
+  }
+
+  const updated: StoredUser = {
+    ...user,
+    role: user.is_listener ? 'listener' : (user.is_facilitator ? 'facilitator' : 'user'),
+    is_administrator: false,
+    is_founder: false,
+  };
+
+  users[index] = updated;
+  saveStoredUsers(users, updated);
+
+  const current = getCurrentUser();
+  if (current && current.id === userId) {
+    setCurrentUser(updated);
+  }
+
+  return updated;
+}
+
+/**
+ * Assign Writer role (Member Management & Administrator authority)
+ * Grants authoring, editing, deleting and republishing privileges for Teen Space
+ */
+export function assignWriterRole(userId: string, customProfession?: string): StoredUser {
+  const users = getStoredUsers();
+  const index = users.findIndex(u => u.id === userId);
+  if (index === -1) {
+    throw new Error('User not found');
+  }
+
+  const user = users[index];
+  const updated: StoredUser = {
+    ...user,
+    role: user.role === 'admin' ? 'admin' : (user.is_administrator ? 'administrator' : 'writer'),
+    is_writer: true,
+    profession: customProfession?.trim() || user.profession || 'Psychologist',
+  };
+
+  users[index] = updated;
+  saveStoredUsers(users, updated);
+
+  const current = getCurrentUser();
+  if (current && current.id === userId) {
+    setCurrentUser(updated);
+  }
+
+  return updated;
+}
+
+/**
+ * Revoke Writer role from a user
+ */
+export function revokeWriterRole(userId: string): StoredUser {
+  const users = getStoredUsers();
+  const index = users.findIndex(u => u.id === userId);
+  if (index === -1) {
+    throw new Error('User not found');
+  }
+
+  const user = users[index];
+  const updated: StoredUser = {
+    ...user,
+    role: user.role === 'admin' 
+      ? 'admin' 
+      : (user.is_administrator || user.role === 'administrator' 
+          ? 'administrator' 
+          : (user.is_listener ? 'listener' : (user.is_facilitator ? 'facilitator' : 'user'))),
+    is_writer: false,
+  };
+
+  users[index] = updated;
+  saveStoredUsers(users, updated);
+
+  const current = getCurrentUser();
+  if (current && current.id === userId) {
+    setCurrentUser(updated);
+  }
+
+  return updated;
+}
+
+export type AssignableUnifiedRole = 'administrator' | 'head_of_listeners' | 'listener' | 'facilitator' | 'writer' | 'member';
+
+export interface AssignRoleResult {
+  updatedUser: UserAccount;
+  oneTimeKey?: string;
+}
+
+// Unified role assignment engine for Administrator / Admin
+export function assignRoleToUser(
+  userId: string,
+  targetRole: AssignableUnifiedRole,
+  profession?: string,
+  gender?: Gender
+): AssignRoleResult {
+  const users = getStoredUsers();
+  const index = users.findIndex(u => u.id === userId);
+  if (index === -1) {
+    throw new Error('User not found');
+  }
+
+  const existing = users[index];
+
+  if (targetRole === 'administrator') {
+    // Administrator role: gives full editorial & role assignment authority (assignable by super Admin)
+    const updated = assignAdministratorRole(
+      userId,
+      profession?.trim() || existing.profession || 'Platform Administrator'
+    );
+    if (gender) {
+      updateListenerProfession(userId, updated.profession || 'Platform Administrator', gender);
+    }
+    return {
+      updatedUser: updated,
+    };
+  }
+
+  if (targetRole === 'head_of_listeners') {
+    // Grants listener badge with head of listeners = true
+    const res = grantListenerBadge(
+      userId, 
+      profession?.trim() || existing.profession || 'Clinical Psychologist & Consultant',
+      true, 
+      gender || existing.gender || 'Male'
+    );
+    return {
+      updatedUser: res.updatedUser,
+      oneTimeKey: res.oneTimeKey,
+    };
+  }
+
+  if (targetRole === 'listener') {
+    // Grants listener badge with head of listeners = false
+    const res = grantListenerBadge(
+      userId, 
+      profession?.trim() || existing.profession || 'Psychologist',
+      false, 
+      gender || existing.gender || 'Male'
+    );
+    return {
+      updatedUser: res.updatedUser,
+      oneTimeKey: res.oneTimeKey,
+    };
+  }
+
+  if (targetRole === 'facilitator') {
+    // Expert Facilitator role: gives full editorial, scheduling, queue & circle control in The Lounge
+    const updated = assignExpertFacilitatorRole(
+      userId, 
+      profession?.trim() || existing.profession || 'Expert Facilitator'
+    );
+    if (gender) {
+      updateListenerProfession(userId, updated.profession || 'Expert Facilitator', gender);
+    }
+    return {
+      updatedUser: updated,
+    };
+  }
+
+  if (targetRole === 'writer') {
+    // Writer role: gives authoring & article management in Teen Space
+    const updated = assignWriterRole(
+      userId,
+      profession?.trim() || existing.profession || 'Psychologist'
+    );
+    if (gender) {
+      updateListenerProfession(userId, updated.profession || 'Psychologist', gender);
+    }
+    return {
+      updatedUser: updated,
+    };
+  }
+
+  // Regular Member: reset all elevated roles
+  revokeListenerBadge(userId);
+  revokeExpertFacilitatorRole(userId);
+  revokeWriterRole(userId);
+  const finalMember = revokeAdministratorRole(userId);
+  return {
+    updatedUser: finalMember,
+  };
 }
 
 // Retrieve a listener's personal key code
@@ -396,7 +836,7 @@ export function updateUserPassword(email: string, newPassword: string): { succes
     }
 
     users[userIndex].password = newPassword;
-    saveStoredUsers(users);
+    saveStoredUsers(users, users[userIndex]);
 
     return { 
       success: true, 
@@ -410,3 +850,223 @@ export function updateUserPassword(email: string, newPassword: string): { succes
     };
   }
 }
+
+/**
+ * Permanently disable a registered user's account (Administrative Ban).
+ * Prevents login going forward and immediately terminates active sessions.
+ */
+export function banUserAccount(
+  userId: string, 
+  reason?: string, 
+  customMessage?: string, 
+  adminUser?: UserAccount
+): { success: boolean; user?: StoredUser; error?: string } {
+  try {
+    const users = getStoredUsers();
+    const index = users.findIndex(u => u.id === userId);
+    if (index === -1) {
+      return { success: false, error: 'User account not found.' };
+    }
+
+    const targetUser = users[index];
+    if (isSuperAdmin(targetUser)) {
+      return { success: false, error: 'The platform super-administrator cannot be banned.' };
+    }
+
+    const now = new Date();
+    const formattedDate = now.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+
+    const banNote = customMessage?.trim() || reason?.trim() || 'Permanent administrative moderation sanction.';
+
+    const updatedUser: StoredUser = {
+      ...targetUser,
+      is_banned: true,
+      bannedAt: formattedDate,
+      banReason: banNote,
+      bannedBy: adminUser?.name || 'Platform Administrator',
+    };
+
+    users[index] = updatedUser;
+    saveStoredUsers(users, updatedUser);
+
+    // If currently logged in as this user, invalidate session immediately
+    const current = getCurrentUser();
+    if (current && (current.id === userId || current.email.toLowerCase() === targetUser.email.toLowerCase())) {
+      setCurrentUser(null);
+    }
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('3awdli_user_banned', { detail: { userId, user: updatedUser } }));
+      window.dispatchEvent(new CustomEvent('3awdli_users_updated', { detail: { users } }));
+    }
+
+    return { success: true, user: updatedUser };
+  } catch (err) {
+    console.error('Failed to ban user account:', err);
+    return { success: false, error: 'An unexpected error occurred while applying account ban.' };
+  }
+}
+
+/**
+ * Remove ban from user account (recovery / appeal).
+ */
+export function unbanUserAccount(userId: string): { success: boolean; user?: StoredUser; error?: string } {
+  try {
+    const users = getStoredUsers();
+    const index = users.findIndex(u => u.id === userId);
+    if (index === -1) {
+      return { success: false, error: 'User account not found.' };
+    }
+
+    const targetUser = users[index];
+    const updatedUser: StoredUser = {
+      ...targetUser,
+      is_banned: false,
+      bannedAt: undefined,
+      banReason: undefined,
+      bannedBy: undefined,
+    };
+
+    users[index] = updatedUser;
+    saveStoredUsers(users, updatedUser);
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('3awdli_users_updated', { detail: { users } }));
+    }
+
+    return { success: true, user: updatedUser };
+  } catch (err) {
+    console.error('Failed to unban user account:', err);
+    return { success: false, error: 'Failed to lift account ban.' };
+  }
+}
+
+/**
+ * Check if a user ID or email is currently banned.
+ */
+export function isUserAccountBanned(userIdOrEmail: string): boolean {
+  if (!userIdOrEmail) return false;
+  const users = getStoredUsers();
+  const cleanTarget = userIdOrEmail.trim().toLowerCase();
+  const found = users.find(u => u.id === userIdOrEmail || u.email.toLowerCase() === cleanTarget);
+  return Boolean(found?.is_banned);
+}
+
+/**
+ * Record and increment an official warning count for a registered member.
+ */
+export function recordUserWarning(
+  userIdOrEmail: string,
+  reason?: string,
+  adminUser?: UserAccount
+): { success: boolean; user?: StoredUser; count: number; error?: string } {
+  try {
+    if (!userIdOrEmail) {
+      return { success: false, count: 0, error: 'User identifier required.' };
+    }
+
+    const users = getStoredUsers();
+    const cleanTarget = userIdOrEmail.trim().toLowerCase();
+    const index = users.findIndex(
+      u => u.id === userIdOrEmail || u.email.toLowerCase() === cleanTarget
+    );
+
+    if (index === -1) {
+      return { success: false, count: 0, error: 'User account not found.' };
+    }
+
+    const targetUser = users[index];
+    const currentCount = Number(targetUser.warning_count || targetUser.warningsCount || 0);
+    const newCount = currentCount + 1;
+
+    const updatedUser: StoredUser = {
+      ...targetUser,
+      warning_count: newCount,
+      warningsCount: newCount,
+    };
+
+    users[index] = updatedUser;
+    saveStoredUsers(users, updatedUser);
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('3awdli_user_warned', {
+          detail: {
+            userId: targetUser.id,
+            count: newCount,
+            user: updatedUser,
+            reason,
+            admin: adminUser?.name || 'Administrator',
+          },
+        })
+      );
+      window.dispatchEvent(new CustomEvent('3awdli_users_updated', { detail: { users } }));
+    }
+
+    return { success: true, user: updatedUser, count: newCount };
+  } catch (err) {
+    console.error('Failed to record user warning:', err);
+    return { success: false, count: 0, error: 'Failed to record warning.' };
+  }
+}
+
+/**
+ * Get the total cumulative warning count for a user.
+ */
+export function getUserWarningCount(userOrIdOrEmail?: UserAccount | StoredUser | string | null): number {
+  if (!userOrIdOrEmail) return 0;
+
+  if (typeof userOrIdOrEmail === 'object') {
+    const directCount = Number(userOrIdOrEmail.warning_count || userOrIdOrEmail.warningsCount || 0);
+    if (directCount > 0) return directCount;
+
+    // Cross-check stored users in case user object was stale
+    const users = getStoredUsers();
+    const targetEmail = userOrIdOrEmail.email?.toLowerCase();
+    const found = users.find(u => u.id === userOrIdOrEmail.id || (targetEmail && u.email.toLowerCase() === targetEmail));
+    return Number(found?.warning_count || found?.warningsCount || 0);
+  }
+
+  const cleanTarget = String(userOrIdOrEmail).trim().toLowerCase();
+  const users = getStoredUsers();
+  const found = users.find(u => u.id === userOrIdOrEmail || u.email.toLowerCase() === cleanTarget);
+  return Number(found?.warning_count || found?.warningsCount || 0);
+}
+
+/**
+ * Reset warning count for a user (e.g. administrator pardoning).
+ */
+export function resetUserWarningCount(userId: string): { success: boolean; user?: StoredUser; error?: string } {
+  try {
+    const users = getStoredUsers();
+    const index = users.findIndex(u => u.id === userId);
+    if (index === -1) {
+      return { success: false, error: 'User account not found.' };
+    }
+
+    const targetUser = users[index];
+    const updatedUser: StoredUser = {
+      ...targetUser,
+      warning_count: 0,
+      warningsCount: 0,
+    };
+
+    users[index] = updatedUser;
+    saveStoredUsers(users, updatedUser);
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('3awdli_users_updated', { detail: { users } }));
+    }
+
+    return { success: true, user: updatedUser };
+  } catch (err) {
+    console.error('Failed to reset user warning count:', err);
+    return { success: false, error: 'Failed to reset warning count.' };
+  }
+}
+
+

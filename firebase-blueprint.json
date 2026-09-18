@@ -1,0 +1,159 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "User accounts, listeners, and administrators",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["user", "listener", "admin", "administrator", "facilitator", "host"] },
+        "is_administrator": { "type": "boolean" },
+        "is_listener": { "type": "boolean" },
+        "is_head_of_listeners": { "type": "boolean" },
+        "is_facilitator": { "type": "boolean" },
+        "is_host": { "type": "boolean" },
+        "profession": { "type": "string" },
+        "gender": { "type": "string", "enum": ["Male", "Female"] },
+        "listener_key_code": { "type": "string" },
+        "listener_granted_at": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "name", "email", "role"]
+    },
+    "Discussion": {
+      "title": "Discussion Conversation",
+      "description": "Confidential support sessions, chat messages, and listener assignments",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string", "enum": ["anonymous", "registered"] },
+        "userName": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "userId": { "type": "string" },
+        "startedAt": { "type": "string" },
+        "startedAtTimestamp": { "type": "number" },
+        "status": { "type": "string", "enum": ["unopened", "active", "closed"] },
+        "genderPreference": { "type": "string", "enum": ["any", "male", "female"] },
+        "primaryListenerId": { "type": "string" },
+        "participants": { "type": "array" },
+        "excludedListeners": { "type": "array" },
+        "messages": { "type": "array" },
+        "closedAt": { "type": "string" },
+        "closedBy": { "type": "string" },
+        "updatedAtTimestamp": { "type": "number" }
+      },
+      "required": ["id", "type", "userName", "status", "messages"]
+    },
+    "ShareRequest": {
+      "title": "Conversation Share Request",
+      "description": "Peer listener case consultations and transfer requests",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "discussionId": { "type": "string" },
+        "discussionTitle": { "type": "string" },
+        "fromListenerId": { "type": "string" },
+        "fromListenerName": { "type": "string" },
+        "toUserId": { "type": "string" },
+        "toUserName": { "type": "string" },
+        "subject": { "type": "string" },
+        "description": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "accepted", "declined"] },
+        "createdAt": { "type": "string" },
+        "createdAtTimestamp": { "type": "number" }
+      },
+      "required": ["id", "discussionId", "fromListenerId", "toUserId", "status"]
+    },
+    "SupportRequest": {
+      "title": "Customer Support Request",
+      "description": "Website feedback, technical inquiries, and support tickets for site admins",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "subject": { "type": "string" },
+        "message": { "type": "string" },
+        "email": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "createdAtTimestamp": { "type": "number" },
+        "status": { "type": "string", "enum": ["new", "in_progress", "resolved", "archived"] },
+        "resolvedAt": { "type": "string" },
+        "adminNotes": { "type": "string" }
+      },
+      "required": ["id", "subject", "message", "email", "status"]
+    },
+    "LoungeArticle": {
+      "title": "Lounge Article",
+      "description": "Founder-written articles and scheduled live lounge sessions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "scheduledOpening": { "type": "string" },
+        "scheduledOpeningTimestamp": { "type": "number" },
+        "authorId": { "type": "string" },
+        "authorName": { "type": "string" },
+        "authorEmail": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "createdAtTimestamp": { "type": "number" },
+        "updatedAt": { "type": "string" },
+        "updatedAtTimestamp": { "type": "number" },
+        "is_hidden": { "type": "boolean" },
+        "hiddenAt": { "type": "string" },
+        "hiddenAtTimestamp": { "type": "number" },
+        "hiddenBy": { "type": "string" }
+      },
+      "required": ["id", "title", "content", "scheduledOpening", "scheduledOpeningTimestamp", "authorId", "authorName"]
+    },
+    "TeenSpaceArticle": {
+      "title": "Teen Space Article",
+      "description": "Safe, curated articles, guides, and emotional wellbeing resources for youth",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "category": { "type": "string" },
+        "authorId": { "type": "string" },
+        "authorName": { "type": "string" },
+        "authorEmail": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "createdAtTimestamp": { "type": "number" },
+        "updatedAt": { "type": "string" },
+        "updatedAtTimestamp": { "type": "number" },
+        "is_hidden": { "type": "boolean" }
+      },
+      "required": ["id", "title", "content", "category", "authorId", "authorName"]
+    }
+  },
+  "firestore": {
+    "users": {
+      "entity": "UserProfile",
+      "description": "Registered users, volunteer listeners, and administrators"
+    },
+    "discussions": {
+      "entity": "Discussion",
+      "description": "Live listening conversations, chat messages, and participants"
+    },
+    "share_requests": {
+      "entity": "ShareRequest",
+      "description": "Consultation and handover requests between listeners"
+    },
+    "support_requests": {
+      "entity": "SupportRequest",
+      "description": "Inquiries, bug reports, and user feedback sent to administrators"
+    },
+    "lounge_articles": {
+      "entity": "LoungeArticle",
+      "description": "Reflective articles written by the Founder with scheduled live lounge sessions"
+    },
+    "teen_space_articles": {
+      "entity": "TeenSpaceArticle",
+      "description": "Educational articles, coping strategies, and guides for youth"
+    }
+  }
+}

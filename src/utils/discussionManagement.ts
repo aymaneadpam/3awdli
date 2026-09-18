@@ -4,238 +4,251 @@ import {
   ListenerGenderPreference,
   DiscussionParticipant,
   DiscussionExcludedListener,
-  UserAccount
+  UserAccount,
+  DiscussionReport
 } from '../types';
-import { verifyListenerKeyCode, getStoredUsers } from './userManagement';
+import { Language } from './translations';
+import { verifyListenerKeyCode, getStoredUsers, StoredUser } from './userManagement';
+import { getShareRequestsForDiscussion, getStoredShareRequests } from './shareManagement';
+import {
+  saveDiscussionToFirestore,
+  fetchDiscussionsFromFirestore,
+  subscribeToDiscussions
+} from '../lib/firestoreService';
 
 const DISCUSSIONS_STORAGE_KEY = '3awdli_discussions';
 
-const SEED_DISCUSSIONS: DiscussionConversation[] = [
-  {
-    id: 'disc_anon_101',
-    type: 'anonymous',
-    userName: 'Anonymous Visitor #101',
-    startedAt: '18 minutes ago',
-    startedAtTimestamp: Date.now() - 18 * 60 * 1000,
-    status: 'unopened',
-    genderPreference: 'female',
-    messages: [
-      {
-        id: 'msg_anon_01_sys',
-        sender: 'system',
-        text: 'Confidential Session Started. Start talking, a team member will immediately join you.',
-        timestamp: '11:42 AM',
-      },
-      {
-        id: 'msg_anon_01_usr',
-        sender: 'user',
-        text: "I've been carrying immense pressure regarding university graduation and family expectations. I haven't slept properly in three nights and don't know who to speak to safely.",
-        timestamp: '11:43 AM',
-      },
-      {
-        id: 'msg_anon_01_tm',
-        sender: 'team',
-        senderName: 'Listening Team',
-        text: "We hear you, and we're here with you. Take all the time you need to express what you're experiencing.",
-        timestamp: '11:44 AM',
-      },
-    ],
-  },
-  {
-    id: 'disc_reg_102',
-    type: 'registered',
-    userName: 'Nadia Cherkaoui',
-    userEmail: 'nadia.cherkaoui@example.com',
-    userId: 'user_sample_04',
-    startedAt: '45 minutes ago',
-    startedAtTimestamp: Date.now() - 45 * 60 * 1000,
-    status: 'unopened',
-    genderPreference: 'male',
-    messages: [
-      {
-        id: 'msg_reg_02_sys',
-        sender: 'system',
-        text: 'Confidential Member Session Started. Identity protected according to 3awdli ethics.',
-        timestamp: '11:15 AM',
-      },
-      {
-        id: 'msg_reg_02_usr',
-        sender: 'user',
-        text: 'Salam. Over the past three weeks I have been getting severe panic spikes before leading our project standup calls at work. My heart races and I feel like I will faint.',
-        timestamp: '11:16 AM',
-      },
-    ],
-  },
-  {
-    id: 'disc_anon_103',
-    type: 'anonymous',
-    userName: 'Anonymous Visitor #103',
-    startedAt: '1 hour ago',
-    startedAtTimestamp: Date.now() - 60 * 60 * 1000,
-    status: 'unopened',
-    genderPreference: 'any',
-    messages: [
-      {
-        id: 'msg_anon_03_sys',
-        sender: 'system',
-        text: 'Confidential Session Started.',
-        timestamp: '10:58 AM',
-      },
-      {
-        id: 'msg_anon_03_usr',
-        sender: 'user',
-        text: 'I just feel terribly lonely and isolated lately. Everyone around me seems to have their lives sorted out, and I feel completely stuck.',
-        timestamp: '11:01 AM',
-      },
-    ],
-  },
-  {
-    id: 'disc_reg_104',
-    type: 'registered',
-    userName: 'Karim Tazi',
-    userEmail: 'karim.tazi@example.com',
-    userId: 'user_sample_05',
-    startedAt: '2 hours ago',
-    startedAtTimestamp: Date.now() - 120 * 60 * 1000,
-    status: 'unopened',
-    genderPreference: 'male',
-    messages: [
-      {
-        id: 'msg_reg_04_sys',
-        sender: 'system',
-        text: 'Confidential Member Session Started.',
-        timestamp: '09:55 AM',
-      },
-      {
-        id: 'msg_reg_04_usr',
-        sender: 'user',
-        text: "I recently went through a painful breakup and I'm having trouble focusing during the day. Need some perspective on how to process the grief.",
-        timestamp: '09:58 AM',
-      },
-    ],
-  },
-  {
-    id: 'disc_claimed_105',
-    type: 'anonymous',
-    userName: 'Anonymous Visitor #105',
-    startedAt: '3 hours ago',
-    startedAtTimestamp: Date.now() - 180 * 60 * 1000,
-    status: 'opened',
-    genderPreference: 'female',
-    openedByListenerId: 'listener_other_leila',
-    openedByListenerName: 'Dr. Leila Senhaji',
-    openedAt: 'Today at 09:15 AM',
-    messages: [
-      {
-        id: 'msg_claimed_05_sys',
-        sender: 'system',
-        text: 'Confidential Session Started.',
-        timestamp: '09:05 AM',
-      },
-      {
-        id: 'msg_claimed_05_usr',
-        sender: 'user',
-        text: 'Struggling with burnout and chronic fatigue from clinical shift rotations.',
-        timestamp: '09:08 AM',
-      },
-      {
-        id: 'msg_claimed_05_tm',
-        sender: 'team',
-        senderName: 'Dr. Leila Senhaji',
-        text: 'Hello. I completely understand how grueling shift work can be. Let us unpack what parts are draining your energy most right now.',
-        timestamp: '09:16 AM',
-      },
-    ],
-  },
-  {
-    id: 'disc_closed_106',
-    type: 'registered',
-    userName: 'Karim Tazi',
-    userEmail: 'karim.tazi@example.com',
-    userId: 'user_sample_05',
-    startedAt: 'Yesterday at 4:30 PM',
-    startedAtTimestamp: Date.now() - 24 * 60 * 60 * 1000,
-    status: 'closed',
-    genderPreference: 'any',
-    openedByListenerId: 'user_sample_03',
-    openedByListenerName: 'Dr. Youssef El Alami',
-    openedAt: 'Yesterday at 4:32 PM',
-    closedAt: 'Yesterday at 5:10 PM',
-    closedByListenerId: 'user_sample_03',
-    closedByListenerName: 'Dr. Youssef El Alami',
-    messages: [
-      {
-        id: 'msg_cl_01',
-        sender: 'system',
-        text: 'Confidential Member Session Started.',
-        timestamp: '04:30 PM',
-      },
-      {
-        id: 'msg_cl_02',
-        sender: 'user',
-        text: 'I felt overwhelmed by work expectations this week, but talking through step-by-step boundaries helped me calm down.',
-        timestamp: '04:35 PM',
-      },
-      {
-        id: 'msg_cl_03',
-        sender: 'team',
-        senderName: 'Dr. Youssef El Alami',
-        text: 'You handled that reflection with great honesty, Karim. Remember that rest is a prerequisite to resilience, not a reward. Reach back out anytime you need.',
-        timestamp: '05:05 PM',
-      },
-      {
-        id: 'msg_cl_04',
-        sender: 'system',
-        text: 'This conversation was ended by the listener.',
-        timestamp: '05:10 PM',
-      },
-    ],
-  },
-];
+export const INITIAL_DISCUSSION_SYSTEM_MESSAGE = "Salam, l'message dialk tsift l team. Chwia w yjawbk chi wa7d";
+
+const SEED_DISCUSSIONS: DiscussionConversation[] = [];
+
+export const FAKE_DISCUSSION_IDS = new Set([
+  'disc_anon_101',
+  'disc_anon_103',
+  'disc_claimed_105',
+  'disc_closed_106',
+  'disc_reg_102',
+  'disc_reg_104',
+  'disc_unopened_102',
+  'disc_open_102',
+  'disc_user_user_sample_02',
+  'disc_user_user_sample_06',
+  'disc_user_user_sample_07',
+  'disc_anon_live_portal',
+]);
+
+const SAMPLE_USER_EMAILS = new Set([
+  'salma.benali@example.com',
+  'dr.youssef@example.com',
+  'nadia.cherkaoui@example.com',
+  'karim.tazi@example.com',
+  'dr.amina@example.com',
+  'mehdi.b@example.com',
+  'sofia.berrada@example.com',
+]);
+
+export function isFakeDiscussion(d: Partial<DiscussionConversation> | null | undefined): boolean {
+  if (!d) return true;
+  if (d.id && FAKE_DISCUSSION_IDS.has(d.id)) return true;
+  if (d.id && d.id.startsWith('disc_sample_')) return true;
+  if (d.userId && d.userId.startsWith('user_sample_')) return true;
+  if (d.userEmail && SAMPLE_USER_EMAILS.has(d.userEmail.trim().toLowerCase())) return true;
+  if (d.userName && (
+    d.userName === 'Anonymous Visitor #101' ||
+    d.userName === 'Anonymous Visitor #102' ||
+    d.userName === 'Anonymous Visitor #103' ||
+    d.userName === 'Anonymous Visitor #105' ||
+    d.userName === 'Salma Benali' ||
+    d.userName === 'Karim Tazi' ||
+    d.userName === 'Nadia Cherkaoui'
+  )) return true;
+  return false;
+}
 
 export function getStoredDiscussions(): DiscussionConversation[] {
   try {
     const raw = localStorage.getItem(DISCUSSIONS_STORAGE_KEY);
     if (!raw) {
-      localStorage.setItem(DISCUSSIONS_STORAGE_KEY, JSON.stringify(SEED_DISCUSSIONS));
-      return SEED_DISCUSSIONS;
+      localStorage.setItem(DISCUSSIONS_STORAGE_KEY, JSON.stringify([]));
+      return [];
     }
-    const discussions: DiscussionConversation[] = JSON.parse(raw);
-    // Ensure all discussions have a valid genderPreference
-    let hasChanges = false;
-    const seedMap: Record<string, ListenerGenderPreference> = {
-      disc_anon_101: 'female',
-      disc_reg_102: 'male',
-      disc_anon_103: 'any',
-      disc_reg_104: 'male',
-      disc_claimed_105: 'female',
-      disc_closed_106: 'any',
-    };
+    const rawDiscussions: DiscussionConversation[] = JSON.parse(raw);
+    if (!Array.isArray(rawDiscussions)) return [];
+
+    // Filter out all fake / demo discussions
+    const discussions = rawDiscussions.filter((d) => !isFakeDiscussion(d));
+
+    let hasChanges = discussions.length !== rawDiscussions.length;
+
+    // Ensure all discussions have a valid genderPreference and correct registration status
+    const registeredUsers = getStoredUsers();
     discussions.forEach((d) => {
       if (!d.genderPreference) {
-        d.genderPreference = seedMap[d.id] || 'any';
+        d.genderPreference = 'any';
         hasChanges = true;
       }
+
+      // Check if discussion was created by a registered user
+      let matchedUser = d.userId ? registeredUsers.find((u) => u.id === d.userId) : null;
+      if (!matchedUser && d.userEmail) {
+        matchedUser = registeredUsers.find(
+          (u) => u.email.toLowerCase() === d.userEmail?.toLowerCase()
+        ) || null;
+      }
+      if (!matchedUser && d.id.startsWith('disc_reg_')) {
+        const parts = d.id.split('_');
+        if (parts.length >= 3) {
+          const candidateId = parts[2];
+          matchedUser = registeredUsers.find((u) => u.id === candidateId) || null;
+        }
+      }
+
+      if (matchedUser) {
+        if (d.type !== 'registered') {
+          d.type = 'registered';
+          hasChanges = true;
+        }
+        if (!d.userId) {
+          d.userId = matchedUser.id;
+          hasChanges = true;
+        }
+        if (
+          !d.userName ||
+          d.userName === 'Anonymous Visitor' ||
+          d.userName === 'Anonymous User' ||
+          d.userName === 'Visiteur Anonyme' ||
+          d.userName === 'Registered Member'
+        ) {
+          d.userName = matchedUser.name;
+          hasChanges = true;
+        }
+        if (!d.userEmail) {
+          d.userEmail = matchedUser.email;
+          hasChanges = true;
+        }
+      }
     });
+
     if (hasChanges) {
       localStorage.setItem(DISCUSSIONS_STORAGE_KEY, JSON.stringify(discussions));
     }
     return discussions;
   } catch (err) {
     console.error('Failed to parse discussions:', err);
-    return SEED_DISCUSSIONS;
+    return [];
   }
 }
 
-export function saveStoredDiscussions(discussions: DiscussionConversation[]): void {
+export function saveStoredDiscussions(
+  discussions: DiscussionConversation[],
+  changedDiscussion?: DiscussionConversation
+): void {
   try {
-    localStorage.setItem(DISCUSSIONS_STORAGE_KEY, JSON.stringify(discussions));
+    const cleanDiscussions = discussions.filter((d) => !isFakeDiscussion(d));
+    localStorage.setItem(DISCUSSIONS_STORAGE_KEY, JSON.stringify(cleanDiscussions));
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('3awdli_discussion_sync', { detail: { timestamp: Date.now() } }));
+    }
+    // Only persist single changed discussion to Firestore to prevent quota exhaustion
+    if (changedDiscussion && !isFakeDiscussion(changedDiscussion)) {
+      saveDiscussionToFirestore(changedDiscussion).catch((e) =>
+        console.warn('Firestore single discussion save notice:', e)
+      );
     }
   } catch (err) {
     console.error('Failed to save discussions:', err);
   }
+}
+
+// Helper to safely merge remote discussions from Firestore with local discussions
+function reconcileDiscussionsWithLocal(
+  remoteDiscussions: DiscussionConversation[],
+  localDiscussions: DiscussionConversation[]
+): DiscussionConversation[] {
+  const cleanRemote = remoteDiscussions.filter((d) => !isFakeDiscussion(d));
+  const mergedMap = new Map<string, DiscussionConversation>();
+
+  for (const r of cleanRemote) {
+    mergedMap.set(r.id, { ...r });
+  }
+
+  const now = Date.now();
+  for (const l of localDiscussions) {
+    if (isFakeDiscussion(l)) continue;
+    const remote = mergedMap.get(l.id);
+    if (!remote) {
+      // Pending local discussion created in last 30s not yet in Firestore
+      if (l.startedAtTimestamp && now - l.startedAtTimestamp < 30000) {
+        mergedMap.set(l.id, l);
+      }
+    } else {
+      // If locally closed, prevent remote from un-closing it unless explicitly reopened
+      if (l.status === 'closed') {
+        if (!remote.reopenedAt || remote.status !== 'opened') {
+          remote.status = 'closed';
+          remote.closedAt = l.closedAt || remote.closedAt;
+          remote.closedByRole = l.closedByRole || remote.closedByRole;
+          remote.closedByListenerId = l.closedByListenerId || remote.closedByListenerId;
+          remote.closedByListenerName = l.closedByListenerName || remote.closedByListenerName;
+          remote.closedByUserId = l.closedByUserId || remote.closedByUserId;
+          remote.closedByUserName = l.closedByUserName || remote.closedByUserName;
+        }
+      }
+      if ((l.messages?.length || 0) > (remote.messages?.length || 0)) {
+        remote.messages = l.messages;
+      }
+    }
+  }
+
+  return Array.from(mergedMap.values());
+}
+
+let isDiscussionsSyncInitialized = false;
+
+// Initialize real-time Firestore sync for discussions
+export function initFirestoreDiscussionsSync(): () => void {
+  if (isDiscussionsSyncInitialized) {
+    return () => {};
+  }
+  isDiscussionsSyncInitialized = true;
+
+  // 1. Initial population from Firestore
+  fetchDiscussionsFromFirestore()
+    .then((remoteDiscussions) => {
+      if (remoteDiscussions) {
+        const local = getStoredDiscussions();
+        const merged = reconcileDiscussionsWithLocal(remoteDiscussions, local);
+        localStorage.setItem(DISCUSSIONS_STORAGE_KEY, JSON.stringify(merged));
+        clearActiveDiscussionReferences();
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('3awdli_discussion_sync', { detail: { timestamp: Date.now() } }));
+        }
+      }
+    })
+    .catch((err) => {
+      console.warn('Initial Firestore discussions fetch notice:', err);
+    });
+
+  // 2. Real-time Firestore subscription
+  const unsubscribeFirestore = subscribeToDiscussions((remoteDiscussions) => {
+    if (!remoteDiscussions) return;
+    const local = getStoredDiscussions();
+    const merged = reconcileDiscussionsWithLocal(remoteDiscussions, local);
+    const currentRaw = localStorage.getItem(DISCUSSIONS_STORAGE_KEY) || '[]';
+    const mergedRaw = JSON.stringify(merged);
+    if (currentRaw !== mergedRaw) {
+      localStorage.setItem(DISCUSSIONS_STORAGE_KEY, mergedRaw);
+      clearActiveDiscussionReferences();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('3awdli_discussion_sync', { detail: { timestamp: Date.now() } }));
+      }
+    }
+  });
+
+  return () => {
+    isDiscussionsSyncInitialized = false;
+    unsubscribeFirestore();
+  };
 }
 
 // Get single discussion by ID
@@ -248,6 +261,99 @@ export function getDiscussionById(discussionId: string): DiscussionConversation 
 export function getUnopenedDiscussions(): DiscussionConversation[] {
   const all = getStoredDiscussions();
   return all.filter((d) => d.status === 'unopened');
+}
+
+// Live waiting discussions count helper for listeners and administrators
+export function getWaitingDiscussionsCount(): number {
+  return getUnopenedDiscussions().length;
+}
+
+export interface DiscussionCreatorInfo {
+  isRegistered: boolean;
+  name: string;
+  userId?: string;
+  userEmail?: string;
+}
+
+// Universal resolver to get discussion creator info and name
+export function getDiscussionCreatorInfo(
+  disc: DiscussionConversation,
+  language: Language = 'en'
+): DiscussionCreatorInfo {
+  const users = getStoredUsers();
+
+  // Try finding user by disc.userId
+  let registeredUser = disc.userId ? users.find((u) => u.id === disc.userId) : null;
+
+  // Try finding user by disc.userEmail
+  if (!registeredUser && disc.userEmail) {
+    registeredUser = users.find(
+      (u) => u.email.toLowerCase() === disc.userEmail?.toLowerCase()
+    ) || null;
+  }
+
+  // Try checking if disc.id has a userId embedded: e.g. disc_reg_<userId>_...
+  if (!registeredUser && disc.id.startsWith('disc_reg_')) {
+    const parts = disc.id.split('_');
+    if (parts.length >= 3) {
+      const candidateId = parts[2];
+      registeredUser = users.find((u) => u.id === candidateId) || null;
+    }
+  }
+
+  const isGenericAnon =
+    !disc.userName ||
+    disc.userName.toLowerCase() === 'anonymous visitor' ||
+    disc.userName.toLowerCase() === 'anonymous user' ||
+    disc.userName.toLowerCase() === 'visiteur anonyme' ||
+    disc.userName.toLowerCase() === 'utilisateur anonyme' ||
+    disc.userName.toLowerCase() === 'anonymous' ||
+    disc.userName.toLowerCase() === 'anonyme';
+
+  // If found in registered users list, this user is definitely registered!
+  if (registeredUser) {
+    return {
+      isRegistered: true,
+      name: registeredUser.name || (disc.userName && !isGenericAnon ? disc.userName : (language === 'fr' ? 'Membre Inscrit' : language === 'ar' ? 'عضو مسجل' : 'Registered Member')),
+      userId: registeredUser.id,
+      userEmail: registeredUser.email,
+    };
+  }
+
+  // Check if disc.type is explicitly 'registered' or if disc has userId/userEmail or a non-generic userName
+  if (disc.type === 'registered' || Boolean(disc.userId) || (Boolean(disc.userName) && !isGenericAnon)) {
+    if (disc.userName && !isGenericAnon) {
+      return {
+        isRegistered: true,
+        name: disc.userName,
+        userId: disc.userId,
+        userEmail: disc.userEmail,
+      };
+    }
+
+    if (disc.userEmail) {
+      return {
+        isRegistered: true,
+        name: disc.userEmail.split('@')[0],
+        userId: disc.userId,
+        userEmail: disc.userEmail,
+      };
+    }
+
+    if (disc.type === 'registered') {
+      return {
+        isRegistered: true,
+        name: language === 'fr' ? 'Membre Inscrit' : language === 'ar' ? 'عضو مسجل' : 'Registered Member',
+        userId: disc.userId,
+      };
+    }
+  }
+
+  // Genuine anonymous visitor who started chat without an account
+  return {
+    isRegistered: false,
+    name: language === 'fr' ? 'Utilisateur Anonyme' : language === 'ar' ? 'مستخدم مجهول الهوية' : 'Anonymous User',
+  };
 }
 
 // Get active conversations claimed by a specific listener
@@ -287,9 +393,23 @@ export function updateListenerAttention(
   const index = all.findIndex((d) => d.id === discussionId);
   if (index === -1) return;
 
+  // If status did not change, ignore to avoid re-triggering loops
+  if (all[index].listenerAttentionStatus === status) {
+    return;
+  }
+
   all[index].listenerAttentionStatus = status;
   all[index].listenerAttentionTimestamp = Date.now();
-  saveStoredDiscussions(all);
+  // Attention state is ephemeral - persist locally and broadcast event without re-writing to Firestore
+  try {
+    const cleanDiscussions = all.filter((d) => !isFakeDiscussion(d));
+    localStorage.setItem(DISCUSSIONS_STORAGE_KEY, JSON.stringify(cleanDiscussions));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('3awdli_discussion_sync', { detail: { timestamp: Date.now() } }));
+    }
+  } catch (err) {
+    console.error('Failed to update attention:', err);
+  }
 }
 
 // Send a message as a listener
@@ -338,15 +458,58 @@ export function sendListenerMessage(
   disc.listenerAttentionStatus = 'reading';
   disc.listenerAttentionTimestamp = nowMs;
 
-  saveStoredDiscussions(all);
+  saveStoredDiscussions(all, disc);
   return { success: true, message: listenerMsg };
 }
 
-// Close a discussion from listener side
+// Permanently clear any active discussion reference across all storage keys
+export function clearActiveDiscussionReferences(discussionId?: string, userId?: string): void {
+  try {
+    if (typeof localStorage === 'undefined') return;
+
+    // 1. Clear anonymous pointer if matching or if no specific discussionId
+    const activeAnonId = localStorage.getItem('3awdli_active_anon_disc_id');
+    if (!discussionId || activeAnonId === discussionId) {
+      localStorage.removeItem('3awdli_active_anon_disc_id');
+    }
+
+    // 2. Clear user pointer if userId provided
+    if (userId) {
+      localStorage.removeItem(`3awdli_active_user_disc_${userId}`);
+    }
+
+    // 3. Scan all keys in localStorage for any 3awdli_active_user_disc_ that matches discussionId or points to a closed discussion
+    const all = getStoredDiscussions();
+    const closedIds = new Set(all.filter((d) => d.status === 'closed').map((d) => d.id));
+    if (discussionId) closedIds.add(discussionId);
+
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('3awdli_active_user_disc_')) {
+        const val = localStorage.getItem(key);
+        if (val && (closedIds.has(val) || val === discussionId)) {
+          keysToRemove.push(key);
+        }
+      }
+    }
+    keysToRemove.forEach((k) => localStorage.removeItem(k));
+
+    // 4. Dispatch sync event
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('3awdli_discussion_sync', { detail: { timestamp: Date.now() } }));
+    }
+  } catch (e) {
+    console.warn('Error clearing active discussion references:', e);
+  }
+}
+
+// Close a discussion from listener or user side
 export function closeDiscussion(
   discussionId: string,
-  listenerId: string,
-  listenerName: string
+  closedById: string,
+  closedByName: string,
+  closedByRole: 'listener' | 'user' = 'listener'
 ): { success: boolean; discussion?: DiscussionConversation; error?: string } {
   const all = getStoredDiscussions();
   const index = all.findIndex((d) => d.id === discussionId);
@@ -359,21 +522,135 @@ export function closeDiscussion(
 
   disc.status = 'closed';
   disc.closedAt = `Today at ${nowFormatted}`;
-  disc.closedByListenerId = listenerId;
-  disc.closedByListenerName = listenerName;
+  disc.closedByRole = closedByRole;
+  if (closedByRole === 'user') {
+    disc.closedByUserId = closedById;
+    disc.closedByUserName = closedByName;
+  } else {
+    disc.closedByListenerId = closedById;
+    disc.closedByListenerName = closedByName;
+  }
   disc.listenerAttentionStatus = null;
+
+  // Clear any active localStorage pointers permanently
+  clearActiveDiscussionReferences(discussionId, disc.userId);
 
   // Add an audit notice message to the conversation
   const closeNotice: ChatMessage = {
     id: `msg_close_${Date.now()}`,
     sender: 'system',
-    text: 'This conversation was ended by the listener.',
+    text: closedByRole === 'user'
+      ? 'This conversation was ended by the user.'
+      : 'This conversation was ended by the listener.',
     timestamp: nowFormatted,
   };
   disc.messages.push(closeNotice);
 
-  saveStoredDiscussions(all);
+  saveStoredDiscussions(all, disc);
   return { success: true, discussion: disc };
+}
+
+/**
+ * Helper to determine which listeners currently have active access to a discussion.
+ * A listener currently has active access IF:
+ * 1. They are tied to this conversation (as primary opened listener, joined listener, or takeover recipient).
+ * 2. They have NOT been excluded (e.g. via takeover handover).
+ * 3. They still hold an active listener badge/role on the platform.
+ */
+export function getActiveListenersForDiscussion(disc: DiscussionConversation): {
+  activePrimaryListener: UserAccount | null;
+  activeJoinedListener: UserAccount | null;
+  allActiveListeners: UserAccount[];
+} {
+  const users = getStoredUsers();
+
+  const isUserActiveListener = (user: UserAccount | undefined): boolean => {
+    if (!user) return false;
+    return Boolean(user.is_listener || user.isListener || user.role === 'listener');
+  };
+
+  const isListenerIdExcluded = (listenerId: string | undefined): boolean => {
+    if (!listenerId) return false;
+    return Boolean(disc.excludedListeners?.some((e) => e.listenerId === listenerId));
+  };
+
+  let activePrimary: UserAccount | null = null;
+  let activeJoined: UserAccount | null = null;
+
+  // 1. Check primary listener (disc.openedByListenerId)
+  if (disc.openedByListenerId && !isListenerIdExcluded(disc.openedByListenerId)) {
+    const user = users.find((u) => u.id === disc.openedByListenerId);
+    if (isUserActiveListener(user)) {
+      activePrimary = user!;
+    }
+  }
+
+  // 2. Check joined listener (disc.joinedListenerId)
+  if (
+    disc.joinedListenerId &&
+    disc.joinedListenerId !== disc.openedByListenerId &&
+    !isListenerIdExcluded(disc.joinedListenerId)
+  ) {
+    const user = users.find((u) => u.id === disc.joinedListenerId);
+    if (isUserActiveListener(user)) {
+      activeJoined = user!;
+    }
+  }
+
+  // 3. If primary is not active (e.g. was excluded via takeover, lost badge, or left),
+  // check if a takeover occurred that specified a new listener who currently holds access
+  if (!activePrimary) {
+    // Check disc.excludedListeners for takeover metadata (newListenerName)
+    if (disc.excludedListeners && disc.excludedListeners.length > 0) {
+      for (const ex of disc.excludedListeners) {
+        if (ex.newListenerName) {
+          const takeoverUser = users.find(
+            (u) =>
+              u.name.trim().toLowerCase() === ex.newListenerName!.trim().toLowerCase() &&
+              isUserActiveListener(u)
+          );
+          if (takeoverUser && !isListenerIdExcluded(takeoverUser.id)) {
+            activePrimary = takeoverUser;
+            break;
+          }
+        }
+      }
+    }
+
+    // Check share requests for accepted takeover
+    if (!activePrimary) {
+      try {
+        const shareRequests = getShareRequestsForDiscussion(disc.id);
+        const acceptedTakeover = shareRequests.find(
+          (r) => r.status === 'accepted' && r.responseType === 'takeover'
+        );
+        if (acceptedTakeover && acceptedTakeover.toUserId && !isListenerIdExcluded(acceptedTakeover.toUserId)) {
+          const takeoverUser = users.find((u) => u.id === acceptedTakeover.toUserId);
+          if (isUserActiveListener(takeoverUser)) {
+            activePrimary = takeoverUser!;
+          }
+        }
+      } catch {
+        // Fallback
+      }
+    }
+
+    // If still no primary, but joined listener is active, promote joined to primary
+    if (!activePrimary && activeJoined) {
+      activePrimary = activeJoined;
+      activeJoined = null;
+    }
+  }
+
+  const allActiveListeners: UserAccount[] = [];
+  if (activePrimary) allActiveListeners.push(activePrimary);
+  if (activeJoined && activeJoined.id !== activePrimary?.id) allActiveListeners.push(activeJoined);
+
+  return {
+    activePrimaryListener: activePrimary,
+    activeJoinedListener: activeJoined,
+    allActiveListeners,
+  };
 }
 
 // Reopen a discussion by a registered user sending a new message
@@ -388,53 +665,111 @@ export function reopenDiscussionByUser(
   }
 
   const disc = all[index];
-  const originalListenerId = disc.openedByListenerId;
-
-  // Verify whether the original listener still has an active listener badge/role
-  let isListenerStillAvailable = false;
-  if (originalListenerId) {
-    try {
-      const users = getStoredUsers();
-      const listenerUser = users.find((u) => u.id === originalListenerId);
-      if (listenerUser && (listenerUser.is_listener || listenerUser.isListener || listenerUser.role === 'listener')) {
-        isListenerStillAvailable = true;
-      }
-    } catch {
-      // Fallback
-      isListenerStillAvailable = Boolean(disc.openedByListenerId);
-    }
-  }
-
   const nowFormatted = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const nowMs = Date.now();
 
-  if (isListenerStillAvailable) {
-    // Route back to the exact same listener!
-    disc.status = 'opened';
-    disc.reopenedAt = `Today at ${nowFormatted}`;
-    disc.listenerUnavailable = false;
-    disc.messages.push(userMessage);
-    disc.messages.push({
-      id: `msg_reopen_sys_${Date.now()}`,
-      sender: 'system',
-      text: `Conversation resumed by member. Re-routed to your previous listener (${disc.openedByListenerName || 'Assigned Listener'}).`,
-      timestamp: nowFormatted,
-    });
-    saveStoredDiscussions(all);
-    return { success: true, discussion: disc, listenerUnavailable: false };
-  } else {
-    // Original listener is no longer available
-    disc.status = 'unopened'; // Available for team coverage
+  const userMsgWithMs: ChatMessage = {
+    ...userMessage,
+    timestampMs: userMessage.timestampMs || nowMs,
+  };
+
+  // Determine which listener(s) currently have active access
+  const { activePrimaryListener, activeJoinedListener, allActiveListeners } = getActiveListenersForDiscussion(disc);
+
+  // SCENARIO 4: No listener currently has access at all
+  // (e.g. only listener with access lost badge, left team, or was excluded with no replacement)
+  if (allActiveListeners.length === 0) {
+    disc.status = 'unopened'; // Place back into shared "Discussions" queue for any listener to pick up
+    disc.openedByListenerId = undefined;
+    disc.openedByListenerName = undefined;
+    disc.openedAt = undefined;
+    disc.joinedListenerId = undefined;
+    disc.joinedListenerName = undefined;
+    disc.joinedListenerProfession = undefined;
+    disc.joinedListenerGender = undefined;
+    disc.joinedListenerRole = undefined;
+    disc.joinedAt = undefined;
+    disc.listenerAttentionStatus = null;
     disc.listenerUnavailable = true;
-    disc.messages.push(userMessage);
+    disc.reopenedAt = `Today at ${nowFormatted}`;
+
+    disc.messages.push(userMsgWithMs);
     disc.messages.push({
-      id: `msg_unavail_sys_${Date.now()}`,
+      id: `msg_unavail_sys_${nowMs}`,
       sender: 'system',
-      text: 'Your previous listener is currently unavailable. Your message has been safely received and will be seen by the team soon.',
+      text: 'Your message has been safely received. Your previous listener is currently unavailable, and our team will follow up with you soon.',
       timestamp: nowFormatted,
+      timestampMs: nowMs,
     });
-    saveStoredDiscussions(all);
+
+    all[index] = disc;
+    saveStoredDiscussions(all, disc);
     return { success: true, discussion: disc, listenerUnavailable: true };
   }
+
+  // SCENARIO 3: A share happened and both listeners are still JOINED (no exclusion) -> route to both
+  if (activePrimaryListener && activeJoinedListener) {
+    disc.status = 'opened';
+    disc.openedByListenerId = activePrimaryListener.id;
+    disc.openedByListenerName = activePrimaryListener.name;
+    disc.joinedListenerId = activeJoinedListener.id;
+    disc.joinedListenerName = activeJoinedListener.name;
+    disc.joinedListenerProfession = activeJoinedListener.profession || 'Support Specialist';
+    disc.joinedListenerGender = activeJoinedListener.gender;
+    disc.reopenedAt = `Today at ${nowFormatted}`;
+    disc.listenerUnavailable = false;
+
+    disc.messages.push(userMsgWithMs);
+    disc.messages.push({
+      id: `msg_reopen_sys_${nowMs}`,
+      sender: 'system',
+      text: `Conversation resumed by member. Re-routed to your listeners (${activePrimaryListener.name} & ${activeJoinedListener.name}).`,
+      timestamp: nowFormatted,
+      timestampMs: nowMs,
+    });
+
+    all[index] = disc;
+    saveStoredDiscussions(all, disc);
+    return { success: true, discussion: disc, listenerUnavailable: false };
+  }
+
+  // SCENARIO 1 & 2: A single listener holds active access
+  // - Scenario 1: Original listener still holds access (no takeover / exclusion)
+  // - Scenario 2: Takeover occurred and original listener was excluded -> route to takeover listener
+  const activeListener = activePrimaryListener || allActiveListeners[0];
+  const hasExclusion = Boolean(disc.excludedListeners && disc.excludedListeners.length > 0);
+
+  disc.status = 'opened';
+  disc.openedByListenerId = activeListener.id;
+  disc.openedByListenerName = activeListener.name;
+  // Clear any inactive or obsolete joined listener
+  disc.joinedListenerId = undefined;
+  disc.joinedListenerName = undefined;
+  disc.joinedListenerProfession = undefined;
+  disc.joinedListenerGender = undefined;
+  disc.joinedListenerRole = undefined;
+  disc.joinedAt = undefined;
+
+  disc.reopenedAt = `Today at ${nowFormatted}`;
+  disc.listenerUnavailable = false;
+
+  disc.messages.push(userMsgWithMs);
+
+  const routingText = hasExclusion
+    ? `Conversation resumed by member. Re-routed to your listener (${activeListener.name}).`
+    : `Conversation resumed by member. Re-routed to your previous listener (${activeListener.name}).`;
+
+  disc.messages.push({
+    id: `msg_reopen_sys_${nowMs}`,
+    sender: 'system',
+    text: routingText,
+    timestamp: nowFormatted,
+    timestampMs: nowMs,
+  });
+
+  all[index] = disc;
+  saveStoredDiscussions(all, disc);
+  return { success: true, discussion: disc, listenerUnavailable: false };
 }
 
 // Attempt to open a discussion by verifying listener's personal key code
@@ -474,6 +809,20 @@ export function openDiscussionWithKey(
   }
 
   const nowFormatted = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const nowMs = Date.now();
+
+  const isReopenedFromUnavail = Boolean(currentDisc.listenerUnavailable);
+
+  const updatedMessages = [...currentDisc.messages];
+  if (isReopenedFromUnavail) {
+    updatedMessages.push({
+      id: `msg_pickup_${nowMs}`,
+      sender: 'system',
+      text: `${listenerName} has opened this conversation to support you.`,
+      timestamp: nowFormatted,
+      timestampMs: nowMs,
+    });
+  }
 
   const updatedDisc: DiscussionConversation = {
     ...currentDisc,
@@ -482,11 +831,15 @@ export function openDiscussionWithKey(
     openedByListenerName: listenerName,
     openedAt: `Today at ${nowFormatted}`,
     listenerAttentionStatus: 'reading',
-    listenerAttentionTimestamp: Date.now(),
+    listenerAttentionTimestamp: nowMs,
+    listenerUnavailable: false,
+    messages: updatedMessages,
+    // Clean up exclusion for the claiming listener if they are claiming the open conversation
+    excludedListeners: (currentDisc.excludedListeners || []).filter((e) => e.listenerId !== listenerId),
   };
 
   all[index] = updatedDisc;
-  saveStoredDiscussions(all);
+  saveStoredDiscussions(all, updatedDisc);
 
   return {
     success: true,
@@ -514,11 +867,28 @@ export function recordLiveDiscussionMessage(
 
   if (index !== -1) {
     const disc = all[index];
+    if (disc.status === 'closed') {
+      console.warn('Cannot append message to closed discussion:', discussionId);
+      return;
+    }
     disc.messages = [...disc.messages, messageWithMs];
     if (genderPreference && (!disc.genderPreference || disc.genderPreference === 'any')) {
       disc.genderPreference = genderPreference;
     }
-    saveStoredDiscussions(all);
+    if (type === 'registered') {
+      disc.type = 'registered';
+      if (userId) disc.userId = userId;
+      if (
+        userName &&
+        userName !== 'Anonymous Visitor' &&
+        userName !== 'Anonymous User' &&
+        userName !== 'Visiteur Anonyme'
+      ) {
+        disc.userName = userName;
+      }
+      if (userEmail) disc.userEmail = userEmail;
+    }
+    saveStoredDiscussions(all, disc);
   } else {
     const newDisc: DiscussionConversation = {
       id: discussionId,
@@ -533,8 +903,145 @@ export function recordLiveDiscussionMessage(
       messages: [messageWithMs],
     };
     all.unshift(newDisc);
-    saveStoredDiscussions(all);
+    saveStoredDiscussions(all, newDisc);
   }
+}
+
+// Create a brand new isolated discussion initialized with ONLY the system opening message
+export function createNewDiscussion(
+  type: 'anonymous' | 'registered',
+  params?: {
+    userId?: string;
+    userName?: string;
+    userEmail?: string;
+    genderPreference?: ListenerGenderPreference;
+  }
+): DiscussionConversation {
+  // Clear any existing active references before registering brand new discussion
+  clearActiveDiscussionReferences(undefined, params?.userId);
+
+  const nowMs = Date.now();
+  const nowFormatted = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const uniqueId = type === 'anonymous'
+    ? `disc_anon_${nowMs}_${Math.random().toString(36).substring(2, 7)}`
+    : `disc_reg_${params?.userId || 'user'}_${nowMs}_${Math.random().toString(36).substring(2, 5)}`;
+
+  const initialSystemMsg: ChatMessage = {
+    id: `msg_sys_${nowMs}`,
+    sender: 'system',
+    text: INITIAL_DISCUSSION_SYSTEM_MESSAGE,
+    timestamp: nowFormatted,
+    timestampMs: nowMs,
+  };
+
+  const newDisc: DiscussionConversation = {
+    id: uniqueId,
+    type,
+    userId: params?.userId,
+    userName: params?.userName || (type === 'anonymous' ? 'Anonymous Visitor' : 'Registered Member'),
+    userEmail: params?.userEmail,
+    startedAt: 'Just now',
+    startedAtTimestamp: nowMs,
+    status: 'unopened',
+    genderPreference: params?.genderPreference || 'any',
+    messages: [initialSystemMsg],
+  };
+
+  const all = getStoredDiscussions();
+  all.unshift(newDisc);
+  saveStoredDiscussions(all, newDisc);
+  // Ensure discussion is immediately saved to Firestore
+  saveDiscussionToFirestore(newDisc).catch((err) => {
+    console.warn('Firestore new discussion initial save notice:', err);
+  });
+
+  if (type === 'anonymous') {
+    setActiveAnonymousDiscussionId(uniqueId);
+  } else if (params?.userId) {
+    setActiveUserDiscussionId(params.userId, uniqueId);
+  }
+
+  return newDisc;
+}
+
+export function getActiveAnonymousDiscussionId(): string | null {
+  try {
+    const id = localStorage.getItem('3awdli_active_anon_disc_id');
+    if (!id) return null;
+    const all = getStoredDiscussions();
+    const found = all.find((d) => d.id === id);
+    if (!found || found.status === 'closed') {
+      localStorage.removeItem('3awdli_active_anon_disc_id');
+      return null;
+    }
+    return id;
+  } catch {
+    return null;
+  }
+}
+
+export function setActiveAnonymousDiscussionId(id: string | null): void {
+  try {
+    if (id) {
+      localStorage.setItem('3awdli_active_anon_disc_id', id);
+    } else {
+      localStorage.removeItem('3awdli_active_anon_disc_id');
+    }
+  } catch {
+    // fallback
+  }
+}
+
+export function getActiveAnonymousDiscussion(): DiscussionConversation | null {
+  const activeId = getActiveAnonymousDiscussionId();
+  if (!activeId) return null;
+  const all = getStoredDiscussions();
+  const found = all.find((d) => d.id === activeId);
+  if (found && found.status !== 'closed') {
+    return found;
+  }
+  return null;
+}
+
+export function getActiveUserDiscussionId(userId: string): string | null {
+  try {
+    const id = localStorage.getItem(`3awdli_active_user_disc_${userId}`);
+    if (!id) return null;
+    const all = getStoredDiscussions();
+    const found = all.find((d) => d.id === id);
+    if (!found || found.status === 'closed') {
+      localStorage.removeItem(`3awdli_active_user_disc_${userId}`);
+      return null;
+    }
+    return id;
+  } catch {
+    return null;
+  }
+}
+
+export function setActiveUserDiscussionId(userId: string, id: string | null): void {
+  try {
+    if (id) {
+      localStorage.setItem(`3awdli_active_user_disc_${userId}`, id);
+    } else {
+      localStorage.removeItem(`3awdli_active_user_disc_${userId}`);
+    }
+  } catch {
+    // fallback
+  }
+}
+
+export function getActiveUserDiscussion(userId: string): DiscussionConversation | null {
+  const activeId = getActiveUserDiscussionId(userId);
+  if (!activeId) return null;
+  const all = getStoredDiscussions();
+  const found = all.find((d) => d.id === activeId);
+  if (found && found.status !== 'closed') {
+    return found;
+  }
+  // Clear stale pointer if discussion is closed or missing
+  setActiveUserDiscussionId(userId, null);
+  return null;
 }
 
 // Update gender preference for an existing discussion
@@ -546,7 +1053,7 @@ export function updateDiscussionGenderPreference(
   const index = all.findIndex((d) => d.id === discussionId);
   if (index !== -1) {
     all[index].genderPreference = genderPreference;
-    saveStoredDiscussions(all);
+    saveStoredDiscussions(all, all[index]);
   }
 }
 
@@ -586,7 +1093,7 @@ export function joinDiscussion(
 
   disc.messages.push(joinNotice);
   all[index] = disc;
-  saveStoredDiscussions(all);
+  saveStoredDiscussions(all, disc);
 
   return { success: true, discussion: disc };
 }
@@ -649,7 +1156,7 @@ export function takeoverDiscussion(
 
   disc.messages.push(handoverNotice);
   all[index] = disc;
-  saveStoredDiscussions(all);
+  saveStoredDiscussions(all, disc);
 
   return { success: true, discussion: disc };
 }
@@ -689,6 +1196,13 @@ export function getVisibleMessagesForListener(
 // Get active and excluded participants for the user-facing participant bar
 export function getDiscussionParticipants(discussion: DiscussionConversation): DiscussionParticipant[] {
   const participants: DiscussionParticipant[] = [];
+  const users = getStoredUsers();
+
+  const isUserActiveListener = (userId: string | undefined): boolean => {
+    if (!userId) return false;
+    const u = users.find((user) => user.id === userId);
+    return Boolean(u && (u.is_listener || u.isListener || u.role === 'listener'));
+  };
 
   // 1. User
   participants.push({
@@ -701,7 +1215,7 @@ export function getDiscussionParticipants(discussion: DiscussionConversation): D
   // 2. Primary listener
   if (discussion.openedByListenerId) {
     const isExcluded = discussion.excludedListeners?.some((e) => e.listenerId === discussion.openedByListenerId);
-    if (!isExcluded) {
+    if (!isExcluded && isUserActiveListener(discussion.openedByListenerId)) {
       participants.push({
         id: discussion.openedByListenerId,
         name: discussion.openedByListenerName || 'Assigned Listener',
@@ -715,7 +1229,7 @@ export function getDiscussionParticipants(discussion: DiscussionConversation): D
   // 3. Joined listener (if active)
   if (discussion.joinedListenerId) {
     const isExcluded = discussion.excludedListeners?.some((e) => e.listenerId === discussion.joinedListenerId);
-    if (!isExcluded) {
+    if (!isExcluded && isUserActiveListener(discussion.joinedListenerId)) {
       participants.push({
         id: discussion.joinedListenerId,
         name: discussion.joinedListenerName || 'Joined Listener',
@@ -747,3 +1261,315 @@ export function getDiscussionParticipants(discussion: DiscussionConversation): D
 
   return participants;
 }
+
+/**
+ * Robustly find a discussion for a given report by ID, partial numeric ID, or title
+ */
+export function findDiscussionForReport(
+  report: DiscussionReport | null | undefined,
+  allDiscussions?: DiscussionConversation[]
+): DiscussionConversation | null {
+  if (!report) return null;
+  const list = allDiscussions || getStoredDiscussions();
+  if (report.discussionId) {
+    const exact = list.find((d) => d.id === report.discussionId);
+    if (exact) return exact;
+
+    // Check partial/numeric matching (e.g., '102' matches 'disc_reg_102' or 'disc_unopened_102')
+    const num = report.discussionId.match(/\d+/)?.[0];
+    if (num) {
+      const matchNum = list.find((d) => d.id.includes(num));
+      if (matchNum) return matchNum;
+    }
+  }
+
+  if (report.discussionTitle) {
+    const lowerTitle = report.discussionTitle.toLowerCase();
+    const matchTitle = list.find((d) =>
+      (d.userName && lowerTitle.includes(d.userName.toLowerCase())) ||
+      (d.id && lowerTitle.includes(d.id.toLowerCase()))
+    );
+    if (matchTitle) return matchTitle;
+  }
+
+  return null;
+}
+
+export interface ModerationParticipant {
+  id: string;
+  name: string;
+  email?: string;
+  role: string;
+  hasAccount: boolean;
+  isAnonymous: boolean;
+  sessionId?: string;
+  userAccount?: StoredUser;
+  participantType?: 'visitor' | 'listener' | 'co_listener' | 'handed_off_listener' | 'reporter';
+}
+
+/**
+ * Get ALL participants tied to a specific discussion for moderation and sanctioning.
+ * Pulls the original visitor/member, primary listener, joined listeners,
+ * handed-off listeners, and referral listeners from shares and message history.
+ */
+export function getAllDiscussionParticipantsForModeration(
+  report?: DiscussionReport | null,
+  discussion?: DiscussionConversation | null
+): ModerationParticipant[] {
+  const list: ModerationParticipant[] = [];
+  const addedIds = new Set<string>();
+  const addedEmails = new Set<string>();
+
+  const allDiscussions = getStoredDiscussions();
+  const allUsers = getStoredUsers();
+  const allShares = getStoredShareRequests();
+
+  // Find discussion if not provided directly
+  let disc = discussion;
+  if (!disc && report) {
+    disc = findDiscussionForReport(report, allDiscussions);
+  }
+
+  const addCandidate = (candidate: ModerationParticipant) => {
+    if (!candidate || !candidate.id) return;
+    if (addedIds.has(candidate.id)) return;
+    if (candidate.email) {
+      const lowerEmail = candidate.email.toLowerCase();
+      if (addedEmails.has(lowerEmail)) return;
+      addedEmails.add(lowerEmail);
+    }
+    addedIds.add(candidate.id);
+    list.push(candidate);
+  };
+
+  // 1. RESOLVE USER / VISITOR (THE ORIGINAL PARTICIPANT)
+  const isAnon =
+    disc?.type === 'anonymous' ||
+    report?.discussionType === 'anonymous' ||
+    disc?.userId === 'anon_portal_visitor' ||
+    (disc?.userName && disc.userName.toLowerCase().includes('anon')) ||
+    (!disc?.userId && report?.reporterRole !== 'registered_user');
+
+  if (isAnon) {
+    const sessionId = disc?.userId || report?.discussionId || 'anon_portal_visitor';
+    addCandidate({
+      id: `candidate_anon_${sessionId}`,
+      name: 'Anonymous User',
+      hasAccount: false,
+      role: 'Visitor (Anonymous User)',
+      isAnonymous: true,
+      sessionId,
+      participantType: 'visitor',
+    });
+  } else {
+    // Registered user
+    const regUserId = disc?.userId || (report && report.reporterRole !== 'listener' && report.reporterRole !== 'head_of_listeners' ? report.reporterId : undefined);
+    const regUserEmail = disc?.userEmail || (report && report.reporterRole !== 'listener' ? report.reporterEmail : undefined);
+    const regUserName = disc?.userName || (report && report.reporterRole !== 'listener' ? report.reporterName : 'Registered Member');
+
+    const matchedUser = allUsers.find(
+      (u) =>
+        (regUserId && u.id === regUserId) ||
+        (regUserEmail && u.email.toLowerCase() === regUserEmail.toLowerCase()) ||
+        (regUserName && u.name.toLowerCase() === regUserName.toLowerCase())
+    );
+
+    if (matchedUser) {
+      addCandidate({
+        id: matchedUser.id,
+        name: matchedUser.name,
+        email: matchedUser.email,
+        hasAccount: true,
+        role: 'Visitor (Registered Member)',
+        isAnonymous: false,
+        userAccount: matchedUser,
+        participantType: 'visitor',
+      });
+    } else {
+      addCandidate({
+        id: regUserId || `candidate_reg_${Date.now()}`,
+        name: regUserName,
+        email: regUserEmail,
+        hasAccount: true,
+        role: 'Visitor (Registered Member)',
+        isAnonymous: false,
+        participantType: 'visitor',
+      });
+    }
+  }
+
+  // 2. RESOLVE ALL LISTENERS (PRIMARY, JOINED, HANDED-OFF, REFERRALS, REPORTERS)
+  const registerListener = (
+    listenerId?: string,
+    listenerName?: string,
+    specificRole = 'Assigned Listener',
+    email?: string,
+    participantType: ModerationParticipant['participantType'] = 'listener'
+  ) => {
+    if (!listenerId && !listenerName) return;
+
+    // Search user accounts
+    const matched = allUsers.find(
+      (u) =>
+        (listenerId && u.id === listenerId) ||
+        (email && u.email.toLowerCase() === email.toLowerCase()) ||
+        (listenerName && u.name.toLowerCase() === listenerName.toLowerCase())
+    );
+
+    if (matched) {
+      addCandidate({
+        id: matched.id,
+        name: matched.name,
+        email: matched.email,
+        hasAccount: true,
+        role: specificRole,
+        isAnonymous: false,
+        userAccount: matched,
+        participantType,
+      });
+    } else if (listenerName && !listenerName.toLowerCase().includes('system') && !listenerName.toLowerCase().includes('listening team')) {
+      addCandidate({
+        id: listenerId || `candidate_listener_${listenerName.toLowerCase().replace(/[^a-z0-9]/g, '_')}`,
+        name: listenerName,
+        email: email || `${listenerName.toLowerCase().replace(/[^a-z0-9]/g, '')}@example.com`,
+        hasAccount: true,
+        role: specificRole,
+        isAnonymous: false,
+        participantType,
+      });
+    }
+  };
+
+  // 2A. Primary / Opened-By Listener
+  if (disc?.openedByListenerId || disc?.openedByListenerName) {
+    registerListener(
+      disc.openedByListenerId,
+      disc.openedByListenerName,
+      'Primary Listener',
+      undefined,
+      'listener'
+    );
+  }
+
+  // 2B. Joined Listener (Co-Listener)
+  if (disc?.joinedListenerId || disc?.joinedListenerName) {
+    registerListener(
+      disc.joinedListenerId,
+      disc.joinedListenerName,
+      'Joined Listener (Co-Listener)',
+      undefined,
+      'co_listener'
+    );
+  }
+
+  // 2C. Closed-By Listener
+  if (disc?.closedByListenerId || disc?.closedByListenerName) {
+    registerListener(
+      disc.closedByListenerId,
+      disc.closedByListenerName,
+      'Assigned Listener (Closed Session)',
+      undefined,
+      'listener'
+    );
+  }
+
+  // 2D. Excluded / Handed-Off Listeners
+  if (disc?.excludedListeners && disc.excludedListeners.length > 0) {
+    disc.excludedListeners.forEach((ex) => {
+      registerListener(
+        ex.listenerId,
+        ex.listenerName,
+        'Previous Listener (Handed Off)',
+        undefined,
+        'handed_off_listener'
+      );
+    });
+  }
+
+  // 2E. Structured participants list in discussion (if populated)
+  if (disc?.participants && disc.participants.length > 0) {
+    disc.participants.forEach((p) => {
+      if (p.role === 'listener' || p.role === 'head_of_listeners') {
+        registerListener(
+          p.id,
+          p.name,
+          p.status === 'excluded'
+            ? 'Previous Listener (Handed Off)'
+            : (p.isOriginalListener ? 'Primary Listener' : 'Joined Listener (Co-Listener)'),
+          undefined,
+          p.status === 'excluded' ? 'handed_off_listener' : 'listener'
+        );
+      }
+    });
+  }
+
+  // 2F. Share Requests tied to this discussion
+  const targetDiscId = disc?.id || report?.discussionId;
+  if (targetDiscId) {
+    const relatedShares = allShares.filter((s) => s.discussionId === targetDiscId);
+    relatedShares.forEach((share) => {
+      // The referring listener
+      registerListener(
+        share.fromListenerId,
+        share.fromListenerName,
+        'Listener (Referred / Shared)',
+        share.fromListenerEmail,
+        'listener'
+      );
+      // The recipient listener if accepted, takeover, or joined
+      if (share.status === 'accepted' || share.responseType === 'joined' || share.responseType === 'takeover') {
+        registerListener(
+          share.toUserId,
+          share.toUserName,
+          share.responseType === 'takeover' ? 'Assigned Listener (Takeover)' : 'Joined Listener (from Hand-off)',
+          share.toUserEmail,
+          'co_listener'
+        );
+      }
+    });
+  }
+
+  // 2G. Messages in discussion or reported messages from listeners
+  const allMessages = [
+    ...(disc?.messages || []),
+    ...(report?.reportedMessages || [])
+  ];
+
+  allMessages.forEach((msg) => {
+    if (msg.sender === 'team' || (msg.sender as string) === 'listener') {
+      if (msg.senderName && !msg.senderName.toLowerCase().includes('listening team') && !msg.senderName.toLowerCase().includes('system')) {
+        registerListener(undefined, msg.senderName, 'Active Listener in Discussion', undefined, 'listener');
+      }
+    }
+  });
+
+  // 2H. Reporting Listener (if report was submitted by a listener)
+  if (report && (report.reporterRole === 'listener' || report.reporterRole === 'head_of_listeners')) {
+    registerListener(
+      report.reporterId,
+      report.reporterName,
+      'Reporting Listener',
+      report.reporterEmail,
+      'reporter'
+    );
+  }
+
+  // 3. GUARANTEE: Ensure at least one listener option is present so Administrator can choose either party
+  const hasListener = list.some(
+    (c) => !c.isAnonymous && c.participantType !== 'visitor'
+  );
+
+  if (!hasListener) {
+    if (report?.reporterName && report.reporterRole === 'listener') {
+      registerListener(report.reporterId, report.reporterName, 'Assigned Listener', report.reporterEmail);
+    } else {
+      const defaultListener = allUsers.find((u) => u.role === 'listener' || u.is_listener || u.isListener);
+      if (defaultListener) {
+        registerListener(defaultListener.id, defaultListener.name, 'Peer Listener (Assigned)', defaultListener.email);
+      }
+    }
+  }
+
+  return list;
+}
+

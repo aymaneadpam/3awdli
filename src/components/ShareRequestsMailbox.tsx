@@ -17,7 +17,8 @@ import {
   Lock,
   CornerDownRight,
   Filter,
-  RefreshCw
+  RefreshCw,
+  ShieldAlert
 } from 'lucide-react';
 import { ConversationShareRequest, UserAccount } from '../types';
 import { 
@@ -29,17 +30,20 @@ import {
   getSentShareRequests
 } from '../utils/shareManagement';
 import { getStoredDiscussions } from '../utils/discussionManagement';
+import { getPendingReportsCount } from '../utils/reportManagement';
 import { ListenerGenderIcon } from './ListenerGenderDisplay';
 
 interface ShareRequestsMailboxProps {
   currentUser: UserAccount;
   onOpenDiscussion?: (discussionId: string) => void;
+  onSwitchToReports?: () => void;
   className?: string;
 }
 
 export const ShareRequestsMailbox: React.FC<ShareRequestsMailboxProps> = ({
   currentUser,
   onOpenDiscussion,
+  onSwitchToReports,
   className = '',
 }) => {
   const [activeTab, setActiveTab] = useState<'incoming' | 'sent'>('incoming');
@@ -58,8 +62,8 @@ export const ShareRequestsMailbox: React.FC<ShareRequestsMailboxProps> = ({
   const [actionError, setActionError] = useState<string | null>(null);
 
   const loadRequests = () => {
-    const inc = getIncomingShareRequests(currentUser.id);
-    const snt = getSentShareRequests(currentUser.id);
+    const inc = getIncomingShareRequests(currentUser);
+    const snt = getSentShareRequests(currentUser);
     setIncomingRequests(inc);
     setSentRequests(snt);
   };
@@ -82,7 +86,7 @@ export const ShareRequestsMailbox: React.FC<ShareRequestsMailboxProps> = ({
       window.removeEventListener('3awdli_discussion_sync', handleUpdate);
       window.removeEventListener('storage', handleUpdate);
     };
-  }, [currentUser.id]);
+  }, [currentUser.id, currentUser.email]);
 
   const pendingIncoming = incomingRequests.filter((r) => r.status === 'pending');
 
@@ -198,6 +202,27 @@ export const ShareRequestsMailbox: React.FC<ShareRequestsMailboxProps> = ({
             <span>Sent Requests</span>
             <span className="text-[10px] opacity-80">({sentRequests.length})</span>
           </button>
+
+          {Boolean(currentUser.is_head_of_listeners) && (
+            <button
+              id="mailbox-reports-notification-btn"
+              onClick={() => {
+                if (onSwitchToReports) {
+                  onSwitchToReports();
+                }
+              }}
+              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-rose-800 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition-all cursor-pointer"
+              title="Jump to Reports Category"
+            >
+              <ShieldAlert className="w-3.5 h-3.5 text-rose-600" />
+              <span>Reports</span>
+              {getPendingReportsCount() > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-rose-600 text-white animate-pulse">
+                  {getPendingReportsCount()}
+                </span>
+              )}
+            </button>
+          )}
         </div>
       </div>
 
@@ -266,7 +291,7 @@ export const ShareRequestsMailbox: React.FC<ShareRequestsMailboxProps> = ({
                   <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 border-b border-[#F0EBE0] pb-3">
                     {/* From Listener Badge */}
                     <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-full bg-[#E5EFE9] text-[#24533B] flex items-center justify-center font-bold text-xs border border-[#C5DECة border-[#C2DDCD]">
+                      <div className="w-9 h-9 rounded-full bg-[#E5EFE9] text-[#24533B] flex items-center justify-center font-bold text-xs border border-[#C2DDCD]">
                         {req.fromListenerName.slice(0, 2).toUpperCase()}
                       </div>
                       <div>
@@ -554,7 +579,7 @@ export const ShareRequestsMailbox: React.FC<ShareRequestsMailboxProps> = ({
 
             {/* Modal Body */}
             <div className="p-6 space-y-4">
-              <div className="p-3 bg-[#F6F2E9] rounded-xl border border-[#E7DFCة border-[#E5DECة border-[#E4DCCE] text-xs text-[#4E5E53]">
+              <div className="p-3 bg-[#F6F2E9] rounded-xl border border-[#E4DCCE] text-xs text-[#4E5E53]">
                 <span className="font-semibold text-[#1C3225]">Request: </span>
                 <span>{acceptingRequest.subject}</span>
                 <p className="italic text-[#617167] mt-1">"{acceptingRequest.description}"</p>
@@ -702,34 +727,6 @@ export const ShareRequestsMailbox: React.FC<ShareRequestsMailboxProps> = ({
               <p className="text-xs text-[#4F5F55] leading-relaxed">
                 Please provide a brief reason so <span className="font-semibold text-[#1C2F23]">{denyingRequest.fromListenerName}</span> understands why you are unable to take this request:
               </p>
-
-              {/* Quick Select Chips */}
-              <div className="space-y-1.5">
-                <span className="text-[10.5px] font-bold text-[#6D7E73] uppercase tracking-wider">
-                  Quick options:
-                </span>
-                <div className="flex flex-wrap gap-1.5">
-                  {[
-                    'Currently in an active session',
-                    'Busy / at capacity',
-                    'Outside my clinical specialty',
-                    'Stepping away / offline soon',
-                  ].map((chip) => (
-                    <button
-                      key={chip}
-                      type="button"
-                      onClick={() => setDenyReason(chip)}
-                      className={`text-[11px] px-2.5 py-1 rounded-lg border transition-all cursor-pointer ${
-                        denyReason === chip
-                          ? 'bg-[#2E5040] text-white border-[#2E5040]'
-                          : 'bg-[#FAF7F2] text-[#4A5D51] border-[#DDD5C7] hover:bg-[#EDE6D7]'
-                      }`}
-                    >
-                      {chip}
-                    </button>
-                  ))}
-                </div>
-              </div>
 
               {/* Custom Reason Textarea */}
               <div>

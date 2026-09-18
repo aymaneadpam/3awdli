@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, type FormEvent } from 'react';
+import { useState, useEffect, useMemo, useCallback, type FormEvent } from 'react';
 import { 
   Heart, 
   ShieldCheck, 
@@ -24,7 +24,8 @@ import {
   Inbox,
   FolderLock,
   Archive,
-  Mail
+  Mail,
+  HelpCircle
 } from 'lucide-react';
 import { UserAccount, DiscussionConversation } from '../types';
 import { 
@@ -34,10 +35,16 @@ import {
   closeDiscussion,
   updateListenerAttention,
   getDiscussionById,
-  isListenerExcludedFromDiscussion
+  isListenerExcludedFromDiscussion,
+  isFakeDiscussion,
+  getDiscussionCreatorInfo
 } from '../utils/discussionManagement';
 import { 
-  getUserShareNotifications, 
+  fetchDiscussionsFromFirestore, 
+  subscribeToDiscussions 
+} from '../lib/firestoreService';
+import { 
+  getIncomingShareRequests, 
   getUnreadShareNotificationsCount 
 } from '../utils/shareManagement';
 import { getListenerKeyCode } from '../utils/userManagement';
@@ -45,32 +52,110 @@ import { ListenerChatInterface } from './ListenerChatInterface';
 import { ListenerGenderIcon } from './ListenerGenderDisplay';
 import { GenderPreferenceTag } from './GenderPreferenceTag';
 import { ShareRequestsMailbox } from './ShareRequestsMailbox';
+import { HeadOfListenersReportsView } from './HeadOfListenersReportsView';
+import { getPendingReportsCount, getStoredReports } from '../utils/reportManagement';
+import { useLanguage } from '../context/LanguageContext';
+import { Navbar } from './Navbar';
+import { MemberDiscussionsPage } from './MemberDiscussionsPage';
 
 interface DiscussionsPageProps {
   user: UserAccount;
+  initialTab?: 'unopened' | 'myConversations' | 'history' | 'allConversations' | 'mailbox' | 'reports';
   onNavigateHome: () => void;
   onNavigateDashboard: () => void;
   onNavigateAdmin?: () => void;
+  onNavigateMemberManagement?: () => void;
+  onNavigateGames?: () => void;
+  onNavigateTeenSpace?: () => void;
+  onNavigateLounge?: () => void;
+  onNavigateRules?: () => void;
+  onNavigateReports?: () => void;
+  onNavigateAdminReports?: () => void;
+  onNavigateAdminSupport?: () => void;
   onSignOut: () => void;
   onOpenEmergencyModal: () => void;
+  onOpenContactSupport?: () => void;
+  onTalkAnonymously?: () => void;
 }
 
 export const DiscussionsPage = ({
   user,
+  initialTab,
   onNavigateHome,
   onNavigateDashboard,
   onNavigateAdmin,
+  onNavigateMemberManagement,
+  onNavigateGames,
+  onNavigateTeenSpace,
+  onNavigateLounge,
+  onNavigateRules,
+  onNavigateReports,
+  onNavigateAdminReports,
+  onNavigateAdminSupport,
   onSignOut,
   onOpenEmergencyModal,
+  onOpenContactSupport,
+  onTalkAnonymously,
 }: DiscussionsPageProps) => {
+  const { strings, language } = useLanguage();
+  const isListener = Boolean(user.is_listener || user.isListener || user.role === 'listener');
   const isHead = Boolean(user.is_head_of_listeners);
   const isAdmin = user.role === 'admin';
 
+  if (!isListener && !isAdmin) {
+    return (
+      <MemberDiscussionsPage
+        user={user}
+        initialTab={initialTab === 'history' ? 'history' : 'active'}
+        onNavigateHome={onNavigateHome}
+        onNavigateDashboard={onNavigateDashboard}
+        onNavigateAdmin={onNavigateAdmin}
+        onNavigateMemberManagement={onNavigateMemberManagement}
+        onNavigateGames={onNavigateGames}
+        onNavigateTeenSpace={onNavigateTeenSpace}
+        onNavigateLounge={onNavigateLounge}
+        onNavigateRules={onNavigateRules}
+        onNavigateReports={onNavigateReports}
+        onNavigateAdminReports={onNavigateAdminReports}
+        onNavigateAdminSupport={onNavigateAdminSupport}
+        onSignOut={onSignOut}
+        onOpenEmergencyModal={onOpenEmergencyModal}
+        onOpenContactSupport={onOpenContactSupport}
+        onTalkAnonymously={onTalkAnonymously}
+      />
+    );
+  }
+
   // State
-  const [activeTab, setActiveTab] = useState<'unopened' | 'myConversations' | 'history' | 'allConversations' | 'mailbox'>('unopened');
+  const [activeTab, setActiveTab] = useState<'unopened' | 'myConversations' | 'history' | 'allConversations' | 'mailbox' | 'reports'>(
+    initialTab || 'unopened'
+  );
+
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
   const [discussions, setDiscussions] = useState<DiscussionConversation[]>([]);
   const [selectedDiscussion, setSelectedDiscussion] = useState<DiscussionConversation | null>(null);
-  const [unreadShareCount, setUnreadShareCount] = useState(() => getUnreadShareNotificationsCount(user.id));
+  const [unreadShareCount, setUnreadShareCount] = useState(() => getUnreadShareNotificationsCount(user));
+  const [pendingReportsCount, setPendingReportsCount] = useState(() => getPendingReportsCount());
+  const [totalReportsCount, setTotalReportsCount] = useState(() => getStoredReports().length);
+
+  useEffect(() => {
+    const syncReports = () => {
+      setPendingReportsCount(getPendingReportsCount());
+      setTotalReportsCount(getStoredReports().length);
+    };
+    window.addEventListener('3awdli_report_created', syncReports);
+    window.addEventListener('3awdli_report_updated', syncReports);
+    window.addEventListener('storage', syncReports);
+    return () => {
+      window.removeEventListener('3awdli_report_created', syncReports);
+      window.removeEventListener('3awdli_report_updated', syncReports);
+      window.removeEventListener('storage', syncReports);
+    };
+  }, []);
 
   // Key verification modal state
   const [verifyingDiscussion, setVerifyingDiscussion] = useState<DiscussionConversation | null>(null);
@@ -95,36 +180,96 @@ export const DiscussionsPage = ({
   useEffect(() => {
     refreshDiscussions();
 
-    // Listen for discussion updates across tabs and events
+    // Direct Firestore fetch on component mount
+    fetchDiscussionsFromFirestore()
+      .then((remote) => {
+        if (remote) {
+          const clean = remote.filter((d) => !isFakeDiscussion(d));
+          setDiscussions(clean);
+        }
+      })
+      .catch((err) => console.warn('DiscussionsPage direct fetch notice:', err));
+
+    // Real-time Firestore subscription for instantaneous cross-device sync
+    const unsubFirestore = subscribeToDiscussions((remote) => {
+      if (!remote) return;
+      const clean = remote.filter((d) => !isFakeDiscussion(d));
+      setDiscussions((prev) => {
+        if (
+          prev.length === clean.length &&
+          prev.every((p, i) => p.id === clean[i]?.id && p.status === clean[i]?.status && p.messages?.length === clean[i]?.messages?.length)
+        ) {
+          return prev;
+        }
+        return clean;
+      });
+      setSelectedDiscussion((prev) => {
+        if (!prev) return null;
+        const updated = clean.find((d) => d.id === prev.id);
+        if (!updated) return null;
+        if (
+          prev.status === updated.status &&
+          prev.messages?.length === updated.messages?.length &&
+          prev.listenerAttentionStatus === updated.listenerAttentionStatus
+        ) {
+          return prev;
+        }
+        return updated;
+      });
+      setUnreadShareCount(getUnreadShareNotificationsCount(user));
+    });
+
+    // Listen for local discussion updates across tabs and events
     const handleSync = () => {
       const list = getStoredDiscussions();
-      setDiscussions(list);
+      setDiscussions((prev) => {
+        if (
+          prev.length === list.length &&
+          prev.every((p, i) => p.id === list[i]?.id && p.status === list[i]?.status && p.messages?.length === list[i]?.messages?.length)
+        ) {
+          return prev;
+        }
+        return list;
+      });
       setSelectedDiscussion((prev) => {
         if (!prev) return null;
         const updated = list.find((d) => d.id === prev.id);
-        return updated || prev;
+        if (!updated) return null;
+        if (
+          prev.status === updated.status &&
+          prev.messages?.length === updated.messages?.length &&
+          prev.listenerAttentionStatus === updated.listenerAttentionStatus
+        ) {
+          return prev;
+        }
+        return updated;
       });
-      setUnreadShareCount(getUnreadShareNotificationsCount(user.id));
+      setUnreadShareCount(getUnreadShareNotificationsCount(user));
     };
 
     window.addEventListener('3awdli_discussion_sync', handleSync);
     window.addEventListener('3awdli_share_request_created', handleSync);
     window.addEventListener('3awdli_share_request_updated', handleSync);
     window.addEventListener('storage', handleSync);
-    const interval = setInterval(handleSync, 1000);
 
     return () => {
+      unsubFirestore();
       window.removeEventListener('3awdli_discussion_sync', handleSync);
       window.removeEventListener('3awdli_share_request_created', handleSync);
       window.removeEventListener('3awdli_share_request_updated', handleSync);
       window.removeEventListener('storage', handleSync);
-      clearInterval(interval);
     };
-  }, [user.id]);
+  }, [user.id, user.email]);
 
   // Filtered lists
   const unopenedList = useMemo(() => {
-    return discussions.filter((d) => d.status === 'unopened');
+    return discussions
+      .filter((d) => d.status === 'unopened')
+      .sort((a, b) => {
+        const timeA = a.startedAtTimestamp || (a.startedAt ? new Date(a.startedAt).getTime() : 0);
+        const timeB = b.startedAtTimestamp || (b.startedAt ? new Date(b.startedAt).getTime() : 0);
+        return timeA - timeB; // Oldest at the top
+      });
   }, [discussions]);
 
   const myList = useMemo(() => {
@@ -194,10 +339,10 @@ export const DiscussionsPage = ({
     }
   };
 
-  const handleUpdateAttention = (status: 'reading' | 'typing' | 'idle') => {
+  const handleUpdateAttention = useCallback((status: 'reading' | 'typing' | 'idle') => {
     if (!selectedDiscussion) return;
     updateListenerAttention(selectedDiscussion.id, status);
-  };
+  }, [selectedDiscussion?.id]);
 
   // Copy listener key
   const handleCopyListenerKey = () => {
@@ -255,9 +400,10 @@ export const DiscussionsPage = ({
     const isOwner = discussion.openedByListenerId === user.id;
     const isJoined = discussion.joinedListenerId === user.id;
     const isExcluded = discussion.excludedListeners?.some((e) => e.listenerId === user.id);
+    const hasShareRequest = getIncomingShareRequests(user).some((r) => r.discussionId === discussion.id);
     const canSupervise = isHead || isAdmin;
 
-    if (!isOwner && !isJoined && !isExcluded && !canSupervise) {
+    if (!isOwner && !isJoined && !isExcluded && !hasShareRequest && !canSupervise) {
       setAccessDeniedMessage(
         `Access Denied: This conversation is confidential and was claimed by ${
           discussion.openedByListenerName || 'another listener'
@@ -270,8 +416,26 @@ export const DiscussionsPage = ({
     setSelectedDiscussion(discussion);
   };
 
+  // Return from discussion view back to Discussions list without closing or ending the discussion
+  const handleReturnToDiscussions = () => {
+    if (selectedDiscussion) {
+      // If returning from an active discussion claimed or joined by this listener, default tab to My Active Conversations
+      if (
+        selectedDiscussion.status === 'opened' &&
+        (selectedDiscussion.openedByListenerId === user.id || selectedDiscussion.joinedListenerId === user.id)
+      ) {
+        setActiveTab('myConversations');
+      }
+      setSelectedDiscussion(null);
+      refreshDiscussions();
+    } else {
+      setActiveTab('myConversations');
+      refreshDiscussions();
+    }
+  };
+
   return (
-    <div className="min-h-screen flex flex-col bg-[#FAF8F5] text-[#2C332E]">
+    <>
       {/* Toast Notification */}
       {toastMessage && (
         <div 
@@ -303,107 +467,47 @@ export const DiscussionsPage = ({
         </div>
       )}
 
-      {/* Top Navigation Header */}
-      <header className="sticky top-0 z-40 bg-[#FAF8F5]/90 backdrop-blur-md border-b border-[#E9E4DC]">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <button 
-              onClick={onNavigateHome}
-              className="flex items-center gap-2 cursor-pointer group text-left"
-            >
-              <div className="w-10 h-10 rounded-2xl bg-[#315243] text-white flex items-center justify-center shadow-xs">
-                <Heart className="w-5 h-5 text-emerald-200 fill-emerald-200/20" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xl font-bold tracking-tight text-[#1F362C] font-['Lora',serif]">
-                    3awdli
-                  </span>
-                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-[#E5EEE9] text-[#2F5342] font-semibold border border-[#D0E0D7]">
-                    Discussions Workspace
-                  </span>
-                </div>
-                <p className="text-[11px] text-[#627068] hidden sm:block">
-                  Confidential Psychological Support Workspace
-                </p>
-              </div>
-            </button>
-          </div>
-
-          <div className="flex items-center gap-2.5 sm:gap-3">
-            <button
-              id="emergency-btn-discussions"
-              onClick={onOpenEmergencyModal}
-              className="hidden md:flex items-center gap-1.5 text-xs text-[#7A5043] hover:text-[#5E3B30] hover:bg-[#F8EFEB] px-3 py-2 rounded-xl transition-colors cursor-pointer"
-            >
-              <LifeBuoy className="w-3.5 h-3.5 text-[#B65E46]" />
-              <span>Emergency Help</span>
-            </button>
-
-            {isAdmin && onNavigateAdmin && (
-              <button
-                id="admin-console-discussions-btn"
-                onClick={onNavigateAdmin}
-                className="flex items-center gap-1.5 text-xs font-semibold text-[#6C442A] bg-[#F9EFE6] hover:bg-[#F2E3D4] border border-[#E9D5C3] px-3 py-2 rounded-xl transition-colors cursor-pointer"
-              >
-                <span>Admin Console</span>
-              </button>
-            )}
-
-            <button
-              id="nav-mailbox-btn"
-              onClick={() => {
-                setSelectedDiscussion(null);
-                setActiveTab('mailbox');
-              }}
-              className={`relative flex items-center gap-2 text-xs sm:text-sm font-semibold px-3 py-2 rounded-xl border transition-colors cursor-pointer ${
-                activeTab === 'mailbox'
-                  ? 'bg-[#315243] text-white border-[#254235]'
-                  : 'bg-white text-[#2C4537] hover:bg-[#F2ECE3] border-[#E8E2D7]'
-              }`}
-              title="Incoming consultations & mailbox"
-            >
-              <Mail className="w-4 h-4 text-emerald-600" />
-              <span className="hidden sm:inline">Mailbox</span>
-              {unreadShareCount > 0 && (
-                <span className="px-1.5 py-0.2 rounded-full bg-rose-500 text-white text-[10px] font-bold animate-pulse">
-                  {unreadShareCount}
-                </span>
-              )}
-            </button>
-
-            <button
-              id="nav-myspace-discussions-btn"
-              onClick={onNavigateDashboard}
-              className="flex items-center gap-2 text-xs sm:text-sm font-semibold text-[#224131] bg-[#E8F1EC] hover:bg-[#DAE8DF] border border-[#CCDED3] px-3.5 py-2 rounded-xl transition-colors cursor-pointer"
-            >
-              <User className="w-4 h-4 text-[#315243]" />
-              <span>My Space</span>
-            </button>
-
-            <button
-              id="discussions-signout-btn"
-              onClick={onSignOut}
-              className="text-xs text-[#738279] hover:text-[#2C332E] hover:bg-[#EFECE5] p-2 rounded-xl transition-colors cursor-pointer"
-              title="Sign Out"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Container */}
-      <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 py-8 sm:py-10">
+      {/* Persistent Left Sidebar + Sticky Top Bar Layout */}
+      <Navbar
+        currentView="discussions"
+        activeSubTab={activeTab === 'mailbox' ? 'mailbox' : undefined}
+        currentUser={user}
+        onNavigateHome={onNavigateHome}
+        onNavigateDashboard={onNavigateDashboard}
+        onNavigateDiscussions={(tab) => {
+          setSelectedDiscussion(null);
+          if (tab === 'mailbox') {
+            setActiveTab('mailbox');
+          } else {
+            setActiveTab('unopened');
+          }
+        }}
+        onNavigateAdmin={isAdmin && onNavigateAdmin ? onNavigateAdmin : undefined}
+        onNavigateMemberManagement={onNavigateMemberManagement}
+        onNavigateGames={onNavigateGames}
+        onNavigateTeenSpace={onNavigateTeenSpace}
+        onNavigateLounge={onNavigateLounge}
+        onNavigateRules={onNavigateRules}
+        onNavigateReports={onNavigateReports}
+        onNavigateAdminReports={onNavigateAdminReports}
+        onNavigateAdminSupport={onNavigateAdminSupport}
+        onOpenContactSupport={onOpenContactSupport}
+        onOpenEmergencyModal={onOpenEmergencyModal}
+        onTalkAnonymously={onTalkAnonymously}
+        onSignOut={onSignOut}
+      >
+        {/* Main Container */}
+        <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 py-8 sm:py-10">
         {/* Navigation Breadcrumb */}
         <div className="mb-6 flex items-center justify-between flex-wrap gap-3">
           <button
-            id="back-to-dashboard-btn"
-            onClick={onNavigateDashboard}
+            id="back-to-discussions-top-btn"
+            onClick={handleReturnToDiscussions}
             className="inline-flex items-center gap-2 text-sm text-[#5B6D62] hover:text-[#21372C] transition-colors cursor-pointer"
+            title={language === 'ar' ? 'العودة إلى المحادثات' : language === 'fr' ? 'Retour aux discussions' : 'Return to Discussions'}
           >
-            <ArrowLeft className="w-4 h-4" />
-            <span>Return to My Personal Space</span>
+            <ArrowLeft className="w-4 h-4 rtl:rotate-180" />
+            <span>{language === 'ar' ? 'العودة إلى المحادثات' : language === 'fr' ? 'Retour aux discussions' : 'Return to Discussions'}</span>
           </button>
 
           <div className="flex items-center gap-2">
@@ -496,19 +600,33 @@ export const DiscussionsPage = ({
         {/* CONDITIONAL RENDER: CHAT WORKSPACE (ONCE DISCUSSION OPENED)    */}
         {/* ------------------------------------------------------------- */}
         {selectedDiscussion ? (
-          <div className="flex justify-center w-full pb-8">
-            <div className="w-full max-w-[500px]">
+          <div className="flex flex-col items-center w-full pb-8">
+            <div className="w-full max-w-[440px]">
               <ListenerChatInterface
                 discussion={selectedDiscussion}
                 currentListener={user}
-                onBack={() => {
-                  setSelectedDiscussion(null);
-                  refreshDiscussions();
-                }}
+                onBack={handleReturnToDiscussions}
                 onSendMessage={handleSendMessage}
                 onCloseDiscussion={handleCloseDiscussion}
                 onUpdateAttention={handleUpdateAttention}
               />
+
+              {/* Direct "Return to Discussions" link/button positioned close below the chat window */}
+              <div className="mt-3.5 flex flex-col sm:flex-row items-center justify-between gap-2 px-1">
+                <button
+                  id="listener-return-to-discussions-below-chat-btn"
+                  type="button"
+                  onClick={handleReturnToDiscussions}
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl bg-white hover:bg-[#F2ECE3] text-[#244534] border border-[#DDD5C7] text-xs sm:text-sm font-semibold transition-all cursor-pointer shadow-2xs hover:shadow-xs"
+                  title={language === 'ar' ? 'العودة إلى قائمة المحادثات (تبقى المحادثة نشطة)' : language === 'fr' ? 'Retourner aux discussions (la conversation reste active)' : 'Return to Discussions list (conversation stays open in background)'}
+                >
+                  <ArrowLeft className="w-4 h-4 text-[#3C6450] rtl:rotate-180" />
+                  <span>{language === 'ar' ? 'العودة إلى المحادثات' : language === 'fr' ? 'Retour aux discussions' : 'Return to Discussions'}</span>
+                </button>
+                <span className="text-[11px] text-[#7A8A80] text-center sm:text-start">
+                  {language === 'ar' ? 'تبقى المحادثة نشطة في الخلفية' : language === 'fr' ? 'La conversation reste active en arrière-plan' : 'Conversation stays active in background'}
+                </span>
+              </div>
             </div>
           </div>
         ) : (
@@ -521,14 +639,14 @@ export const DiscussionsPage = ({
               <button
                 id="tab-unopened-discussions"
                 onClick={() => setActiveTab('unopened')}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-semibold transition-all cursor-pointer shrink-0 ${
                   activeTab === 'unopened'
                     ? 'bg-[#315243] text-white shadow-xs'
                     : 'bg-white text-[#56685D] hover:bg-[#F2ECE3] border border-[#E8E2D7]'
                 }`}
               >
                 <Inbox className="w-4 h-4" />
-                <span>Available Discussions</span>
+                <span>{strings.discussions.availableDiscussions}</span>
                 <span className={`px-2 py-0.5 rounded-full text-xs ${
                   activeTab === 'unopened'
                     ? 'bg-white/20 text-white'
@@ -541,14 +659,14 @@ export const DiscussionsPage = ({
               <button
                 id="tab-my-conversations"
                 onClick={() => setActiveTab('myConversations')}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-semibold transition-all cursor-pointer shrink-0 ${
                   activeTab === 'myConversations'
                     ? 'bg-[#315243] text-white shadow-xs'
                     : 'bg-white text-[#56685D] hover:bg-[#F2ECE3] border border-[#E8E2D7]'
                 }`}
               >
                 <MessageSquare className="w-4 h-4" />
-                <span>My Conversations</span>
+                <span>{strings.discussions.myConversations}</span>
                 <span className={`px-2 py-0.5 rounded-full text-xs ${
                   activeTab === 'myConversations'
                     ? 'bg-white/20 text-white'
@@ -561,14 +679,14 @@ export const DiscussionsPage = ({
               <button
                 id="tab-history-discussions"
                 onClick={() => setActiveTab('history')}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-semibold transition-all cursor-pointer shrink-0 ${
                   activeTab === 'history'
                     ? 'bg-[#315243] text-white shadow-xs'
                     : 'bg-white text-[#56685D] hover:bg-[#F2ECE3] border border-[#E8E2D7]'
                 }`}
               >
                 <Archive className="w-4 h-4" />
-                <span>Closed / History</span>
+                <span>{strings.discussions.closedHistory}</span>
                 <span className={`px-2 py-0.5 rounded-full text-xs ${
                   activeTab === 'history'
                     ? 'bg-white/20 text-white'
@@ -581,14 +699,14 @@ export const DiscussionsPage = ({
               <button
                 id="tab-mailbox"
                 onClick={() => setActiveTab('mailbox')}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-semibold transition-all cursor-pointer shrink-0 ${
                   activeTab === 'mailbox'
                     ? 'bg-[#315243] text-white shadow-xs'
                     : 'bg-white text-[#56685D] hover:bg-[#F2ECE3] border border-[#E8E2D7]'
                 }`}
               >
                 <Mail className="w-4 h-4" />
-                <span>Mailbox</span>
+                <span>{strings.discussions.mailbox}</span>
                 {unreadShareCount > 0 ? (
                   <span className="px-2 py-0.5 rounded-full text-xs bg-rose-500 text-white font-bold animate-pulse">
                     {unreadShareCount}
@@ -608,14 +726,14 @@ export const DiscussionsPage = ({
                 <button
                   id="tab-all-conversations-supervisor"
                   onClick={() => setActiveTab('allConversations')}
-                  className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-semibold transition-all cursor-pointer shrink-0 ${
                     activeTab === 'allConversations'
                       ? 'bg-[#92400E] text-white shadow-xs'
                       : 'bg-[#FFFBEB] text-[#92400E] hover:bg-[#FEF3C7] border border-[#FDE68A]'
                   }`}
                 >
                   <Star className="w-4 h-4" />
-                  <span>Supervisor View (All)</span>
+                  <span>{language === 'fr' ? 'Vue Superviseur (Tous)' : 'Supervisor View (All)'}</span>
                   <span className={`px-2 py-0.5 rounded-full text-xs ${
                     activeTab === 'allConversations'
                       ? 'bg-white/20 text-white'
@@ -623,6 +741,32 @@ export const DiscussionsPage = ({
                   }`}>
                     {allList.length}
                   </span>
+                </button>
+              )}
+
+              {(isHead || isAdmin) && (
+                <button
+                  id="tab-reports-head-of-listeners"
+                  onClick={() => setActiveTab('reports')}
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-semibold transition-all cursor-pointer shrink-0 ${
+                    activeTab === 'reports'
+                      ? 'bg-[#991B1B] text-white shadow-xs'
+                      : 'bg-[#FEF2F2] text-[#991B1B] hover:bg-[#FEE2E2] border border-[#FECACA]'
+                  }`}
+                >
+                  <ShieldAlert className="w-4 h-4" />
+                  <span>{strings.discussions.reports}</span>
+                  {pendingReportsCount > 0 ? (
+                    <span className="px-2 py-0.5 rounded-full text-xs bg-rose-600 text-white font-bold animate-pulse">
+                      {pendingReportsCount}
+                    </span>
+                  ) : (
+                    <span className={`px-2 py-0.5 rounded-full text-xs ${
+                      activeTab === 'reports' ? 'bg-white/20 text-white' : 'bg-rose-100 text-rose-800'
+                    }`}>
+                      {totalReportsCount}
+                    </span>
+                  )}
                 </button>
               )}
             </div>
@@ -633,14 +777,16 @@ export const DiscussionsPage = ({
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div>
                     <h2 className="text-base sm:text-lg font-bold text-[#1C3227] font-['Lora',serif]">
-                      Unopened Conversations Queue
+                      {strings.discussions.unopenedQueue}
                     </h2>
                     <p className="text-xs text-[#66776E]">
-                      Conversations initiated by visitors that have not yet been opened by any listener. Basic non-sensitive details are shown below. Message content remains confidential until claimed.
+                      {language === 'fr'
+                        ? 'Conversations initiées par les visiteurs en attente d\'un écoutant. Les détails de base sont indiqués ci-dessous. Le contenu des messages reste strictement confidentiel jusqu\'au déverrouillage.'
+                        : 'Conversations initiated by visitors that have not yet been opened by any listener. Basic non-sensitive details are shown below. Message content remains confidential until claimed.'}
                     </p>
                   </div>
                   <div className="text-xs text-[#7B8B82] bg-white px-3 py-1.5 rounded-xl border border-[#E8E2D7] shrink-0 self-start sm:self-auto">
-                    Waiting: <strong className="text-[#203D2E]">{unopenedList.length}</strong>
+                    {strings.discussions.waiting}: <strong className="text-[#203D2E]">{unopenedList.length}</strong>
                   </div>
                 </div>
 
@@ -649,65 +795,73 @@ export const DiscussionsPage = ({
                     <div className="w-12 h-12 rounded-2xl bg-[#F0F5F2] text-[#2F5342] flex items-center justify-center mx-auto mb-3">
                       <Inbox className="w-6 h-6" />
                     </div>
-                    <h3 className="text-sm font-bold text-[#23382D]">No Unopened Discussions</h3>
+                    <h3 className="text-sm font-bold text-[#23382D]">{strings.discussions.noUnopened}</h3>
                     <p className="text-xs text-[#6C7D73] mt-1 max-w-sm mx-auto">
-                      All incoming conversations have currently been picked up. Check your &quot;My Conversations&quot; tab for active sessions.
+                      {strings.discussions.allClaimed}
                     </p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {unopenedList.map((disc) => (
-                      <div
-                        key={disc.id}
-                        className="bg-white rounded-3xl border border-[#E8E2D7] p-5 shadow-xs hover:border-[#D0C7B8] transition-all flex flex-col justify-between"
-                      >
-                        <div>
-                          <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              {disc.type === 'anonymous' ? (
-                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-[#EEF2FF] text-[#4338CA] border border-[#D5DCFC]">
-                                  <UserX className="w-3.5 h-3.5" />
-                                  Anonymous Visitor
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-[#E0F2FE] text-[#0369A1] border border-[#BAE6FD]">
-                                  <User className="w-3.5 h-3.5" />
-                                  Registered Member
-                                </span>
-                              )}
-                              <GenderPreferenceTag preference={disc.genderPreference} />
+                  <div className="flex flex-col gap-4">
+                    {unopenedList.map((disc) => {
+                      const creator = getDiscussionCreatorInfo(disc, language);
+                      return (
+                        <div
+                          key={disc.id}
+                          className="w-full bg-white rounded-3xl border border-[#E8E2D7] p-5 sm:p-6 shadow-xs hover:border-[#D0C7B8] transition-all flex flex-col md:flex-row md:items-center md:justify-between gap-4"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between md:justify-start gap-2 mb-3 flex-wrap">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                {creator.isRegistered ? (
+                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-[#E0F2FE] text-[#0369A1] border border-[#BAE6FD]">
+                                    <User className="w-3.5 h-3.5" />
+                                    <span>{creator.name}</span>
+                                    <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-white/80 text-[#0284C7] font-medium">
+                                      {language === 'fr' ? 'Inscrit' : 'Registered'}
+                                    </span>
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-[#EEF2FF] text-[#4338CA] border border-[#D5DCFC]">
+                                    <UserX className="w-3.5 h-3.5" />
+                                    {language === 'fr' ? 'Utilisateur Anonyme' : 'Anonymous User'}
+                                  </span>
+                                )}
+                                <GenderPreferenceTag preference={disc.genderPreference} />
+                              </div>
+                              <span className="text-[11px] font-mono text-[#8C9C92] bg-[#F7F4EE] px-2 py-0.5 rounded-lg border border-[#E8E1D5]">
+                                #{disc.id}
+                              </span>
                             </div>
-                            <span className="text-[11px] font-mono text-[#8C9C92] bg-[#F7F4EE] px-2 py-0.5 rounded-lg border border-[#E8E1D5]">
-                              #{disc.id}
-                            </span>
-                          </div>
 
-                          <div className="space-y-2 mb-4">
+                          <div className="space-y-2">
                             <div className="flex items-center gap-2 text-xs text-[#5D6F64]">
                               <Clock className="w-3.5 h-3.5 text-[#798E82]" />
-                              <span>Session Started: <strong>{disc.startedAt}</strong></span>
+                              <span>{language === 'fr' ? 'Session démarrée :' : 'Session Started:'} <strong>{disc.startedAt}</strong></span>
                             </div>
 
                             <div className="p-3 rounded-2xl bg-[#FAF8F5] border border-[#ECE5DB] flex items-start gap-2 text-xs text-[#6B7C72]">
                               <Lock className="w-3.5 h-3.5 text-[#305241] shrink-0 mt-0.5" />
                               <span>
-                                <strong>Confidentiality Protection:</strong> Actual message contents are locked and encrypted until claimed with your verified key code.
+                                <strong>{language === 'fr' ? 'Protection de la confidentialité :' : 'Confidentiality Protection:'}</strong> {language === 'fr' ? 'Le contenu réel des messages est verrouillé et chiffré jusqu\'au déverrouillage avec votre code personnel d\'écoutant.' : 'Actual message contents are locked and encrypted until claimed with your verified key code.'}
                               </span>
                             </div>
                           </div>
                         </div>
 
-                        <button
-                          id={`open-disc-btn-${disc.id}`}
-                          onClick={() => handleInitiateOpenDiscussion(disc)}
-                          className="w-full py-2.5 px-4 bg-[#315243] hover:bg-[#253E33] text-white text-xs sm:text-sm font-semibold rounded-2xl transition-all cursor-pointer flex items-center justify-center gap-2 shadow-xs group"
-                        >
-                          <KeyRound className="w-4 h-4 transition-transform group-hover:scale-110" />
-                          <span>Open Discussion (Verify Key)</span>
-                        </button>
+                        <div className="md:w-64 shrink-0">
+                          <button
+                            id={`open-disc-btn-${disc.id}`}
+                            onClick={() => handleInitiateOpenDiscussion(disc)}
+                            className="w-full py-3 px-4 bg-[#315243] hover:bg-[#253E33] text-white text-xs sm:text-sm font-semibold rounded-2xl transition-all cursor-pointer flex items-center justify-center gap-2 shadow-xs group"
+                          >
+                            <KeyRound className="w-4 h-4 transition-transform group-hover:scale-110" />
+                            <span>{strings.discussions.openDiscussion}</span>
+                          </button>
+                        </div>
                       </div>
-                    ))}
-                  </div>
+                    );
+                  })}
+                </div>
                 )}
               </div>
             )}
@@ -747,58 +901,64 @@ export const DiscussionsPage = ({
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {myList.map((disc) => (
-                      <div
-                        key={disc.id}
-                        className="bg-white rounded-3xl border border-[#E8E2D7] p-5 shadow-xs hover:border-[#D0C7B8] transition-all flex flex-col justify-between"
-                      >
-                        <div>
-                          <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              {disc.type === 'anonymous' ? (
-                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-[#EEF2FF] text-[#4338CA] border border-[#D5DCFC]">
-                                  <UserX className="w-3.5 h-3.5" />
-                                  Anonymous Visitor
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-[#E0F2FE] text-[#0369A1] border border-[#BAE6FD]">
-                                  <User className="w-3.5 h-3.5" />
-                                  Member: {disc.userName || 'Registered'}
-                                </span>
-                              )}
-                              <GenderPreferenceTag preference={disc.genderPreference} />
-                            </div>
-                            <span className="inline-flex items-center gap-1 text-[11px] text-[#254636] font-semibold bg-[#E7F2EB] px-2.5 py-0.5 rounded-full border border-[#D2E4D8]">
-                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                              Active Session
-                            </span>
-                          </div>
-
-                          <div className="space-y-1.5 text-xs text-[#5D6F64] mb-4">
-                            <div className="flex items-center gap-1.5">
-                              <Clock className="w-3.5 h-3.5 text-[#798E82]" />
-                              <span>Started: {disc.startedAt}</span>
-                            </div>
-                            <div className="flex items-center gap-1.5 text-[#244333] font-medium">
-                              <Unlock className="w-3.5 h-3.5 text-emerald-600" />
-                              <span>{disc.openedAt || 'Claimed with your key'}</span>
-                            </div>
-                            <div className="text-[11px] text-[#7A8C81] pt-1">
-                              Total message exchanges: <strong>{disc.messages.length}</strong>
-                            </div>
-                          </div>
-                        </div>
-
-                        <button
-                          id={`view-my-disc-btn-${disc.id}`}
-                          onClick={() => handleViewDiscussion(disc)}
-                          className="w-full py-2.5 px-4 bg-[#315243] hover:bg-[#253E33] text-white text-xs sm:text-sm font-semibold rounded-2xl transition-all cursor-pointer flex items-center justify-center gap-2 shadow-xs"
+                    {myList.map((disc) => {
+                      const creator = getDiscussionCreatorInfo(disc, language);
+                      return (
+                        <div
+                          key={disc.id}
+                          className="bg-white rounded-3xl border border-[#E8E2D7] p-5 shadow-xs hover:border-[#D0C7B8] transition-all flex flex-col justify-between"
                         >
-                          <MessageSquare className="w-4 h-4" />
-                          <span>Open Chat Workspace</span>
-                        </button>
-                      </div>
-                    ))}
+                          <div>
+                            <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                {creator.isRegistered ? (
+                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-[#E0F2FE] text-[#0369A1] border border-[#BAE6FD]">
+                                    <User className="w-3.5 h-3.5" />
+                                    <span>{creator.name}</span>
+                                    <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-white/80 text-[#0284C7] font-medium">
+                                      {language === 'fr' ? 'Inscrit' : 'Registered'}
+                                    </span>
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-[#EEF2FF] text-[#4338CA] border border-[#D5DCFC]">
+                                    <UserX className="w-3.5 h-3.5" />
+                                    {language === 'fr' ? 'Utilisateur Anonyme' : 'Anonymous User'}
+                                  </span>
+                                )}
+                                <GenderPreferenceTag preference={disc.genderPreference} />
+                              </div>
+                              <span className="inline-flex items-center gap-1 text-[11px] text-[#254636] font-semibold bg-[#E7F2EB] px-2.5 py-0.5 rounded-full border border-[#D2E4D8]">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                Active Session
+                              </span>
+                            </div>
+
+                            <div className="space-y-1.5 text-xs text-[#5D6F64] mb-4">
+                              <div className="flex items-center gap-1.5">
+                                <Clock className="w-3.5 h-3.5 text-[#798E82]" />
+                                <span>Started: {disc.startedAt}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5 text-[#244333] font-medium">
+                                <Unlock className="w-3.5 h-3.5 text-emerald-600" />
+                                <span>{disc.openedAt || 'Claimed with your key'}</span>
+                              </div>
+                              <div className="text-[11px] text-[#7A8C81] pt-1">
+                                Total message exchanges: <strong>{disc.messages.length}</strong>
+                              </div>
+                            </div>
+                          </div>
+
+                          <button
+                            id={`view-my-disc-btn-${disc.id}`}
+                            onClick={() => handleViewDiscussion(disc)}
+                            className="w-full py-2.5 px-4 bg-[#315243] hover:bg-[#253E33] text-white text-xs sm:text-sm font-semibold rounded-2xl transition-all cursor-pointer flex items-center justify-center gap-2 shadow-xs"
+                          >
+                            <MessageSquare className="w-4 h-4" />
+                            <span>Open Chat Workspace</span>
+                          </button>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -833,62 +993,68 @@ export const DiscussionsPage = ({
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {historyList.map((disc) => (
-                      <div
-                        key={disc.id}
-                        className="bg-white rounded-3xl border border-[#E8E2D7] p-5 shadow-xs hover:border-[#D0C7B8] transition-all flex flex-col justify-between"
-                      >
-                        <div>
-                          <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              {disc.type === 'anonymous' ? (
-                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-stone-100 text-stone-700 border border-stone-300">
-                                  <UserX className="w-3.5 h-3.5" />
-                                  Anonymous Visitor
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-[#EAF4F3] text-[#164E49] border border-[#C2E4DF]">
-                                  <User className="w-3.5 h-3.5" />
-                                  Member: {disc.userName || 'Registered'}
-                                </span>
-                              )}
-                              <GenderPreferenceTag preference={disc.genderPreference} />
-                            </div>
-                            <span className="inline-flex items-center gap-1 text-[11px] text-[#697A71] font-semibold bg-[#F5F2EC] px-2.5 py-0.5 rounded-full border border-[#E2DDD5]">
-                              <Archive className="w-3 h-3 text-stone-500" />
-                              Concluded
-                            </span>
-                          </div>
-
-                          <div className="space-y-1.5 text-xs text-[#5D6F64] mb-4">
-                            <div className="flex items-center gap-1.5">
-                              <Clock className="w-3.5 h-3.5 text-[#798E82]" />
-                              <span>Started: {disc.startedAt}</span>
-                            </div>
-                            <div className="flex items-center gap-1.5 text-stone-600">
-                              <span>Concluded: <strong>{disc.closedAt || 'Recorded'}</strong></span>
-                            </div>
-                            <div className="text-[11px] text-[#7A8C81] pt-1">
-                              Total message exchanges: <strong>{disc.messages.length}</strong>
-                            </div>
-                            {disc.type === 'registered' && (
-                              <div className="text-[11px] text-teal-800 bg-[#F0F7F5] border border-[#D5EAE3] p-2 rounded-xl mt-2">
-                                &bull; Registered session: if member sends a new reflection, it reactivates here automatically.
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        <button
-                          id={`view-history-disc-btn-${disc.id}`}
-                          onClick={() => handleViewDiscussion(disc)}
-                          className="w-full py-2.5 px-4 bg-[#F2EDE4] hover:bg-[#E7E1D6] text-[#283C30] text-xs sm:text-sm font-semibold rounded-2xl transition-all cursor-pointer flex items-center justify-center gap-2 border border-[#DBD3C5]"
+                    {historyList.map((disc) => {
+                      const creator = getDiscussionCreatorInfo(disc, language);
+                      return (
+                        <div
+                          key={disc.id}
+                          className="bg-white rounded-3xl border border-[#E8E2D7] p-5 shadow-xs hover:border-[#D0C7B8] transition-all flex flex-col justify-between"
                         >
-                          <Eye className="w-4 h-4 text-[#315243]" />
-                          <span>Review Chat History</span>
-                        </button>
-                      </div>
-                    ))}
+                          <div>
+                            <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                {creator.isRegistered ? (
+                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-[#EAF4F3] text-[#164E49] border border-[#C2E4DF]">
+                                    <User className="w-3.5 h-3.5" />
+                                    <span>{creator.name}</span>
+                                    <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-white/80 text-[#0f766e] font-medium">
+                                      {language === 'fr' ? 'Inscrit' : 'Registered'}
+                                    </span>
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-stone-100 text-stone-700 border border-stone-300">
+                                    <UserX className="w-3.5 h-3.5" />
+                                    {language === 'fr' ? 'Utilisateur Anonyme' : 'Anonymous User'}
+                                  </span>
+                                )}
+                                <GenderPreferenceTag preference={disc.genderPreference} />
+                              </div>
+                              <span className="inline-flex items-center gap-1 text-[11px] text-[#697A71] font-semibold bg-[#F5F2EC] px-2.5 py-0.5 rounded-full border border-[#E2DDD5]">
+                                <Archive className="w-3 h-3 text-stone-500" />
+                                Concluded
+                              </span>
+                            </div>
+
+                            <div className="space-y-1.5 text-xs text-[#5D6F64] mb-4">
+                              <div className="flex items-center gap-1.5">
+                                <Clock className="w-3.5 h-3.5 text-[#798E82]" />
+                                <span>Started: {disc.startedAt}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5 text-stone-600">
+                                <span>Concluded: <strong>{disc.closedAt || 'Recorded'}</strong></span>
+                              </div>
+                              <div className="text-[11px] text-[#7A8C81] pt-1">
+                                Total message exchanges: <strong>{disc.messages.length}</strong>
+                              </div>
+                              {creator.isRegistered && (
+                                <div className="text-[11px] text-teal-800 bg-[#F0F7F5] border border-[#D5EAE3] p-2 rounded-xl mt-2">
+                                  &bull; Registered session: if member sends a new reflection, it reactivates here automatically.
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          <button
+                            id={`view-history-disc-btn-${disc.id}`}
+                            onClick={() => handleViewDiscussion(disc)}
+                            className="w-full py-2.5 px-4 bg-[#F2EDE4] hover:bg-[#E7E1D6] text-[#283C30] text-xs sm:text-sm font-semibold rounded-2xl transition-all cursor-pointer flex items-center justify-center gap-2 border border-[#DBD3C5]"
+                          >
+                            <Eye className="w-4 h-4 text-[#315243]" />
+                            <span>Review Chat History</span>
+                          </button>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -916,30 +1082,35 @@ export const DiscussionsPage = ({
                   </div>
 
                   <div className="divide-y divide-[#EFEBE4]">
-                    {allList.map((disc) => (
-                      <div 
-                        key={disc.id}
-                        className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-[#FAF8F5] transition-colors"
-                      >
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-mono text-xs font-bold text-[#233A2E]">
-                              #{disc.id}
-                            </span>
-
-                            {disc.type === 'anonymous' ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-[#EEF2FF] text-[#4338CA]">
-                                <UserX className="w-3 h-3" />
-                                Anonymous Visitor
+                    {allList.map((disc) => {
+                      const creator = getDiscussionCreatorInfo(disc, language);
+                      return (
+                        <div 
+                          key={disc.id}
+                          className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-[#FAF8F5] transition-colors"
+                        >
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-mono text-xs font-bold text-[#233A2E]">
+                                #{disc.id}
                               </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-[#E0F2FE] text-[#0369A1]">
-                                <User className="w-3 h-3" />
-                                Member ({disc.userName || 'Registered'})
-                              </span>
-                            )}
 
-                            <GenderPreferenceTag preference={disc.genderPreference} />
+                              {creator.isRegistered ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-[#E0F2FE] text-[#0369A1]">
+                                  <User className="w-3 h-3" />
+                                  <span>{creator.name}</span>
+                                  <span className="text-[9px] px-1 py-0.2 rounded bg-white/70 text-[#0284C7] font-medium">
+                                    {language === 'fr' ? 'Inscrit' : 'Registered'}
+                                  </span>
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-[#EEF2FF] text-[#4338CA]">
+                                  <UserX className="w-3 h-3" />
+                                  {language === 'fr' ? 'Utilisateur Anonyme' : 'Anonymous User'}
+                                </span>
+                              )}
+
+                              <GenderPreferenceTag preference={disc.genderPreference} />
 
                             {disc.status === 'unopened' && (
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-[#FEF3C7] text-[#92400E]">
@@ -990,14 +1161,64 @@ export const DiscussionsPage = ({
                           )}
                         </div>
                       </div>
-                    ))}
-                  </div>
+                    );
+                  })}
                 </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB 5: MAILBOX (CONSULTATIONS & SHARE REQUESTS) */}
+            {activeTab === 'mailbox' && (
+              <div className="bg-white rounded-3xl border border-[#E8E2D7] p-4 sm:p-7 shadow-xs">
+                <ShareRequestsMailbox 
+                  currentUser={user}
+                  onOpenDiscussion={(discussionId) => {
+                    const disc = discussions.find((d) => d.id === discussionId);
+                    if (disc) {
+                      handleViewDiscussion(disc);
+                    }
+                  }}
+                  onSwitchToReports={() => setActiveTab('reports')}
+                />
+              </div>
+            )}
+
+            {/* TAB 6: REPORTS (HEAD OF LISTENERS ONLY) */}
+            {activeTab === 'reports' && (isHead || isAdmin) && (
+              <div className="bg-white rounded-3xl border border-[#E8E2D7] p-4 sm:p-7 shadow-xs">
+                <HeadOfListenersReportsView 
+                  currentUser={user}
+                  onOpenDiscussion={(discussionId) => {
+                    const disc = discussions.find((d) => d.id === discussionId);
+                    if (disc) {
+                      handleViewDiscussion(disc);
+                    }
+                  }}
+                />
               </div>
             )}
           </div>
         )}
       </main>
+
+      {/* Page Footer */}
+      <footer className="w-full py-5 text-center text-xs text-[#7A8A80] border-t border-[#E5DFD5] bg-[#FAF8F5]/80 mt-auto">
+        <div className="max-w-5xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
+          <span>&copy; {new Date().getFullYear()} 3awdli &bull; Listener Workspace</span>
+          {onOpenContactSupport && (
+            <button
+              id="discussions-footer-contact-link"
+              onClick={onOpenContactSupport}
+              className="text-[#315243] hover:underline font-medium cursor-pointer inline-flex items-center gap-1"
+            >
+              <HelpCircle className="w-3.5 h-3.5 text-[#315243]" />
+              <span>Need technical assistance with the site? Contact Support</span>
+            </button>
+          )}
+        </div>
+      </footer>
+      </Navbar>
 
       {/* ------------------------------------------------------------- */}
       {/* MODAL: ONE-TIME KEY CODE VERIFICATION TO OPEN DISCUSSION       */}
@@ -1022,10 +1243,12 @@ export const DiscussionsPage = ({
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-[#1C3227] font-['Lora',serif]">
-                    Listener Authorization Required
+                    {language === 'fr' ? 'Autorisation Écoutant Requise' : 'Listener Authorization Required'}
                   </h3>
                   <p className="text-xs text-[#68766E]">
-                    Enter your personal key code to claim and open discussion #{verifyingDiscussion.id}
+                    {language === 'fr' 
+                      ? `Entrez votre code personnel d'écoutant pour réclamer et ouvrir la discussion #${verifyingDiscussion.id}`
+                      : `Enter your personal key code to claim and open discussion #${verifyingDiscussion.id}`}
                   </p>
                 </div>
               </div>
@@ -1048,21 +1271,26 @@ export const DiscussionsPage = ({
               {/* Target Discussion Non-Sensitive Summary */}
               <div className="p-3.5 bg-white border border-[#E5DFD5] rounded-2xl space-y-1.5">
                 <div className="text-xs font-semibold text-[#3D4F43] flex items-center justify-between">
-                  <span>Target Discussion:</span>
+                  <span>{language === 'fr' ? 'Discussion ciblée :' : 'Target Discussion:'}</span>
                   <span className="font-mono text-[11px] text-[#697B70]">#{verifyingDiscussion.id}</span>
                 </div>
                 <div className="text-xs text-[#5D6F64] flex items-center justify-between">
-                  <span>Visitor Category:</span>
+                  <span>{language === 'fr' ? 'Demandeur :' : 'Requester:'}</span>
                   <span className="font-medium text-[#203D2E]">
-                    {verifyingDiscussion.type === 'anonymous' ? 'Anonymous Visitor' : 'Registered Member'}
+                    {(() => {
+                      const c = getDiscussionCreatorInfo(verifyingDiscussion, language);
+                      return c.isRegistered 
+                        ? `${c.name} (${language === 'fr' ? 'Membre Inscrit' : 'Registered Member'})`
+                        : (language === 'fr' ? 'Utilisateur Anonyme' : 'Anonymous User');
+                    })()}
                   </span>
                 </div>
                 <div className="text-xs text-[#5D6F64] flex items-center justify-between">
-                  <span>Gender Preference:</span>
+                  <span>{language === 'fr' ? 'Préférence de genre :' : 'Gender Preference:'}</span>
                   <GenderPreferenceTag preference={verifyingDiscussion.genderPreference} />
                 </div>
                 <div className="text-xs text-[#5D6F64] flex items-center justify-between">
-                  <span>Started:</span>
+                  <span>{language === 'fr' ? 'Démarrée :' : 'Started:'}</span>
                   <span>{verifyingDiscussion.startedAt}</span>
                 </div>
               </div>
@@ -1071,7 +1299,7 @@ export const DiscussionsPage = ({
               <div className="p-3 bg-[#F4EFE7] rounded-2xl border border-[#DFD6C8] flex items-start gap-2.5 text-xs text-[#67776F]">
                 <FolderLock className="w-4 h-4 text-[#315243] shrink-0 mt-0.5" />
                 <div className="leading-relaxed">
-                  <strong className="text-[#20382B]">Ownership Policy:</strong> Once verified, this conversation will be permanently assigned to your personal list (<strong>My Conversations</strong>) and removed from the shared open queue.
+                  <strong className="text-[#20382B]">{language === 'fr' ? 'Règle de propriété :' : 'Ownership Policy:'}</strong> {language === 'fr' ? 'Une fois vérifiée, cette conversation sera définitivement attribuée à votre liste personnelle (Mes Conversations) et retirée de la file d\'attente partagée.' : 'Once verified, this conversation will be permanently assigned to your personal list (My Conversations) and removed from the shared open queue.'}
                 </div>
               </div>
 
@@ -1093,7 +1321,7 @@ export const DiscussionsPage = ({
                     htmlFor="listener-key-input"
                     className="block text-xs font-semibold text-[#293B30] mb-1.5"
                   >
-                    Your Personal Listener Key Code
+                    {language === 'fr' ? 'Votre code personnel d\'écoutant' : 'Your Personal Listener Key Code'}
                   </label>
                   <div className="relative">
                     <input
@@ -1110,23 +1338,6 @@ export const DiscussionsPage = ({
                     />
                   </div>
                 </div>
-
-                {/* Developer/Testing Helper Assist Box */}
-                <div className="p-3 bg-[#EBF2EE] border border-[#CCE0D3] rounded-xl flex items-center justify-between gap-2 text-xs">
-                  <div className="text-[11px] text-[#335343] leading-tight">
-                    <span className="font-semibold">Testing helper:</span> Your key is <code className="font-mono font-bold">{listenerKeyCode}</code>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setInputKeyCode(listenerKeyCode);
-                      setKeyCodeError(null);
-                    }}
-                    className="px-2.5 py-1 rounded-lg bg-[#315243] hover:bg-[#253E33] text-white text-[11px] font-semibold transition-colors cursor-pointer shrink-0"
-                  >
-                    Auto-Fill
-                  </button>
-                </div>
               </form>
             </div>
 
@@ -1140,7 +1351,7 @@ export const DiscussionsPage = ({
                 }}
                 className="py-2.5 px-4 rounded-xl bg-[#EFECE5] hover:bg-[#E4DFD4] text-[#3B4C41] text-xs sm:text-sm font-semibold transition-colors cursor-pointer"
               >
-                Cancel
+                {strings.common.cancel}
               </button>
 
               <button
@@ -1150,12 +1361,12 @@ export const DiscussionsPage = ({
                 className="py-2.5 px-5 rounded-xl bg-[#315243] hover:bg-[#253E33] text-white text-xs sm:text-sm font-semibold transition-colors cursor-pointer flex items-center justify-center gap-2 shadow-xs"
               >
                 <Unlock className="w-4 h-4" />
-                <span>Verify Key &amp; Open Discussion</span>
+                <span>{language === 'fr' ? 'Vérifier la clé & Ouvrir' : 'Verify Key & Open Discussion'}</span>
               </button>
             </div>
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 };

@@ -1,4 +1,4 @@
-import { useState, useMemo, type FormEvent } from 'react';
+import { useState, useMemo, useEffect, type FormEvent } from 'react';
 import { 
   X, 
   Share2, 
@@ -6,6 +6,7 @@ import {
   Search, 
   Star, 
   ShieldCheck, 
+  Sparkles,
   CheckCircle2, 
   Send, 
   AlertCircle,
@@ -14,9 +15,10 @@ import {
   Briefcase
 } from 'lucide-react';
 import { DiscussionConversation, UserAccount } from '../types';
-import { getStoredUsers, StoredUser } from '../utils/userManagement';
+import { getStoredUsers, StoredUser, isAdministrator } from '../utils/userManagement';
 import { isUserOnline, createShareRequest, getShareRequestsForDiscussion } from '../utils/shareManagement';
 import { ListenerGenderIcon } from './ListenerGenderDisplay';
+import { useLanguage } from '../context/LanguageContext';
 
 interface ShareConversationModalProps {
   isOpen: boolean;
@@ -31,6 +33,7 @@ export const ShareConversationModal = ({
   discussion,
   currentListener,
 }: ShareConversationModalProps) => {
+  const { language } = useLanguage();
   const [step, setStep] = useState<'list' | 'form' | 'success'>('list');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedColleague, setSelectedColleague] = useState<StoredUser | null>(null);
@@ -38,7 +41,20 @@ export const ShareConversationModal = ({
   const [description, setDescription] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successRecipientName, setSuccessRecipientName] = useState('');
-  const [activeTab, setActiveTab] = useState<'colleagues' | 'existingShares'>('colleagues');
+
+  // Tabs: 'connected' (default), 'all', or 'existingShares'
+  const [listenerFilterTab, setListenerFilterTab] = useState<'connected' | 'all' | 'existingShares'>('connected');
+
+  // Reset to Connected Listeners whenever modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setListenerFilterTab('connected');
+      setStep('list');
+      setSelectedColleague(null);
+      setSearchQuery('');
+      setErrorMsg(null);
+    }
+  }, [isOpen]);
 
   // Existing share requests sent for this discussion
   const existingRequests = useMemo(() => {
@@ -55,28 +71,39 @@ export const ShareConversationModal = ({
       // Must be a listener or higher-ranked (Head of Listeners, Admin)
       const isListener = Boolean(u.is_listener || u.isListener || u.role === 'listener');
       const isHead = Boolean(u.is_head_of_listeners);
-      const isAdmin = u.role === 'admin';
+      const isAdmin = Boolean(
+        u.role === 'admin' ||
+        u.role === 'administrator' ||
+        u.is_administrator ||
+        isAdministrator(u)
+      );
 
       return isListener || isHead || isAdmin;
     });
   }, [currentListener.id]);
 
-  // Filtered by search
-  const filteredColleagues = useMemo(() => {
+  // Connected colleagues (currently online)
+  const connectedColleagues = useMemo(() => {
+    return eligibleColleagues.filter((u) => isUserOnline(u.id));
+  }, [eligibleColleagues]);
+
+  // Displayed colleagues based on selected tab ('connected' or 'all')
+  const displayedColleagues = useMemo(() => {
+    const baseList = listenerFilterTab === 'connected' ? connectedColleagues : eligibleColleagues;
     const q = searchQuery.toLowerCase().trim();
-    if (!q) return eligibleColleagues;
-    return eligibleColleagues.filter((u) => {
+    if (!q) return baseList;
+    return baseList.filter((u) => {
       const nameMatch = u.name.toLowerCase().includes(q);
       const profMatch = u.profession?.toLowerCase().includes(q);
       return nameMatch || profMatch;
     });
-  }, [eligibleColleagues, searchQuery]);
+  }, [listenerFilterTab, connectedColleagues, eligibleColleagues, searchQuery]);
 
   if (!isOpen) return null;
 
   const handleSelectColleague = (user: StoredUser) => {
     setSelectedColleague(user);
-    setSubject(`Consultation: Discussion #${discussion.id}`);
+    setSubject('');
     setDescription('');
     setErrorMsg(null);
     setStep('form');
@@ -122,11 +149,13 @@ export const ShareConversationModal = ({
         fromListenerName: currentListener.name,
         fromListenerProfession: currentListener.profession,
         fromListenerGender: currentListener.gender,
+        fromListenerEmail: currentListener.email,
         toUserId: selectedColleague.id,
         toUserName: selectedColleague.name,
         toUserProfession: selectedColleague.profession,
         toUserRole: selectedColleague.is_head_of_listeners ? 'Head of Listeners' : (selectedColleague.role === 'admin' ? 'Administrator' : 'Listener'),
         toUserGender: selectedColleague.gender,
+        toUserEmail: selectedColleague.email,
         subject: trimmedSubject,
         description: trimmedDesc,
       });
@@ -205,37 +234,76 @@ export const ShareConversationModal = ({
         {/* STEP 1: COLLEAGUES LIST VIEW */}
         {step === 'list' && (
           <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
-            {/* Tabs if there are previous requests */}
-            {existingRequests.length > 0 && (
-              <div className="flex items-center gap-2 px-5 pt-3 pb-2 border-b border-[#ECE7DE] bg-white shrink-0">
-                <button
-                  type="button"
-                  id="tab-select-colleague"
-                  onClick={() => setActiveTab('colleagues')}
-                  className={`text-xs font-semibold px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
-                    activeTab === 'colleagues'
-                      ? 'bg-[#2A4B3A] text-white'
-                      : 'bg-[#F4EFE6] text-[#55675D] hover:bg-[#EBE5DC]'
+            {/* TABS: Connected Listeners | All Listeners | (optional) Existing Shares */}
+            <div className="flex items-center gap-2 px-5 pt-3.5 pb-2 border-b border-[#ECE7DE] bg-white shrink-0 overflow-x-auto">
+              {/* Tab 1: Connected Listeners (Default) */}
+              <button
+                type="button"
+                id="tab-connected-listeners"
+                onClick={() => setListenerFilterTab('connected')}
+                className={`text-xs font-semibold px-3 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
+                  listenerFilterTab === 'connected'
+                    ? 'bg-[#2A4B3A] text-white shadow-xs'
+                    : 'bg-[#F4EFE6] text-[#55675D] hover:bg-[#EBE5DC]'
+                }`}
+              >
+                <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block animate-pulse" />
+                <span>Connected Listeners</span>
+                <span
+                  className={`text-[11px] px-1.5 py-0.2 rounded-full ${
+                    listenerFilterTab === 'connected'
+                      ? 'bg-white/20 text-white font-bold'
+                      : 'bg-[#E5DFD4] text-[#44554B]'
                   }`}
                 >
-                  Colleagues &amp; Supervisors ({eligibleColleagues.length})
-                </button>
+                  {connectedColleagues.length}
+                </span>
+              </button>
+
+              {/* Tab 2: All Listeners */}
+              <button
+                type="button"
+                id="tab-all-listeners"
+                onClick={() => setListenerFilterTab('all')}
+                className={`text-xs font-semibold px-3 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
+                  listenerFilterTab === 'all'
+                    ? 'bg-[#2A4B3A] text-white shadow-xs'
+                    : 'bg-[#F4EFE6] text-[#55675D] hover:bg-[#EBE5DC]'
+                }`}
+              >
+                <span>All Listeners</span>
+                <span
+                  className={`text-[11px] px-1.5 py-0.2 rounded-full ${
+                    listenerFilterTab === 'all'
+                      ? 'bg-white/20 text-white font-bold'
+                      : 'bg-[#E5DFD4] text-[#44554B]'
+                  }`}
+                >
+                  {eligibleColleagues.length}
+                </span>
+              </button>
+
+              {/* Tab 3: Existing Shares (if any) */}
+              {existingRequests.length > 0 && (
                 <button
                   type="button"
                   id="tab-existing-shares"
-                  onClick={() => setActiveTab('existingShares')}
-                  className={`text-xs font-semibold px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
-                    activeTab === 'existingShares'
-                      ? 'bg-[#2A4B3A] text-white'
-                      : 'bg-[#F4EFE6] text-[#55675D] hover:bg-[#EBE5DC]'
+                  onClick={() => setListenerFilterTab('existingShares')}
+                  className={`text-xs font-semibold px-3 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ml-auto ${
+                    listenerFilterTab === 'existingShares'
+                      ? 'bg-[#2A4B3A] text-white shadow-xs'
+                      : 'bg-[#FAF6EE] text-[#6B7D72] hover:bg-[#EBE5DC] border border-[#E3DDD1]'
                   }`}
                 >
-                  Existing Shares ({existingRequests.length})
+                  <span>Existing Shares</span>
+                  <span className="text-[11px] px-1.5 py-0.2 rounded-full bg-[#E5DFD4] text-[#44554B]">
+                    {existingRequests.length}
+                  </span>
                 </button>
-              </div>
-            )}
+              )}
+            </div>
 
-            {activeTab === 'colleagues' ? (
+            {listenerFilterTab !== 'existingShares' ? (
               <>
                 {/* Search Bar */}
                 <div className="p-4 pb-3 bg-white shrink-0">
@@ -246,7 +314,11 @@ export const ShareConversationModal = ({
                       id="search-colleagues-input"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="Search colleagues by name or profession..."
+                      placeholder={
+                        listenerFilterTab === 'connected'
+                          ? 'Search connected listeners by name or profession...'
+                          : 'Search all listeners by name or profession...'
+                      }
                       className="w-full bg-[#FAF8F5] border border-[#DDD6C8] rounded-xl pl-9 pr-3.5 py-2 text-xs text-[#24352B] placeholder-[#8B9C92] outline-none focus:border-[#2C4D3C] focus:bg-white transition-colors"
                     />
                   </div>
@@ -254,15 +326,37 @@ export const ShareConversationModal = ({
 
                 {/* Colleague Cards List */}
                 <div className="p-4 pt-1 overflow-y-auto flex-1 space-y-2.5 divide-y divide-[#F1EDE5]">
-                  {filteredColleagues.length === 0 ? (
-                    <div className="py-8 text-center text-xs text-[#6F8076]">
-                      No matching colleagues or supervisors found.
+                  {displayedColleagues.length === 0 ? (
+                    <div className="py-10 text-center text-xs text-[#6F8076] space-y-2.5">
+                      <p>
+                        {listenerFilterTab === 'connected'
+                          ? (searchQuery
+                              ? 'No connected listeners match your search.'
+                              : 'No other listeners are currently connected online.')
+                          : (searchQuery
+                              ? 'No colleagues match your search.'
+                              : 'No eligible colleagues found.')}
+                      </p>
+                      {listenerFilterTab === 'connected' && eligibleColleagues.length > 0 && !searchQuery && (
+                        <button
+                          type="button"
+                          onClick={() => setListenerFilterTab('all')}
+                          className="px-3.5 py-1.5 rounded-xl bg-[#2A4B3A] text-white text-xs font-semibold hover:bg-[#1E362A] transition-all cursor-pointer shadow-xs"
+                        >
+                          View All Listeners ({eligibleColleagues.length})
+                        </button>
+                      )}
                     </div>
                   ) : (
-                    filteredColleagues.map((colleague) => {
+                    displayedColleagues.map((colleague) => {
                       const online = isUserOnline(colleague.id);
                       const isHead = Boolean(colleague.is_head_of_listeners);
-                      const isAdmin = colleague.role === 'admin';
+                      const isAdmin = Boolean(
+                        colleague.role === 'admin' ||
+                        colleague.role === 'administrator' ||
+                        colleague.is_administrator ||
+                        isAdministrator(colleague)
+                      );
 
                       return (
                         <div
@@ -272,15 +366,15 @@ export const ShareConversationModal = ({
                           className="pt-2.5 first:pt-0 group flex items-center justify-between gap-3 p-3 rounded-2xl hover:bg-[#F6F3ED] border border-transparent hover:border-[#DDD7CB] transition-all cursor-pointer"
                         >
                           <div className="flex items-center gap-3 min-w-0">
-                            {/* Avatar with Online Green Dot */}
+                            {/* Avatar with Online Green Dot (only if online) */}
                             <div className="relative shrink-0">
                               <div className="w-10 h-10 rounded-2xl bg-[#E8EFEA] text-[#244534] font-bold text-sm flex items-center justify-center border border-[#CFDCD3]">
-                                {colleague.name.charAt(0)}
+                                {colleague.name.charAt(0).toUpperCase()}
                               </div>
                               {/* Online indicator: green dot if online; no dot if offline */}
                               {online && (
                                 <span 
-                                  className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 ring-2 ring-white"
+                                  className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 ring-2 ring-white shadow-2xs"
                                   title="Currently Online"
                                   aria-label="Online"
                                 />
@@ -294,33 +388,41 @@ export const ShareConversationModal = ({
                                 </span>
 
                                 {/* Rank / Role Badge */}
-                                {isHead && (
+                                {isHead ? (
                                   <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 shrink-0">
                                     <Star className="w-2.5 h-2.5 text-amber-600 fill-amber-500" />
                                     Head of Listeners
                                   </span>
-                                )}
-                                {isAdmin && !isHead && (
+                                ) : isAdmin ? (
                                   <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-emerald-100 text-emerald-900 border border-emerald-300 shrink-0">
                                     <ShieldCheck className="w-2.5 h-2.5 text-emerald-700" />
                                     Administrator
                                   </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-[#EAF3EE] text-[#1E3F2E] border border-[#CFE1D6] shrink-0">
+                                    <Sparkles className="w-2.5 h-2.5 text-emerald-600" />
+                                    Listener
+                                  </span>
                                 )}
-                              </div>
 
-                              {/* Profession & Gender Display */}
-                              <div className="flex items-center gap-2 mt-0.5 text-xs text-[#58695F]">
-                                <span className="truncate">
-                                  {colleague.profession || 'Psychology Support Specialist'}
-                                </span>
                                 {/* Gender Icon: Blue man emoji for Male, Pink woman emoji for Female */}
                                 <ListenerGenderIcon gender={colleague.gender || 'Male'} />
                               </div>
 
-                              {/* Status text */}
-                              <div className="text-[10.5px] mt-0.5">
+                              {/* Profession */}
+                              <div className="flex items-center gap-2 mt-0.5 text-xs text-[#58695F]">
+                                <span className="truncate">
+                                  {colleague.profession || 'Psychology Support Specialist'}
+                                </span>
+                              </div>
+
+                              {/* Status text: green dot only for online; no dot for offline */}
+                              <div className="text-[10.5px] mt-0.5 flex items-center gap-1.5">
                                 {online ? (
-                                  <span className="text-emerald-700 font-medium">Online now</span>
+                                  <>
+                                    <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block shadow-2xs" />
+                                    <span className="text-emerald-700 font-medium">Online now</span>
+                                  </>
                                 ) : (
                                   <span className="text-[#88998F]">Offline</span>
                                 )}

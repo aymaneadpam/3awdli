@@ -17,10 +17,12 @@ import {
   Lock,
   RefreshCw,
   Archive,
-  Share2
+  Share2,
+  Flag
 } from 'lucide-react';
 import { DiscussionConversation, UserAccount, ChatMessage } from '../types';
 import { ShareConversationModal } from './ShareConversationModal';
+import { ReportDiscussionModal } from './ReportDiscussionModal';
 import { ListenerGenderIcon } from './ListenerGenderDisplay';
 import { GenderPreferenceTag } from './GenderPreferenceTag';
 import { ConversationParticipantBar } from './ConversationParticipantBar';
@@ -29,6 +31,7 @@ import {
   getVisibleMessagesForListener, 
   isListenerExcludedFromDiscussion 
 } from '../utils/discussionManagement';
+import { useLanguage } from '../context/LanguageContext';
 
 interface ListenerChatInterfaceProps {
   discussion: DiscussionConversation;
@@ -47,10 +50,13 @@ export const ListenerChatInterface = ({
   onCloseDiscussion,
   onUpdateAttention,
 }: ListenerChatInterfaceProps) => {
+  const { language } = useLanguage();
   const [inputText, setInputText] = useState('');
   const [isConfirmCloseModalOpen, setIsConfirmCloseModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [shareRequestsCount, setShareRequestsCount] = useState(() => getShareRequestsForDiscussion(discussion.id).length);
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  const [reportPreselectedMsgId, setReportPreselectedMsgId] = useState<string | null>(null);
   const [isTypingLocally, setIsTypingLocally] = useState(false);
   const [showScrollBottomBtn, setShowScrollBottomBtn] = useState(false);
 
@@ -86,19 +92,24 @@ export const ListenerChatInterface = ({
 
   const isClosed = discussion.status === 'closed';
 
+  const onUpdateAttentionRef = useRef(onUpdateAttention);
+  useEffect(() => {
+    onUpdateAttentionRef.current = onUpdateAttention;
+  }, [onUpdateAttention]);
+
   // Inform backend/storage that listener is currently reading this discussion
   useEffect(() => {
     if (!isClosed) {
-      onUpdateAttention('reading');
+      onUpdateAttentionRef.current('reading');
     }
 
     return () => {
       if (typingTimerRef.current) {
         clearTimeout(typingTimerRef.current);
       }
-      onUpdateAttention('idle');
+      onUpdateAttentionRef.current('idle');
     };
-  }, [discussion.id, isClosed, onUpdateAttention]);
+  }, [discussion.id, isClosed]);
 
   // Check whether listener is already near the bottom (within 80px)
   const checkIfAtBottom = () => {
@@ -149,7 +160,7 @@ export const ListenerChatInterface = ({
     } else {
       prevMessagesCountRef.current = currentCount;
     }
-  }, [discussion.messages]);
+  }, [discussion.messages?.length]);
 
   // Handle typing detection
   const handleInputChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
@@ -205,16 +216,8 @@ export const ListenerChatInterface = ({
     onCloseDiscussion(discussion.id);
   };
 
-  // Empathetic opening / response chips for listener
-  const supportivePrompts = [
-    "I am here and I'm listening closely. Take all the time you need.",
-    "What you're feeling right now is completely understandable.",
-    "You don't have to carry this all alone. Would it help to tell me more about it?",
-    "Let's pause together for a moment and take a calm, deep breath."
-  ];
-
   return (
-    <div className="bg-white border border-[#DDD7CB] rounded-3xl shadow-lg overflow-hidden flex flex-col w-full h-[820px] min-h-[580px] max-h-[min(90vh,860px)]">
+    <div className="bg-white border border-[#DDD7CB] rounded-3xl shadow-lg overflow-hidden flex flex-col w-full h-[840px] min-h-[580px] max-h-[min(92vh,880px)]">
       {/* Header */}
       <header className="bg-[#264134] text-white px-4 sm:px-5 py-3.5 flex items-center justify-between border-b border-[#1E352A] shrink-0">
         <div className="flex items-center gap-2.5 min-w-0">
@@ -222,31 +225,33 @@ export const ListenerChatInterface = ({
             id="listener-back-to-list-btn"
             onClick={onBack}
             className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-emerald-100 transition-colors cursor-pointer shrink-0"
-            title="Return to discussions list"
+            title={language === 'ar' ? 'العودة إلى المحادثات' : language === 'fr' ? 'Retour aux discussions' : 'Return to Discussions'}
           >
-            <ArrowLeft className="w-4 h-4" />
+            <ArrowLeft className="w-4 h-4 rtl:rotate-180" />
           </button>
 
           <div className="min-w-0">
             <div className="flex items-center gap-1.5 flex-wrap">
               <span className="font-semibold text-sm sm:text-base tracking-tight font-['Lora',serif] truncate">
-                {discussion.type === 'anonymous' ? 'Anonymous Visitor Support' : `Discussion with ${discussion.userName || 'Member'}`}
+                {discussion.type === 'anonymous' 
+                  ? (language === 'ar' ? 'دعم زائر مجهول الهوية' : language === 'fr' ? 'Soutien visiteur anonyme' : 'Anonymous Visitor Support') 
+                  : (language === 'ar' ? `محادثة مع ${discussion.userName || 'عضو'}` : language === 'fr' ? `Discussion avec ${discussion.userName || 'Membre'}` : `Discussion with ${discussion.userName || 'Member'}`)}
               </span>
               {discussion.type === 'anonymous' ? (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-900/60 text-indigo-200 border border-indigo-400/30 shrink-0">
                   <UserX className="w-3 h-3" />
-                  Anonymous
+                  {language === 'ar' ? 'مجهول الهوية' : language === 'fr' ? 'Anonyme' : 'Anonymous'}
                 </span>
               ) : (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-sky-900/60 text-sky-200 border border-sky-400/30 shrink-0">
                   <User className="w-3 h-3" />
-                  Registered
+                  {language === 'ar' ? 'مسجل' : language === 'fr' ? 'Inscrit' : 'Registered'}
                 </span>
               )}
               {isClosed && (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-stone-700/80 text-stone-200 border border-stone-500/30 shrink-0">
                   <Archive className="w-3 h-3" />
-                  Closed Session
+                  {language === 'ar' ? 'جلسة مغلقة' : language === 'fr' ? 'Session fermée' : 'Closed Session'}
                 </span>
               )}
             </div>
@@ -254,7 +259,7 @@ export const ListenerChatInterface = ({
             <div className="flex items-center gap-2 text-[10.5px] text-emerald-100/75 mt-0.5 truncate">
               <span className="flex items-center gap-1 shrink-0">
                 <Clock className="w-3 h-3 text-emerald-300" />
-                Started: {discussion.startedAt}
+                {language === 'ar' ? 'بدأت:' : language === 'fr' ? 'Début :' : 'Started:'} {discussion.startedAt}
               </span>
               {discussion.userEmail && (
                 <span className="hidden sm:inline text-emerald-200/90 truncate">&bull; {discussion.userEmail}</span>
@@ -263,17 +268,30 @@ export const ListenerChatInterface = ({
           </div>
         </div>
 
-        {/* Action Controls: Share Conversation + End Discussion */}
+        {/* Action Controls: Share Conversation + Report + End Discussion */}
         <div className="flex items-center gap-2 shrink-0">
+          <button
+            id="listener-report-discussion-btn"
+            onClick={() => {
+              setReportPreselectedMsgId(null);
+              setIsReportModalOpen(true);
+            }}
+            className="px-2.5 py-1.5 rounded-xl bg-white/10 hover:bg-rose-900/40 text-emerald-100 hover:text-rose-200 border border-white/20 transition-all cursor-pointer flex items-center gap-1.5 text-xs font-semibold"
+            title={language === 'ar' ? 'إبلاغ مسؤول المستمعين عن هذه المحادثة' : language === 'fr' ? 'Signaler cette discussion' : 'Report this discussion to Head of Listeners'}
+          >
+            <Flag className="w-3.5 h-3.5 text-rose-300" />
+            <span className="hidden sm:inline">{language === 'ar' ? 'إبلاغ' : language === 'fr' ? 'Signaler' : 'Report'}</span>
+          </button>
+
           {!isExcluded && (
             <button
               id="listener-share-conversation-btn"
               onClick={() => setIsShareModalOpen(true)}
               className="px-2.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-emerald-100 hover:text-white border border-white/20 transition-all cursor-pointer flex items-center gap-1.5 text-xs font-semibold"
-              title="Share this conversation with colleagues or supervisors"
+              title={language === 'ar' ? 'مشاركة هذه المحادثة مع الزملاء أو المشرفين' : language === 'fr' ? 'Partager cette discussion' : 'Share this conversation with colleagues or supervisors'}
             >
               <Share2 className="w-3.5 h-3.5 text-emerald-300" />
-              <span className="hidden sm:inline">Share</span>
+              <span className="hidden sm:inline">{language === 'ar' ? 'مشاركة' : language === 'fr' ? 'Partager' : 'Share'}</span>
               {shareRequestsCount > 0 && (
                 <span className="w-4 h-4 rounded-full bg-emerald-400 text-[#132A1F] text-[10px] font-bold flex items-center justify-center">
                   {shareRequestsCount}
@@ -287,17 +305,17 @@ export const ListenerChatInterface = ({
               id="listener-end-discussion-x-btn"
               onClick={() => setIsConfirmCloseModalOpen(true)}
               className="px-2.5 py-1.5 rounded-xl bg-red-900/30 hover:bg-red-800/50 text-red-200 hover:text-white border border-red-500/30 transition-all cursor-pointer flex items-center gap-1.5 text-xs font-semibold"
-              title="End this conversation"
+              title={language === 'ar' ? 'إنهاء هذه المحادثة' : language === 'fr' ? 'Terminer cette discussion' : 'End this conversation'}
             >
               <X className="w-3.5 h-3.5 text-red-300" />
-              <span className="hidden sm:inline">End Discussion</span>
+              <span className="hidden sm:inline">{language === 'ar' ? 'إنهاء المحادثة' : language === 'fr' ? 'Terminer la discussion' : 'End Discussion'}</span>
             </button>
           )}
 
           {isExcluded && (
             <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-amber-900/40 text-amber-200 border border-amber-500/30 text-xs font-medium">
               <Lock className="w-3 h-3 text-amber-300" />
-              <span>Handover (Past Record)</span>
+              <span>{language === 'ar' ? 'تم التحويل (سجل سابق)' : language === 'fr' ? 'Transfert (historique)' : 'Handover (Past Record)'}</span>
             </div>
           )}
         </div>
@@ -372,42 +390,70 @@ export const ListenerChatInterface = ({
             if (msg.sender === 'user') {
               // Visitor / User message bubble
               return (
-                <div key={msg.id} className="flex flex-col items-start max-w-[88%] space-y-1">
-                  <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[#445E50] pl-1">
+                <div key={msg.id} className="group flex flex-col items-start max-w-[88%] space-y-1">
+                  <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[#445E50] ps-1">
                     {discussion.type === 'anonymous' ? (
                       <span className="flex items-center gap-1 text-indigo-700">
                         <UserX className="w-3 h-3" />
-                        Anonymous Visitor
+                        {language === 'ar' ? 'زائر مجهول الهوية' : language === 'fr' ? 'Visiteur anonyme' : 'Anonymous Visitor'}
                       </span>
                     ) : (
                       <span className="flex items-center gap-1 text-teal-800">
                         <User className="w-3 h-3" />
-                        {discussion.userName || 'Registered Member'}
+                        {discussion.userName || (language === 'ar' ? 'عضو مسجل' : language === 'fr' ? 'Membre inscrit' : 'Registered Member')}
                       </span>
                     )}
                   </div>
-                  <div className="bg-[#F6F2E9] border border-[#DDD3C2] text-[#1E2E25] text-xs sm:text-sm px-4 py-2.5 rounded-2xl rounded-tl-xs shadow-2xs leading-relaxed">
+                  <div className="bg-[#F6F2E9] border border-[#DDD3C2] text-[#1E2E25] text-xs sm:text-sm px-4 py-2.5 rounded-2xl rtl:rounded-tr-xs ltr:rounded-tl-xs shadow-2xs leading-relaxed">
                     {msg.text}
                   </div>
-                  <span className="text-[10px] text-[#86958B] pl-1">{msg.timestamp}</span>
+                  <div className="flex items-center gap-2 ps-1">
+                    <span className="text-[10px] text-[#86958B]">{msg.timestamp}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReportPreselectedMsgId(msg.id);
+                        setIsReportModalOpen(true);
+                      }}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity text-[10px] text-stone-400 hover:text-rose-600 flex items-center gap-0.5 cursor-pointer"
+                      title={language === 'ar' ? 'إبلاغ مسؤول المستمعين عن هذه الرسالة' : language === 'fr' ? 'Signaler ce message' : 'Report this message to Head of Listeners'}
+                    >
+                      <Flag className="w-2.5 h-2.5" />
+                      <span>{language === 'ar' ? 'إبلاغ' : language === 'fr' ? 'Signaler' : 'Report'}</span>
+                    </button>
+                  </div>
                 </div>
               );
             }
 
             // Listener's sent message
             return (
-              <div key={msg.id} className="flex flex-col items-end ml-auto max-w-[88%] space-y-1">
-                <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[#184844] pr-1">
+              <div key={msg.id} className="group flex flex-col items-end ms-auto max-w-[88%] space-y-1">
+                <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[#184844] pe-1">
                   <span className="flex items-center gap-1">
                     <Heart className="w-3 h-3 text-emerald-700 fill-emerald-600/20" />
                     {msg.senderName || currentListener.name}
-                    {msg.senderName === currentListener.name && ' (You)'}
+                    {msg.senderName === currentListener.name && (language === 'ar' ? ' (أنت)' : language === 'fr' ? ' (Vous)' : ' (You)')}
                   </span>
                 </div>
-                <div className="bg-[#EAF4F3] border border-[#BDE0DC] text-[#113B37] text-xs sm:text-sm px-4 py-2.5 rounded-2xl rounded-tr-xs shadow-2xs leading-relaxed font-medium">
+                <div className="bg-[#EAF4F3] border border-[#BDE0DC] text-[#113B37] text-xs sm:text-sm px-4 py-2.5 rounded-2xl rtl:rounded-tl-xs ltr:rounded-tr-xs shadow-2xs leading-relaxed font-medium">
                   {msg.text}
                 </div>
-                <span className="text-[10px] text-[#86958B] pr-1">{msg.timestamp}</span>
+                <div className="flex items-center gap-2 pe-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setReportPreselectedMsgId(msg.id);
+                      setIsReportModalOpen(true);
+                    }}
+                    className="opacity-0 group-hover:opacity-100 transition-opacity text-[10px] text-stone-400 hover:text-rose-600 flex items-center gap-0.5 cursor-pointer"
+                    title={language === 'ar' ? 'إبلاغ مسؤول المستمعين عن هذه الرسالة' : language === 'fr' ? 'Signaler ce message' : 'Report this message to Head of Listeners'}
+                  >
+                    <Flag className="w-2.5 h-2.5" />
+                    <span>{language === 'ar' ? 'إبلاغ' : language === 'fr' ? 'Signaler' : 'Report'}</span>
+                  </button>
+                  <span className="text-[10px] text-[#86958B]">{msg.timestamp}</span>
+                </div>
               </div>
             );
           })}
@@ -422,12 +468,12 @@ export const ListenerChatInterface = ({
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-bounce delay-100"></span>
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-bounce delay-200"></span>
                   </span>
-                  <span>You are typing a reply (visitor is notified)...</span>
+                  <span>{language === 'ar' ? 'أنت تكتب رداً (يتم إشعار الزائر)...' : language === 'fr' ? 'Vous écrivez une réponse...' : 'You are typing a reply (visitor is notified)...'}</span>
                 </div>
               ) : (
                 <div className="flex items-center gap-1.5 text-[11px] text-[#55695E] bg-[#FAF7F0] border border-[#EBE4D8] rounded-xl px-2.5 py-1 w-fit">
                   <Eye className="w-3.5 h-3.5 text-emerald-700" />
-                  <span>Visitor sees: <em>&quot;Reading your message&quot;</em></span>
+                  <span>{language === 'ar' ? 'الزائر يرى: ' : language === 'fr' ? 'Le visiteur voit : ' : 'Visitor sees: '}<em>{language === 'ar' ? '«يقرأ رسالتك»' : language === 'fr' ? '« Lit votre message »' : '«Reading your message»'}</em></span>
                 </div>
               )}
             </div>
@@ -449,28 +495,6 @@ export const ListenerChatInterface = ({
         )}
       </div>
 
-      {/* Empathetic Prompt Chips for Listener - Compact single horizontal row */}
-      {!isClosed && !isExcluded && (
-        <div className="px-3.5 py-2 bg-[#F7F4EE] border-t border-[#E8E1D5] shrink-0">
-          <div className="flex items-center gap-1.5 text-[10.5px] font-semibold text-[#5A6D62] mb-1">
-            <Sparkles className="w-3 h-3 text-emerald-700" />
-            <span>Supportive opening phrases (tap to insert):</span>
-          </div>
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
-            {supportivePrompts.map((prompt, idx) => (
-              <button
-                key={idx}
-                type="button"
-                onClick={() => setInputText(prompt)}
-                className="text-[10.5px] bg-white hover:bg-[#EAF3EE] text-[#294636] border border-[#DCD5C8] hover:border-[#264134]/30 px-2.5 py-1 rounded-full transition-colors whitespace-nowrap shrink-0 cursor-pointer shadow-2xs"
-              >
-                {prompt}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* Input or Closed Notice Footer */}
       <div className="p-3 sm:p-3.5 bg-white border-t border-[#E3DDD1] shrink-0">
         {isExcluded ? (
@@ -488,16 +512,16 @@ export const ListenerChatInterface = ({
           <div className="p-3 rounded-2xl bg-[#FAF8F5] border border-[#E5DFD5] text-center space-y-1">
             <div className="flex items-center justify-center gap-2 text-xs font-semibold text-[#32493C]">
               <Archive className="w-3.5 h-3.5 text-stone-600" />
-              <span>This discussion was completed and moved to archives.</span>
+              <span>{language === 'ar' ? 'اكتملت هذه المحادثة ونُقلت إلى الأرشيف.' : language === 'fr' ? 'Cette discussion est terminée et archivée.' : 'This discussion was completed and moved to archives.'}</span>
             </div>
             <p className="text-[11px] text-[#718278]">
-              Read-only view. The user will be re-routed to active listeners if they send a new message.
+              {language === 'ar' ? 'عرض للقراءة فقط. سيتم إعادة توجيه المستخدم إلى مستمع نشط إذا أرسل رسالة جديدة.' : language === 'fr' ? 'Lecture seule. L’utilisateur sera redirigé vers des écoutants actifs s’il renvoie un message.' : 'Read-only view. The user will be re-routed to active listeners if they send a new message.'}
             </p>
           </div>
         ) : (
           <div>
             <label htmlFor="listener-chat-textarea" className="sr-only">
-              Reply to visitor
+              {language === 'ar' ? 'الرد على الزائر' : language === 'fr' ? 'Répondre au visiteur' : 'Reply to visitor'}
             </label>
             <div className="flex items-end gap-2 bg-[#F7F5F0] border border-[#DDD5C7] rounded-2xl p-2.5 focus-within:border-[#264134] focus-within:ring-2 focus-within:ring-[#264134]/20 transition-all">
               <textarea
@@ -507,7 +531,7 @@ export const ListenerChatInterface = ({
                 onChange={handleInputChange}
                 onKeyDown={handleKeyDown}
                 rows={2}
-                placeholder="Write your empathetic response here... (Enter to send, Shift+Enter for new line)"
+                placeholder={language === 'ar' ? 'اكتب ردك المتفهم هنا... (اضغط Enter للإرسال، Shift+Enter لسطر جديد)' : language === 'fr' ? 'Écrivez votre réponse empathique ici... (Entrée pour envoyer, Maj+Entrée pour saut de ligne)' : 'Write your empathetic response here... (Enter to send, Shift+Enter for new line)'}
                 className="w-full bg-transparent text-xs sm:text-sm text-[#1F2F26] placeholder-[#87968D] outline-none resize-none"
               />
               <button
@@ -519,14 +543,14 @@ export const ListenerChatInterface = ({
                     ? 'bg-[#264134] text-white hover:bg-[#1E352A] shadow-xs'
                     : 'bg-stone-200 text-stone-400 cursor-not-allowed'
                 }`}
-                title="Send reply"
+                title={language === 'ar' ? 'إرسال الرد' : language === 'fr' ? 'Envoyer la réponse' : 'Send reply'}
               >
-                <Send className="w-4 h-4" />
+                <Send className="w-4 h-4 rtl:rotate-180" />
               </button>
             </div>
             <div className="flex items-center justify-between mt-1 text-[10.5px] text-[#7E8E84] px-1">
-              <span>Press <strong>Enter</strong> to send</span>
-              <span className="italic">Confidential support session</span>
+              <span>{language === 'ar' ? 'اضغط Enter للإرسال' : language === 'fr' ? 'Appuyez sur Entrée pour envoyer' : 'Press Enter to send'}</span>
+              <span className="italic">{language === 'ar' ? 'جلسة دعم سرية' : language === 'fr' ? 'Session de soutien confidentielle' : 'Confidential support session'}</span>
             </div>
           </div>
         )}
@@ -548,13 +572,13 @@ export const ListenerChatInterface = ({
                   <AlertCircle className="w-4 h-4" />
                 </div>
                 <h3 className="text-base font-bold text-[#23382D] font-['Lora',serif]">
-                  End Conversation
+                  {language === 'ar' ? 'إنهاء المحادثة' : language === 'fr' ? 'Terminer la conversation' : 'End Conversation'}
                 </h3>
               </div>
               <button
                 onClick={() => setIsConfirmCloseModalOpen(false)}
                 className="p-1.5 rounded-lg text-stone-400 hover:text-stone-600 hover:bg-stone-100 transition-colors cursor-pointer"
-                title="Cancel"
+                title={language === 'ar' ? 'إلغاء' : language === 'fr' ? 'Annuler' : 'Cancel'}
               >
                 <X className="w-4 h-4" />
               </button>
@@ -563,24 +587,24 @@ export const ListenerChatInterface = ({
             {/* Content - Scrollable if needed */}
             <div className="p-6 overflow-y-auto space-y-3.5 text-xs sm:text-sm text-[#46574E]">
               <p className="font-semibold text-[#1C2C24] text-sm sm:text-base">
-                Are you sure you want to end this conversation?
+                {language === 'ar' ? 'هل أنت متأكد من رغبتك في إنهاء هذه المحادثة؟' : language === 'fr' ? 'Êtes-vous sûr de vouloir terminer cette conversation ?' : 'Are you sure you want to end this conversation?'}
               </p>
               <p className="leading-relaxed">
-                Ending this discussion will conclude the active session and move it into your <strong>Closed / History</strong> section.
+                {language === 'ar' ? 'سيؤدي إنهاء هذه المحادثة إلى اختتام الجلسة النشطة ونقلها إلى قسم المغلقة / السجل الخاص بك.' : language === 'fr' ? 'Mettre fin à cette discussion clôturera la session active et la déplacera dans vos discussions fermées / historiques.' : 'Ending this discussion will conclude the active session and move it into your Closed / History section.'}
               </p>
 
               {discussion.type === 'anonymous' ? (
                 <div className="p-3.5 rounded-2xl bg-[#EEF2FF] border border-[#D5DCFC] text-[#3730A3] space-y-1 text-xs">
-                  <span className="font-semibold block">Visitor Notice (Anonymous):</span>
+                  <span className="font-semibold block">{language === 'ar' ? 'إشعار الزائر (مجهول الهوية):' : language === 'fr' ? 'Avis visiteur (Anonyme) :' : 'Visitor Notice (Anonymous):'}</span>
                   <p className="leading-relaxed text-[#4338CA]">
-                    The visitor will be gently invited to create a free account if they wish to keep and continue their conversations in the future.
+                    {language === 'ar' ? 'ستتم دعوة الزائر بلطف لإنشاء حساب مجاني إذا كان يرغب في الاحتفاظ بمحادثاته ومتابعتها مستقبلاً.' : language === 'fr' ? 'Le visiteur sera gentiment invité à créer un compte gratuit s’il souhaite conserver ses conversations futures.' : 'The visitor will be gently invited to create a free account if they wish to keep and continue their conversations in the future.'}
                   </p>
                 </div>
               ) : (
                 <div className="p-3.5 rounded-2xl bg-[#EAF4F3] border border-[#C2E4DF] text-[#13423E] space-y-1 text-xs">
-                  <span className="font-semibold block">Member Notice (Registered):</span>
+                  <span className="font-semibold block">{language === 'ar' ? 'إشعار العضو (مسجل):' : language === 'fr' ? 'Avis membre (Inscrit) :' : 'Member Notice (Registered):'}</span>
                   <p className="leading-relaxed text-[#164E49]">
-                    The member will see a reassuring note that their discussion is saved in their personal history. If they reply to it later, it will automatically route back to you.
+                    {language === 'ar' ? 'سيرى العضو ملاحظة مطمئنة بأن محادثته محفوظة في سجله الشخصي. وإذا رد عليها لاحقاً فستعود إليك تلقائياً.' : language === 'fr' ? 'Le membre verra une note rassurante indiquant que sa discussion est enregistrée dans son historique personnel.' : 'The member will see a reassuring note that their discussion is saved in their personal history. If they reply to it later, it will automatically route back to you.'}
                   </p>
                 </div>
               )}
@@ -593,7 +617,7 @@ export const ListenerChatInterface = ({
                 onClick={() => setIsConfirmCloseModalOpen(false)}
                 className="px-4 py-2 rounded-xl bg-white hover:bg-stone-100 text-stone-700 border border-stone-300 text-xs font-semibold transition-colors cursor-pointer"
               >
-                Cancel
+                {language === 'ar' ? 'إلغاء' : language === 'fr' ? 'Annuler' : 'Cancel'}
               </button>
               <button
                 type="button"
@@ -602,7 +626,7 @@ export const ListenerChatInterface = ({
                 className="px-4 py-2 rounded-xl bg-red-700 hover:bg-red-800 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
               >
                 <X className="w-3.5 h-3.5" />
-                <span>Yes, End Conversation</span>
+                <span>{language === 'ar' ? 'نعم، إنهاء المحادثة' : language === 'fr' ? 'Oui, terminer la conversation' : 'Yes, End Conversation'}</span>
               </button>
             </div>
           </div>
@@ -618,6 +642,23 @@ export const ListenerChatInterface = ({
         }}
         discussion={discussion}
         currentListener={currentListener}
+      />
+
+      {/* Report Discussion Modal for Listeners */}
+      <ReportDiscussionModal
+        isOpen={isReportModalOpen}
+        onClose={() => {
+          setIsReportModalOpen(false);
+          setReportPreselectedMsgId(null);
+        }}
+        discussion={discussion}
+        messages={visibleMessages}
+        currentUser={currentListener}
+        preSelectedMessageId={reportPreselectedMsgId}
+        onReportSubmitted={() => {
+          setIsReportModalOpen(false);
+          setReportPreselectedMsgId(null);
+        }}
       />
     </div>
   );
