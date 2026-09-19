@@ -471,7 +471,7 @@ export const MemberDiscussionsPage: React.FC<MemberDiscussionsPageProps> = ({
           {activeTab === 'active' && (
             <div className="bg-white rounded-3xl border border-[#E8E2D7] overflow-hidden shadow-xs">
               {activeDiscussion ? (
-                <div className="flex flex-col h-[650px]">
+                <div className="flex flex-col h-[760px] min-h-[560px] max-h-[min(90vh,820px)]">
                   {/* Chat Header */}
                   <div className="px-5 py-3.5 bg-[#315243] text-white flex items-center justify-between gap-3 shrink-0">
                     <div className="flex items-center gap-3">

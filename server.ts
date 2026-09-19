@@ -104,12 +104,15 @@ async function startServer() {
     html?: string;
     text?: string;
     replyTo?: string;
-  }): Promise<{ success: boolean; provider?: string; messageId?: string; error?: string }> {
+  }): Promise<{ success: boolean; provider?: string; messageId?: string; error?: string; warning?: string }> {
+    let lastError = '';
+
     // 1. Resend API
     const resendApiKey = process.env.RESEND_API_KEY?.trim();
     if (resendApiKey && !resendApiKey.includes('re_your_api_key')) {
       try {
         const from = process.env.RESEND_FROM?.trim() || '3awdli Support <onboarding@resend.dev>';
+        console.log(`[Server Email] Attempting Resend dispatch to ${to} from ${from}...`);
         const response = await fetch('https://api.resend.com/emails', {
           method: 'POST',
           headers: {
@@ -127,11 +130,15 @@ async function startServer() {
         });
         const data = (await response.json().catch(() => ({}))) as any;
         if (response.ok && data?.id) {
+          console.log('[Server Email] Resend email dispatched successfully:', data.id);
           return { success: true, provider: 'resend', messageId: data.id };
         }
-        console.warn('[Server Email] Resend API error response:', data);
+        const resendError = data?.message || data?.error?.message || `Resend HTTP error ${response.status}`;
+        console.error('[Server Email] Resend API error response:', response.status, resendError, data);
+        lastError = `Resend: ${resendError}`;
       } catch (err: any) {
-        console.warn('[Server Email] Resend API fetch failed:', err?.message);
+        console.error('[Server Email] Resend API fetch failed:', err?.message);
+        lastError = `Resend network error: ${err?.message}`;
       }
     }
 
@@ -140,6 +147,7 @@ async function startServer() {
     if (transporter) {
       try {
         const user = process.env.GMAIL_USER || 'aymane.habbo@gmail.com';
+        console.log(`[Server Email] Attempting Gmail SMTP dispatch to ${to} from ${user}...`);
         const info = await transporter.sendMail({
           from: `"3awdli Support" <${user}>`,
           to,
@@ -148,16 +156,24 @@ async function startServer() {
           html: html || text || '',
           replyTo: replyTo || user,
         });
-        return { success: true, provider: 'smtp', messageId: info.messageId };
+        console.log('[Server Email] Gmail SMTP dispatched successfully:', info.messageId);
+        return { 
+          success: true, 
+          provider: 'smtp', 
+          messageId: info.messageId,
+          warning: lastError ? `Resend failed (${lastError}), but dispatched via Gmail SMTP.` : undefined
+        };
       } catch (err: any) {
-        console.warn('[Server Email] Gmail SMTP error:', err?.message);
-        return { success: false, error: err?.message || 'SMTP sending failed' };
+        console.error('[Server Email] Gmail SMTP error:', err?.message);
+        const smtpErr = `Gmail SMTP error: ${err?.message || 'SMTP sending failed'}`;
+        lastError = lastError ? `${lastError}; ${smtpErr}` : smtpErr;
       }
     }
 
     return {
       success: false,
-      error: 'No email service credentials configured. Set RESEND_API_KEY or GMAIL_APP_PASSWORD in environment variables.',
+      provider: 'none',
+      error: lastError || 'No email service credentials configured. Set RESEND_API_KEY or GMAIL_APP_PASSWORD in environment variables.',
     };
   }
 
@@ -443,13 +459,16 @@ Sent from ${sender} (3awdli Platform).
       console.log(`[Email] Password reset result for ${cleanEmail}:`, emailResult);
 
       return res.json({
-        success: true,
+        success: emailResult.success,
+        emailSent: emailResult.success,
         smtpConfigured: emailResult.success,
-        provider: emailResult.provider,
+        provider: emailResult.provider || 'none',
         messageId: emailResult.messageId,
+        error: emailResult.error,
+        warning: emailResult.warning,
         message: emailResult.success
           ? 'Password reset link sent to your email.'
-          : 'Password reset link prepared. (Email delivery pending environment credentials)',
+          : (emailResult.error || 'Password reset link prepared, but email delivery failed.'),
         resetUrl,
         expiresIn: '1 hour',
       });

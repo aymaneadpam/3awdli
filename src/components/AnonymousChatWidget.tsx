@@ -122,8 +122,8 @@ export const AnonymousChatWidget = ({
           setPosition(null);
           return;
         }
-        const estimatedWidth = Math.min(380, window.innerWidth - 24);
-        const estimatedHeight = Math.min(840, window.innerHeight - 32);
+        const estimatedWidth = Math.min(365, window.innerWidth - 24);
+        const estimatedHeight = Math.min(880, window.innerHeight - 32);
         const margin = 16;
         const initialX = Math.max(margin, window.innerWidth - estimatedWidth - margin);
         const initialY = Math.max(margin, window.innerHeight - estimatedHeight - margin);
@@ -176,8 +176,8 @@ export const AnonymousChatWidget = ({
         setPosition((prev) => {
           if (!prev) return prev;
           const widget = widgetRef.current;
-          const width = widget ? widget.offsetWidth : 375;
-          const height = widget ? widget.offsetHeight : 840;
+          const width = widget ? widget.offsetWidth : 365;
+          const height = widget ? widget.offsetHeight : 880;
           const margin = 16;
           const maxX = Math.max(margin, window.innerWidth - width - margin);
           const maxY = Math.max(margin, window.innerHeight - height - margin);
@@ -661,7 +661,7 @@ export const AnonymousChatWidget = ({
             }
           : undefined
       }
-      className={`fixed z-50 sm:top-auto sm:bottom-auto sm:inset-x-auto sm:mx-0 sm:w-[370px] sm:max-w-[380px] sm:h-[840px] sm:min-h-[520px] sm:max-h-[min(92vh,860px)] flex flex-col transition-shadow duration-200 ${
+      className={`fixed z-50 sm:top-auto sm:bottom-auto sm:inset-x-auto sm:mx-0 sm:w-[365px] sm:max-w-[375px] sm:h-[880px] sm:min-h-[560px] sm:max-h-[min(94vh,890px)] flex flex-col transition-shadow duration-200 ${
         isDragging ? 'shadow-2xl opacity-95' : 'shadow-2xl'
       } ${position ? '' : 'sm:bottom-6 sm:end-6'}`}
     >

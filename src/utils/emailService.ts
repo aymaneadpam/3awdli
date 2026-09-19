@@ -3,6 +3,7 @@ import {
   saveResetTokenToFirestore,
   getResetTokenFromFirestore,
   markResetTokenUsedInFirestore,
+  firebaseSendPasswordReset,
 } from '../lib/firestoreService';
 
 export interface EmailConfigStatus {
@@ -164,22 +165,27 @@ export async function forwardSupportRequestViaSMTP(request: SupportRequest): Pro
   };
 }
 
+export interface RequestPasswordResetResult {
+  success: boolean;
+  emailSent: boolean;
+  provider?: 'resend' | 'smtp' | 'firebase' | 'none' | string;
+  message?: string;
+  error?: string;
+  warning?: string;
+  resetUrl?: string;
+  smtpConfigured?: boolean;
+}
+
 /**
  * Requests a real password reset email.
  * Works seamlessly across both:
  * 1. Live Backend (Netlify Functions or Express server running Nodemailer/Resend)
- * 2. Static Netlify Host (safely stores token in Firestore & triggers Firebase Auth)
+ * 2. Client-side Firebase Auth backup (built-in Google email delivery)
  */
 export async function requestPasswordResetViaEmail(
   email: string,
   appUrl?: string
-): Promise<{
-  success: boolean;
-  message?: string;
-  error?: string;
-  resetUrl?: string;
-  smtpConfigured?: boolean;
-}> {
+): Promise<RequestPasswordResetResult> {
   const cleanEmail = email.trim().toLowerCase();
   const currentOrigin =
     appUrl || (typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.host}` : '');
@@ -196,8 +202,10 @@ export async function requestPasswordResetViaEmail(
     }),
   });
 
-  // If backend API succeeded, return response
-  if (result.ok && result.data?.success) {
+  // If backend API responded
+  if (result.ok && result.data) {
+    const isEmailSent = Boolean(result.data.emailSent || (result.data.success && result.data.smtpConfigured));
+
     // Also persist token copy to Firestore for maximum cross-environment resilience
     if (result.data.resetUrl) {
       try {
@@ -215,16 +223,36 @@ export async function requestPasswordResetViaEmail(
       } catch {}
     }
 
+    // If backend email dispatch failed, also try client-side Firebase Auth password reset as backup
+    let fbBackupSent = false;
+    if (!isEmailSent) {
+      try {
+        await firebaseSendPasswordReset(cleanEmail);
+        fbBackupSent = true;
+      } catch (fbErr: any) {
+        console.warn('[Email Service] Firebase Auth backup email reset notice:', fbErr);
+      }
+    }
+
+    const effectiveSent = isEmailSent || fbBackupSent;
+    const effectiveProvider = isEmailSent ? (result.data.provider || 'smtp') : fbBackupSent ? 'firebase' : 'none';
+
     return {
-      success: true,
-      message: result.data.message,
+      success: effectiveSent,
+      emailSent: effectiveSent,
+      provider: effectiveProvider,
+      message: effectiveSent
+        ? (fbBackupSent ? 'Password reset link sent via Firebase Auth.' : (result.data.message || 'Password reset email sent successfully.'))
+        : (result.data.error || 'Email dispatch failed. Please check that email service credentials are configured in your host environment.'),
+      error: effectiveSent ? undefined : (result.data.error || 'Failed to dispatch email via email provider.'),
+      warning: result.data.warning,
       resetUrl: result.data.resetUrl,
-      smtpConfigured: result.data.smtpConfigured !== false,
+      smtpConfigured: isEmailSent,
     };
   }
 
-  // 2. If backend is not available (e.g. Netlify static hosting where Netlify Function is not responding),
-  // generate a token and persist directly to Firestore!
+  // 2. If backend is not reachable (e.g. Netlify static hosting where Netlify Function is not responding),
+  // generate a token, persist directly to Firestore, AND trigger Firebase Auth:
   try {
     const token = generateClientResetToken();
     const now = Date.now();
@@ -239,16 +267,37 @@ export async function requestPasswordResetViaEmail(
       used: false,
     });
 
+    let fbSent = false;
+    let fbError = '';
+    try {
+      await firebaseSendPasswordReset(cleanEmail);
+      fbSent = true;
+    } catch (fbErr: any) {
+      fbError = fbErr?.message || 'Firebase Auth password reset unavailable';
+      console.warn('Firebase Auth direct reset notice:', fbErr);
+    }
+
     return {
-      success: true,
-      smtpConfigured: false,
-      message: 'Password reset link prepared and saved securely in cloud database.',
+      success: fbSent,
+      emailSent: fbSent,
+      provider: fbSent ? 'firebase' : 'none',
+      message: fbSent
+        ? 'Password reset email dispatched via Firebase Auth.'
+        : 'Backend email service is unreachable and Firebase Auth email was not dispatched.',
+      error: fbSent
+        ? undefined
+        : (result.isHtml
+            ? 'Backend API unreachable (Netlify Functions not responding). Please verify Netlify environment variables.'
+            : (fbError || 'No active email provider reached. Set GMAIL_APP_PASSWORD or RESEND_API_KEY in Netlify Site Settings.')),
       resetUrl,
+      smtpConfigured: false,
     };
   } catch (err: any) {
     console.warn('Firestore direct reset token creation notice:', err);
     return {
       success: false,
+      emailSent: false,
+      provider: 'none',
       error: err?.message || 'Could not initiate password reset. Please try again.',
     };
   }

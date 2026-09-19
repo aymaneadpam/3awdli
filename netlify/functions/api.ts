@@ -64,12 +64,16 @@ async function dispatchEmail({
   html?: string;
   text?: string;
   replyTo?: string;
-}): Promise<{ success: boolean; provider?: string; messageId?: string; error?: string }> {
+}): Promise<{ success: boolean; provider?: string; messageId?: string; error?: string; warning?: string }> {
+  let lastError = '';
+
   // 1. Prioritize Resend API if RESEND_API_KEY is configured
   const resendApiKey = process.env.RESEND_API_KEY?.trim();
   if (resendApiKey && !resendApiKey.includes('re_your_api_key')) {
     try {
       const from = process.env.RESEND_FROM?.trim() || '3awdli Support <onboarding@resend.dev>';
+      console.log(`[Netlify Function Email] Attempting Resend dispatch to ${to} from ${from}...`);
+      
       const res = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
@@ -88,11 +92,16 @@ async function dispatchEmail({
 
       const data = (await res.json().catch(() => ({}))) as any;
       if (res.ok && data?.id) {
+        console.log('[Netlify Function Email] Resend email successfully dispatched:', data.id);
         return { success: true, provider: 'resend', messageId: data.id };
       }
-      console.warn('[Netlify Function Email] Resend API error response:', data);
+
+      const resendError = data?.message || data?.error?.message || `Resend HTTP error ${res.status}`;
+      console.error('[Netlify Function Email] Resend API error response:', res.status, resendError, data);
+      lastError = `Resend: ${resendError}`;
     } catch (err: any) {
-      console.warn('[Netlify Function Email] Resend API fetch failed:', err?.message);
+      console.error('[Netlify Function Email] Resend API fetch failed:', err?.message);
+      lastError = `Resend network error: ${err?.message}`;
     }
   }
 
@@ -101,6 +110,7 @@ async function dispatchEmail({
   if (transporter) {
     try {
       const sender = process.env.GMAIL_USER || 'aymane.habbo@gmail.com';
+      console.log(`[Netlify Function Email] Attempting Gmail SMTP dispatch to ${to} from ${sender}...`);
       const info = await transporter.sendMail({
         from: `"3awdli Support" <${sender}>`,
         to,
@@ -109,16 +119,24 @@ async function dispatchEmail({
         html: html || text || '',
         replyTo: replyTo || sender,
       });
-      return { success: true, provider: 'smtp', messageId: info.messageId };
+      console.log('[Netlify Function Email] Gmail SMTP successfully dispatched:', info.messageId);
+      return { 
+        success: true, 
+        provider: 'smtp', 
+        messageId: info.messageId,
+        warning: lastError ? `Resend failed (${lastError}), but dispatched successfully via Gmail SMTP.` : undefined
+      };
     } catch (err: any) {
-      console.warn('[Netlify Function Email] Gmail SMTP error:', err?.message);
-      return { success: false, error: err?.message || 'SMTP sending failed' };
+      console.error('[Netlify Function Email] Gmail SMTP error:', err?.message);
+      const smtpErr = `Gmail SMTP error: ${err?.message || 'SMTP sending failed'}`;
+      lastError = lastError ? `${lastError}; ${smtpErr}` : smtpErr;
     }
   }
 
   return {
     success: false,
-    error: 'No email service credentials configured. Set RESEND_API_KEY or GMAIL_APP_PASSWORD in Netlify environment variables.',
+    provider: 'none',
+    error: lastError || 'No email service credentials configured. Set RESEND_API_KEY or GMAIL_APP_PASSWORD in Netlify site environment variables.',
   };
 }
 
@@ -183,6 +201,14 @@ export const handler = async (event: NetlifyEvent): Promise<NetlifyResponse> => 
     path = `/${path}`;
   }
 
+  const cleanPath = path.toLowerCase();
+  const isEmailStatus = cleanPath === '/email-status' || cleanPath.endsWith('/email-status');
+  const isSendEmail = cleanPath === '/send-email' || cleanPath.endsWith('/send-email');
+  const isSupportNotification = cleanPath === '/support-notification' || cleanPath.endsWith('/support-notification');
+  const isRequestPasswordReset = cleanPath === '/request-password-reset' || cleanPath.endsWith('/request-password-reset');
+  const isVerifyResetToken = cleanPath === '/verify-reset-token' || cleanPath.endsWith('/verify-reset-token');
+  const isResetPassword = cleanPath === '/reset-password' || cleanPath.endsWith('/reset-password');
+
   let body: any = {};
   if (event.body) {
     try {
@@ -199,7 +225,7 @@ export const handler = async (event: NetlifyEvent): Promise<NetlifyResponse> => 
     // -------------------------------------------------------------
     // GET /email-status
     // -------------------------------------------------------------
-    if (path === '/email-status' && event.httpMethod === 'GET') {
+    if (isEmailStatus && event.httpMethod === 'GET') {
       const hasResend = Boolean(process.env.RESEND_API_KEY && !process.env.RESEND_API_KEY.includes('re_your_api_key'));
       const hasSmtp = Boolean(process.env.GMAIL_APP_PASSWORD && !process.env.GMAIL_APP_PASSWORD.includes('YOUR_GMAIL_APP_PASSWORD'));
       const sender = hasResend
@@ -220,7 +246,7 @@ export const handler = async (event: NetlifyEvent): Promise<NetlifyResponse> => 
     // -------------------------------------------------------------
     // POST /send-email
     // -------------------------------------------------------------
-    if (path === '/send-email' && event.httpMethod === 'POST') {
+    if (isSendEmail && event.httpMethod === 'POST') {
       const { to, subject, html, text, replyTo } = body;
       if (!to || !subject || (!html && !text)) {
         return {
@@ -241,7 +267,7 @@ export const handler = async (event: NetlifyEvent): Promise<NetlifyResponse> => 
     // -------------------------------------------------------------
     // POST /support-notification
     // -------------------------------------------------------------
-    if (path === '/support-notification' && event.httpMethod === 'POST') {
+    if (isSupportNotification && event.httpMethod === 'POST') {
       const { subject, message, email, category, priority, userName, userId, destinationEmail } = body;
       const targetDestination = destinationEmail || process.env.GMAIL_USER || 'aymane.habbo@gmail.com';
 
@@ -283,7 +309,7 @@ export const handler = async (event: NetlifyEvent): Promise<NetlifyResponse> => 
     // -------------------------------------------------------------
     // POST /request-password-reset
     // -------------------------------------------------------------
-    if (path === '/request-password-reset' && event.httpMethod === 'POST') {
+    if (isRequestPasswordReset && event.httpMethod === 'POST') {
       const email = (body.email || '').trim().toLowerCase();
       if (!email) {
         return {
@@ -364,11 +390,16 @@ export const handler = async (event: NetlifyEvent): Promise<NetlifyResponse> => 
         statusCode: 200,
         headers: CORS_HEADERS,
         body: JSON.stringify({
-          success: true,
+          success: emailResult.success,
+          emailSent: emailResult.success,
+          provider: emailResult.provider || 'none',
+          messageId: emailResult.messageId,
+          error: emailResult.error,
+          warning: emailResult.warning,
           smtpConfigured: emailResult.success,
           message: emailResult.success
             ? 'Password reset email sent successfully.'
-            : 'Password reset link prepared. (Email service pending configuration in Netlify)',
+            : (emailResult.error || 'Password reset link prepared, but email delivery failed.'),
           resetUrl,
           expiresIn: '1 hour',
         }),
@@ -378,7 +409,7 @@ export const handler = async (event: NetlifyEvent): Promise<NetlifyResponse> => 
     // -------------------------------------------------------------
     // POST /verify-reset-token
     // -------------------------------------------------------------
-    if (path === '/verify-reset-token' && event.httpMethod === 'POST') {
+    if (isVerifyResetToken && event.httpMethod === 'POST') {
       const token = (body.token || '').trim();
       if (!token) {
         return {
@@ -438,7 +469,7 @@ export const handler = async (event: NetlifyEvent): Promise<NetlifyResponse> => 
     // -------------------------------------------------------------
     // POST /reset-password
     // -------------------------------------------------------------
-    if (path === '/reset-password' && event.httpMethod === 'POST') {
+    if (isResetPassword && event.httpMethod === 'POST') {
       const { token, newPassword } = body;
       const cleanToken = (token || '').trim();
 

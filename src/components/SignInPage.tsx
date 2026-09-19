@@ -18,7 +18,8 @@ import {
   Mail,
   Clock,
   Loader2,
-  ShieldCheck
+  ShieldCheck,
+  RefreshCw
 } from 'lucide-react';
 import { UserAccount, SupportCategory } from '../types';
 import { 
@@ -83,7 +84,20 @@ export const SignInPage = ({
   const [recoveryStep, setRecoveryStep] = useState<'request' | 'sent'>('request');
   const [isSendingReset, setIsSendingReset] = useState(false);
   const [sentToEmail, setSentToEmail] = useState('');
+  const [sentProvider, setSentProvider] = useState<string>('smtp');
   const [recoveryError, setRecoveryError] = useState<string | null>(null);
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [isResending, setIsResending] = useState(false);
+  const [resendSuccessNotice, setResendSuccessNotice] = useState<string | null>(null);
+
+  // 30-second cooldown timer for resend email button
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setResendCooldown((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [resendCooldown]);
 
   useEffect(() => {
     if (initialEmail) {
@@ -242,29 +256,59 @@ export const SignInPage = ({
     setIsSendingReset(true);
 
     try {
-      // 1. Dispatch real email via Gmail SMTP from aymane.habbo@gmail.com
       const res = await requestPasswordResetViaEmail(
         cleanEmail, 
         typeof window !== 'undefined' ? window.location.origin : undefined
       );
 
-      // 2. Also trigger Firebase Auth password reset if enabled
-      firebaseSendPasswordReset(cleanEmail).catch(err => {
-        console.warn('Firebase Auth sendPasswordResetEmail notice:', err);
-      });
-
-      if (!res.success && !res.resetUrl) {
-        setRecoveryError(res.error || 'Failed to send password reset email. Please verify your connection.');
+      if (!res.emailSent) {
+        setRecoveryError(
+          res.error || 
+          'Email delivery failed. If hosted on Netlify, please ensure RESEND_API_KEY or GMAIL_APP_PASSWORD is set in your Netlify Site Environment Variables.'
+        );
         setIsSendingReset(false);
         return;
       }
 
       setSentToEmail(cleanEmail);
+      setSentProvider(res.provider || 'smtp');
       setRecoveryStep('sent');
+      setResendCooldown(30);
+      setResendSuccessNotice(null);
     } catch (err: any) {
       setRecoveryError(err.message || 'An error occurred while dispatching the reset email.');
     } finally {
       setIsSendingReset(false);
+    }
+  };
+
+  const handleResendEmail = async () => {
+    if (resendCooldown > 0 || isResending || !sentToEmail) return;
+
+    setIsResending(true);
+    setRecoveryError(null);
+    setResendSuccessNotice(null);
+
+    try {
+      const res = await requestPasswordResetViaEmail(
+        sentToEmail,
+        typeof window !== 'undefined' ? window.location.origin : undefined
+      );
+
+      if (res.emailSent) {
+        setSentProvider(res.provider || 'smtp');
+        setResendSuccessNotice('A fresh password reset link has been dispatched to your inbox.');
+        setResendCooldown(30);
+      } else {
+        setRecoveryError(
+          res.error ||
+          'Failed to resend reset email. Please ensure your email credentials (RESEND_API_KEY or GMAIL_APP_PASSWORD) are set in Netlify site environment variables.'
+        );
+      }
+    } catch (err: any) {
+      setRecoveryError(err.message || 'An unexpected error occurred while resending.');
+    } finally {
+      setIsResending(false);
     }
   };
 
@@ -622,10 +666,32 @@ export const SignInPage = ({
                   <div className="p-3 bg-white border border-[#D9D1C5] rounded-xl text-center">
                     <span className="text-xs font-mono font-bold text-[#1F3329] break-all">{sentToEmail}</span>
                     <div className="text-[11px] text-[#6B7E74] mt-1 flex items-center justify-center gap-1.5">
-                      <span>Sender:</span>
-                      <strong className="text-[#2F473A]">aymane.habbo@gmail.com</strong>
+                      <span>Service:</span>
+                      <strong className="text-[#2F473A]">
+                        {sentProvider === 'resend'
+                          ? 'Resend API'
+                          : sentProvider === 'firebase'
+                          ? 'Firebase Auth'
+                          : 'Gmail SMTP (aymane.habbo@gmail.com)'}
+                      </strong>
                     </div>
                   </div>
+
+                  {/* Resend success banner */}
+                  {resendSuccessNotice && (
+                    <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs flex items-center gap-2 text-start">
+                      <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+                      <span>{resendSuccessNotice}</span>
+                    </div>
+                  )}
+
+                  {/* Recovery error banner during resend */}
+                  {recoveryError && (
+                    <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs flex items-start gap-2 text-start">
+                      <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-500" />
+                      <span>{recoveryError}</span>
+                    </div>
+                  )}
 
                   <div className="p-3.5 bg-[#FAF7F2] rounded-2xl border border-[#E9E2D6] text-start space-y-2 text-xs text-[#55675E]">
                     <div className="flex items-center gap-2 font-semibold text-[#22382D]">
@@ -645,15 +711,43 @@ export const SignInPage = ({
                     </ul>
                   </div>
 
-                  <div className="pt-2">
+                  {/* Action buttons: Resend Email (with 30s cooldown) & Return to Sign In */}
+                  <div className="pt-2 flex flex-col gap-2">
+                    <button
+                      type="button"
+                      id="resend-reset-email-btn"
+                      onClick={handleResendEmail}
+                      disabled={resendCooldown > 0 || isResending}
+                      className="w-full py-2.5 bg-white hover:bg-[#F3EFEA] border border-[#D9D1C5] text-[#2D4537] text-xs sm:text-sm font-semibold rounded-xl transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    >
+                      {isResending ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin text-[#315243]" />
+                          <span>Resending Email...</span>
+                        </>
+                      ) : resendCooldown > 0 ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5 text-[#73837A]" />
+                          <span>Resend Email ({resendCooldown}s)</span>
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5 text-[#315243]" />
+                          <span>Resend Email</span>
+                        </>
+                      )}
+                    </button>
+
                     <button
                       type="button"
                       id="recovery-sent-close-btn"
                       onClick={() => {
                         setIsForgotPasswordOpen(false);
                         setRecoveryStep('request');
+                        setRecoveryError(null);
+                        setResendSuccessNotice(null);
                       }}
-                      className="w-full py-3 bg-[#315243] hover:bg-[#253E33] text-white text-xs sm:text-sm font-semibold rounded-xl transition-colors cursor-pointer flex items-center justify-center gap-2 shadow-xs"
+                      className="w-full py-2.5 bg-[#315243] hover:bg-[#253E33] text-white text-xs sm:text-sm font-semibold rounded-xl transition-colors cursor-pointer flex items-center justify-center gap-2 shadow-xs"
                     >
                       <span>Return to Sign In</span>
                     </button>
