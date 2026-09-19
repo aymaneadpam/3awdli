@@ -128,6 +128,20 @@
         "is_hidden": { "type": "boolean" }
       },
       "required": ["id", "title", "content", "category", "authorId", "authorName"]
+    },
+    "PasswordResetToken": {
+      "title": "Password Reset Token",
+      "description": "Secure one-time cryptographic tokens for password reset verification",
+      "type": "object",
+      "properties": {
+        "token": { "type": "string" },
+        "email": { "type": "string" },
+        "createdAt": { "type": "number" },
+        "expiresAt": { "type": "number" },
+        "used": { "type": "boolean" },
+        "usedAt": { "type": "number" }
+      },
+      "required": ["token", "email", "createdAt", "expiresAt", "used"]
     }
   },
   "firestore": {
@@ -154,6 +168,10 @@
     "teen_space_articles": {
       "entity": "TeenSpaceArticle",
       "description": "Educational articles, coping strategies, and guides for youth"
+    },
+    "password_reset_tokens": {
+      "entity": "PasswordResetToken",
+      "description": "Secure one-time password recovery tokens with 1-hour expiration"
     }
   }
 }

@@ -701,5 +701,55 @@ export function subscribeToRulesCategories(
   );
 }
 
+// -------------------------------------------------------------
+// FIRESTORE PASSWORD RESET TOKENS MANAGEMENT
+// -------------------------------------------------------------
+export const PASSWORD_RESET_TOKENS_COLLECTION = 'password_reset_tokens';
 
+export interface FirestoreResetToken {
+  token: string;
+  email: string;
+  createdAt: number;
+  expiresAt: number;
+  used: boolean;
+  usedAt?: number;
+}
 
+export async function saveResetTokenToFirestore(record: FirestoreResetToken): Promise<void> {
+  if (!record.token) return;
+  try {
+    const docRef = doc(db, PASSWORD_RESET_TOKENS_COLLECTION, record.token.trim());
+    const cleanData = sanitizeForFirestore(record);
+    await setDoc(docRef, cleanData, { merge: true });
+  } catch (err) {
+    console.error('Error saving reset token to Firestore:', err);
+  }
+}
+
+export async function getResetTokenFromFirestore(token: string): Promise<FirestoreResetToken | null> {
+  if (!token) return null;
+  try {
+    const docRef = doc(db, PASSWORD_RESET_TOKENS_COLLECTION, token.trim());
+    const snap = await getDoc(docRef);
+    if (!snap.exists()) return null;
+    return snap.data() as FirestoreResetToken;
+  } catch (err) {
+    console.error('Error fetching reset token from Firestore:', err);
+    return null;
+  }
+}
+
+export async function markResetTokenUsedInFirestore(token: string): Promise<boolean> {
+  if (!token) return false;
+  try {
+    const docRef = doc(db, PASSWORD_RESET_TOKENS_COLLECTION, token.trim());
+    await updateDoc(docRef, {
+      used: true,
+      usedAt: Date.now(),
+    });
+    return true;
+  } catch (err) {
+    console.error('Error marking reset token used in Firestore:', err);
+    return false;
+  }
+}

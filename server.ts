@@ -5,6 +5,11 @@ import crypto from "crypto";
 import { createServer as createViteServer } from "vite";
 import nodemailer from "nodemailer";
 import dotenv from "dotenv";
+import {
+  saveResetTokenToFirestore,
+  getResetTokenFromFirestore,
+  markResetTokenUsedInFirestore,
+} from "./src/lib/firestoreService";
 
 dotenv.config();
 
@@ -74,28 +79,92 @@ async function startServer() {
 
   // Check email configuration status
   app.get("/api/email-status", (req, res) => {
-    const user = process.env.GMAIL_USER || 'aymane.habbo@gmail.com';
+    const hasResend = Boolean(process.env.RESEND_API_KEY && !process.env.RESEND_API_KEY.includes('re_your_api_key'));
     const hasPassword = Boolean(process.env.GMAIL_APP_PASSWORD && process.env.GMAIL_APP_PASSWORD.trim());
+    const sender = hasResend
+      ? (process.env.RESEND_FROM || '3awdli Support <onboarding@resend.dev>')
+      : (process.env.GMAIL_USER || 'aymane.habbo@gmail.com');
     res.json({
-      configured: hasPassword,
-      sender: user,
+      configured: hasResend || hasPassword,
+      provider: hasResend ? 'resend' : hasPassword ? 'smtp' : 'none',
+      sender,
     });
   });
+
+  // Unified Email Dispatcher (Resend API + Gmail SMTP)
+  async function sendEmailHelper({
+    to,
+    subject,
+    html,
+    text,
+    replyTo,
+  }: {
+    to: string;
+    subject: string;
+    html?: string;
+    text?: string;
+    replyTo?: string;
+  }): Promise<{ success: boolean; provider?: string; messageId?: string; error?: string }> {
+    // 1. Resend API
+    const resendApiKey = process.env.RESEND_API_KEY?.trim();
+    if (resendApiKey && !resendApiKey.includes('re_your_api_key')) {
+      try {
+        const from = process.env.RESEND_FROM?.trim() || '3awdli Support <onboarding@resend.dev>';
+        const response = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${resendApiKey}`,
+          },
+          body: JSON.stringify({
+            from,
+            to: [to],
+            subject,
+            html: html || text,
+            text: text || '',
+            reply_to: replyTo,
+          }),
+        });
+        const data = (await response.json().catch(() => ({}))) as any;
+        if (response.ok && data?.id) {
+          return { success: true, provider: 'resend', messageId: data.id };
+        }
+        console.warn('[Server Email] Resend API error response:', data);
+      } catch (err: any) {
+        console.warn('[Server Email] Resend API fetch failed:', err?.message);
+      }
+    }
+
+    // 2. Gmail SMTP
+    const transporter = getTransporter();
+    if (transporter) {
+      try {
+        const user = process.env.GMAIL_USER || 'aymane.habbo@gmail.com';
+        const info = await transporter.sendMail({
+          from: `"3awdli Support" <${user}>`,
+          to,
+          subject,
+          text: text || '',
+          html: html || text || '',
+          replyTo: replyTo || user,
+        });
+        return { success: true, provider: 'smtp', messageId: info.messageId };
+      } catch (err: any) {
+        console.warn('[Server Email] Gmail SMTP error:', err?.message);
+        return { success: false, error: err?.message || 'SMTP sending failed' };
+      }
+    }
+
+    return {
+      success: false,
+      error: 'No email service credentials configured. Set RESEND_API_KEY or GMAIL_APP_PASSWORD in environment variables.',
+    };
+  }
 
   // Generic send email endpoint
   app.post("/api/send-email", async (req, res) => {
     try {
       const { to, subject, html, text, replyTo } = req.body;
-      const user = process.env.GMAIL_USER || 'aymane.habbo@gmail.com';
-      const transporter = getTransporter();
-
-      if (!transporter) {
-        return res.status(503).json({
-          success: false,
-          error: 'GMAIL_APP_PASSWORD is not configured in environment variables. Please set it in Settings / Secrets.',
-        });
-      }
-
       if (!to || !subject || (!html && !text)) {
         return res.status(400).json({
           success: false,
@@ -103,22 +172,16 @@ async function startServer() {
         });
       }
 
-      const info = await transporter.sendMail({
-        from: `"3awdli Support" <${user}>`,
-        to,
-        subject,
-        text: text || '',
-        html: html || text || '',
-        replyTo: replyTo || user,
-      });
-
-      console.log(`[SMTP] Successfully sent email to ${to}:`, info.messageId);
-      return res.json({ success: true, messageId: info.messageId });
+      const result = await sendEmailHelper({ to, subject, html, text, replyTo });
+      if (!result.success) {
+        return res.status(503).json(result);
+      }
+      return res.json(result);
     } catch (err: any) {
-      console.error('[SMTP Error] Failed to send email:', err);
+      console.error('[Email Error] Failed to send email:', err);
       return res.status(500).json({
         success: false,
-        error: err.message || 'Failed to send email via Gmail SMTP',
+        error: err.message || 'Failed to send email',
       });
     }
   });
@@ -127,16 +190,7 @@ async function startServer() {
   app.post("/api/support-notification", async (req, res) => {
     try {
       const { subject, message, email, category, priority, userName, userId, destinationEmail } = req.body;
-      const sender = process.env.GMAIL_USER || 'aymane.habbo@gmail.com';
-      const targetDestination = destinationEmail || sender;
-      const transporter = getTransporter();
-
-      if (!transporter) {
-        return res.status(503).json({
-          success: false,
-          error: 'GMAIL_APP_PASSWORD not set. Stored in database, awaiting SMTP configuration.',
-        });
-      }
+      const targetDestination = destinationEmail || process.env.GMAIL_USER || 'aymane.habbo@gmail.com';
 
       const emailSubject = `[3awdli Support ${priority === 'urgent' ? '🔴 URGENT' : '🟢'}] ${subject}`;
 
@@ -185,8 +239,7 @@ async function startServer() {
         </div>
       `;
 
-      const info = await transporter.sendMail({
-        from: `"3awdli Notification" <${sender}>`,
+      const result = await sendEmailHelper({
         to: targetDestination,
         replyTo: email,
         subject: emailSubject,
@@ -194,13 +247,13 @@ async function startServer() {
         html: htmlContent,
       });
 
-      console.log(`[SMTP] Support request forwarded to ${targetDestination}:`, info.messageId);
-      return res.json({ success: true, messageId: info.messageId });
+      console.log(`[Support Notification] Forward result to ${targetDestination}:`, result);
+      return res.json(result);
     } catch (err: any) {
-      console.error('[SMTP Error] Failed to forward support request:', err);
+      console.error('[Notification Error] Failed to forward support request:', err);
       return res.status(500).json({
         success: false,
-        error: err.message || 'Failed to forward support request via SMTP',
+        error: err.message || 'Failed to forward support request',
       });
     }
   });
@@ -311,24 +364,18 @@ async function startServer() {
       resetTokensStore.set(token, tokenRecord);
       saveTokensToFile(resetTokensStore);
 
+      // Also persist to cloud Firestore database
+      saveResetTokenToFirestore(tokenRecord).catch((err) => {
+        console.warn('[Server] Firestore token sync notice:', err?.message);
+      });
+
       // Determine public client origin URL
       const origin = resolvePublicAppUrl(req, appUrl);
       const resetUrl = `${origin}/reset-password?token=${token}&email=${encodeURIComponent(cleanEmail)}`;
 
-      const transporter = getTransporter();
-      const sender = process.env.GMAIL_USER || 'aymane.habbo@gmail.com';
-
-      if (!transporter) {
-        console.warn(`[SMTP Warning] GMAIL_APP_PASSWORD not configured. Reset link generated for ${cleanEmail}: ${resetUrl}`);
-        // Return success with notice so developer/admin can still use link if testing in dev mode without password
-        return res.json({
-          success: true,
-          smtpConfigured: false,
-          message: 'Password reset link prepared. (SMTP credentials pending in Settings)',
-          resetUrl,
-          expiresIn: '1 hour',
-        });
-      }
+      const sender = (process.env.RESEND_API_KEY && !process.env.RESEND_API_KEY.includes('re_your_api_key'))
+        ? (process.env.RESEND_FROM || '3awdli Support <onboarding@resend.dev>')
+        : (process.env.GMAIL_USER || 'aymane.habbo@gmail.com');
 
       const emailHtml = `
         <!DOCTYPE html>
@@ -386,24 +433,28 @@ If you did not request this, please ignore this email.
 Sent from ${sender} (3awdli Platform).
       `;
 
-      const mailResult = await transporter.sendMail({
-        from: `"3awdli Support" <${sender}>`,
+      const emailResult = await sendEmailHelper({
         to: cleanEmail,
         subject: "Reset your 3awdli password | إعادة تعيين كلمة المرور",
-        text: textFallback,
         html: emailHtml,
+        text: textFallback,
       });
 
-      console.log(`[SMTP] Password reset email sent to ${cleanEmail}:`, mailResult.messageId);
+      console.log(`[Email] Password reset result for ${cleanEmail}:`, emailResult);
 
       return res.json({
         success: true,
-        smtpConfigured: true,
-        messageId: mailResult.messageId,
-        message: 'Password reset link sent to your email.',
+        smtpConfigured: emailResult.success,
+        provider: emailResult.provider,
+        messageId: emailResult.messageId,
+        message: emailResult.success
+          ? 'Password reset link sent to your email.'
+          : 'Password reset link prepared. (Email delivery pending environment credentials)',
+        resetUrl,
+        expiresIn: '1 hour',
       });
     } catch (err: any) {
-      console.error('[SMTP Error] Password reset dispatch failed:', err);
+      console.error('[Email Error] Password reset dispatch failed:', err);
       return res.status(500).json({
         success: false,
         error: err.message || 'Failed to dispatch password reset email',
@@ -412,14 +463,28 @@ Sent from ${sender} (3awdli Platform).
   });
 
   // 2. Verify Password Reset Token
-  app.post("/api/verify-reset-token", (req, res) => {
+  app.post("/api/verify-reset-token", async (req, res) => {
     try {
       const { token } = req.body;
       if (!token) {
         return res.status(400).json({ valid: false, error: 'missing_token', message: 'Reset token is required' });
       }
 
-      const record = resetTokensStore.get(token);
+      let record = resetTokensStore.get(token);
+
+      // Check Firestore if not in memory
+      if (!record) {
+        try {
+          const fromFirestore = await getResetTokenFromFirestore(token);
+          if (fromFirestore) {
+            record = fromFirestore;
+            resetTokensStore.set(token, record);
+          }
+        } catch (err: any) {
+          console.warn('[Server] Firestore token lookup notice:', err?.message);
+        }
+      }
+
       if (!record) {
         return res.status(404).json({
           valid: false,
@@ -455,7 +520,7 @@ Sent from ${sender} (3awdli Platform).
   });
 
   // 3. Complete Password Reset
-  app.post("/api/reset-password", (req, res) => {
+  app.post("/api/reset-password", async (req, res) => {
     try {
       const { token, newPassword } = req.body;
       if (!token || !newPassword) {
@@ -469,7 +534,18 @@ Sent from ${sender} (3awdli Platform).
         });
       }
 
-      const record = resetTokensStore.get(token);
+      let record = resetTokensStore.get(token);
+      if (!record) {
+        try {
+          const fromFirestore = await getResetTokenFromFirestore(token);
+          if (fromFirestore) {
+            record = fromFirestore;
+          }
+        } catch (err: any) {
+          console.warn('[Server] Firestore token lookup notice:', err?.message);
+        }
+      }
+
       if (!record) {
         return res.status(404).json({
           success: false,
@@ -497,7 +573,10 @@ Sent from ${sender} (3awdli Platform).
       resetTokensStore.set(token, record);
       saveTokensToFile(resetTokensStore);
 
-      console.log(`[SMTP] Password successfully reset for ${record.email} via token`);
+      // Also mark used in Firestore
+      markResetTokenUsedInFirestore(token).catch(() => {});
+
+      console.log(`[Password Reset] Password successfully reset for ${record.email} via token`);
 
       return res.json({
         success: true,

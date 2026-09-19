@@ -61,6 +61,11 @@ service cloud.firestore {
       allow create, update, delete: if true;
     }
 
+    // Password reset tokens for one-time password recovery links
+    match /password_reset_tokens/{tokenId} {
+      allow read, write: if true;
+    }
+
     // Default safety fallback
     match /{document=**} {
       allow read, write: if true;

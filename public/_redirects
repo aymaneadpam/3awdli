@@ -1,0 +1,6 @@
+# Netlify Redirects and Rewrites
+# Proxy all API requests to the Netlify Serverless Function
+/api/*  /.netlify/functions/api/:splat  200!
+
+# SPA Client-Side Routing fallback for React
+/*      /index.html                     200
