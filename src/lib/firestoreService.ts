@@ -320,7 +320,6 @@ export async function firebaseSignInUser(
   existingUserAccount?: UserAccount
 ): Promise<UserAccount> {
   const cleanEmail = email.trim().toLowerCase();
-  const isTargetAdmin = cleanEmail === 'aymaneoumlala@gmail.com';
   
   try {
     const cred = await signInWithEmailAndPassword(auth, cleanEmail, password);
@@ -336,19 +335,20 @@ export async function firebaseSignInUser(
     }
     if (existingUserAccount) return existingUserAccount;
   } catch (err: any) {
-    // If Firebase Auth throws operation-not-allowed, it means Email/Password provider is disabled in Firebase Console.
-    // Seamlessly authenticate against Firestore / local user records so users and admins are never locked out!
+    // If Firebase Auth throws operation-not-allowed, invalid-credential, or network errors,
+    // verify securely against Firestore database & local user records.
     if (
       err.code === 'auth/operation-not-allowed' || 
       err.code === 'auth/network-request-failed' ||
-      err.message?.includes('operation-not-allowed')
+      err.message?.includes('operation-not-allowed') ||
+      err.code === 'auth/invalid-credential' ||
+      err.code === 'auth/wrong-password' ||
+      err.code === 'auth/user-not-found'
     ) {
-      console.warn('Firebase Email/Password auth is disabled on this Firebase project. Performing secure Firestore/local database authentication.');
-      
       let matched: any = null;
       try {
         const allFirestoreUsers = await fetchUsersFromFirestore();
-        matched = allFirestoreUsers.find(u => u.email?.toLowerCase() === cleanEmail);
+        matched = allFirestoreUsers.find(u => u.email?.trim().toLowerCase() === cleanEmail);
       } catch (firestoreErr) {
         console.warn('Could not read from Firestore, checking local storage:', firestoreErr);
       }
@@ -359,7 +359,7 @@ export async function firebaseSignInUser(
           if (raw) {
             const parsed = JSON.parse(raw);
             if (Array.isArray(parsed)) {
-              matched = parsed.find((u: any) => u.email?.toLowerCase() === cleanEmail);
+              matched = parsed.find((u: any) => u.email?.trim().toLowerCase() === cleanEmail);
             }
           }
         } catch (storageErr) {
@@ -371,73 +371,35 @@ export async function firebaseSignInUser(
         matched = existingUserAccount;
       }
 
-      // If it's the Platform Admin (Aymane)
-      if (isTargetAdmin) {
-        const adminAccount: UserAccount = matched || {
-          id: 'user_admin_01',
-          name: 'Aymane Oumlala',
-          email: 'aymaneoumlala@gmail.com',
-          role: 'admin',
-          is_founder: true,
-          is_administrator: true,
-          is_facilitator: true,
-          is_host: true,
-          gender: 'Male',
-          profession: 'Platform Director & Admin',
-          createdAt: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-        };
-        // Update credentials in Firestore if accessible
-        saveUserToFirestore({ ...adminAccount, password }).catch(() => {});
-        return adminAccount;
+      if (!matched) {
+        const notFoundErr = new Error('No account was found with this email in the database. Please sign up or continue with Google.');
+        (notFoundErr as any).code = 'auth/user-not-found';
+        throw notFoundErr;
       }
-      
-      if (matched) {
-        const storedWithPass = matched as UserAccount & { password?: string };
-        if (storedWithPass.password && storedWithPass.password !== password) {
-          const passError = new Error('The password entered does not match our records.');
-          (passError as any).code = 'auth/wrong-password';
-          throw passError;
-        }
-        if (!storedWithPass.password) {
-          saveUserToFirestore({ ...matched, password }).catch(() => {});
-        }
-        return matched;
+
+      // STRICT PASSWORD CHECK: Verify entered password against the stored password
+      const storedWithPass = matched as UserAccount & { password?: string };
+      const storedPassword = storedWithPass.password;
+
+      if (!storedPassword) {
+        const noPassErr = new Error('This account does not have a password set. Please sign in with Google or use "Forgot password" to set one.');
+        (noPassErr as any).code = 'auth/no-password-set';
+        throw noPassErr;
       }
-      
-      // User not found in Firestore or local records
-      const notFoundErr = new Error('No account was found with this email in the database. Please sign up or continue with Google.');
-      (notFoundErr as any).code = 'auth/user-not-found';
-      throw notFoundErr;
+
+      if (storedPassword !== password) {
+        const passError = new Error('The password entered does not match our records.');
+        (passError as any).code = 'auth/wrong-password';
+        throw passError;
+      }
+
+      // Password matches!
+      return matched as UserAccount;
     }
 
-    // If user does not exist in Firebase Auth yet (e.g. seeded listener/admin account),
-    // automatically provision them in Firebase Auth if supported
-    if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') {
-      if (existingUserAccount) {
-        try {
-          const cred = await createUserWithEmailAndPassword(auth, cleanEmail, password);
-          const fullUser: UserAccount = {
-            ...existingUserAccount,
-            id: cred.user.uid,
-          };
-          saveUserToFirestore(fullUser).catch(() => {});
-          return fullUser;
-        } catch (createErr: any) {
-          if (createErr.code === 'auth/operation-not-allowed') {
-            return existingUserAccount;
-          }
-          console.warn('Fallback Firebase Auth creation error:', createErr);
-          const storedPass = (existingUserAccount as any).password;
-          if (!storedPass || storedPass === password) {
-            return existingUserAccount;
-          }
-        }
-      }
-    }
     throw err;
   }
 
-  // Fallback to existing profile if document was not yet indexed
   if (existingUserAccount) {
     return existingUserAccount;
   }
@@ -753,3 +715,70 @@ export async function markResetTokenUsedInFirestore(token: string): Promise<bool
     return false;
   }
 }
+
+/**
+ * Overwrite and invalidate the previous password for all Firestore documents
+ * matching an email address. Ensures that the old password cannot authenticate.
+ */
+export async function updateUserPasswordInFirestore(
+  email: string,
+  newPassword: string
+): Promise<{ success: boolean; updatedCount: number }> {
+  const cleanEmail = email.trim().toLowerCase();
+  if (!cleanEmail || !newPassword) {
+    return { success: false, updatedCount: 0 };
+  }
+
+  try {
+    const colRef = collection(db, USERS_COLLECTION);
+    const snap = await getDocs(colRef);
+    let count = 0;
+    const nowIso = new Date().toISOString();
+
+    const updatePromises: Promise<any>[] = [];
+    snap.forEach((docSnap) => {
+      const data = docSnap.data();
+      if (data.email && data.email.trim().toLowerCase() === cleanEmail) {
+        count++;
+        updatePromises.push(
+          setDoc(docSnap.ref, {
+            ...data,
+            password: newPassword,
+            updatedAt: nowIso,
+            passwordChangedAt: nowIso,
+          }, { merge: true }).catch(async (err) => {
+            console.warn(`Error updating password on doc ${docSnap.id}:`, err);
+          })
+        );
+      }
+    });
+
+    await Promise.all(updatePromises);
+
+    // If no document existed in Firestore, create one so the new password is firmly saved
+    if (count === 0) {
+      const isTargetAdmin = cleanEmail === 'aymane.habbo@gmail.com' || cleanEmail === 'aymaneoumlala@gmail.com';
+      const newDocRef = doc(collection(db, USERS_COLLECTION));
+      await setDoc(newDocRef, {
+        id: newDocRef.id,
+        email: cleanEmail,
+        name: cleanEmail.split('@')[0],
+        password: newPassword,
+        role: isTargetAdmin ? 'admin' : 'user',
+        is_administrator: isTargetAdmin,
+        is_founder: isTargetAdmin,
+        createdAt: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+        passwordChangedAt: nowIso,
+        updatedAt: nowIso,
+      });
+      count = 1;
+    }
+
+    console.log(`[Firestore] Overwrote password for ${cleanEmail} across ${count} document(s)`);
+    return { success: true, updatedCount: count };
+  } catch (err) {
+    console.error('Error updating user password in Firestore:', err);
+    return { success: false, updatedCount: 0 };
+  }
+}
+

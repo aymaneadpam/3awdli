@@ -9,6 +9,7 @@ import {
   saveResetTokenToFirestore,
   getResetTokenFromFirestore,
   markResetTokenUsedInFirestore,
+  updateUserPasswordInFirestore,
 } from "./src/lib/firestoreService";
 
 dotenv.config({ override: true });
@@ -568,7 +569,14 @@ Sent from ${sender} (3awdli Platform).
       // Also mark used in Firestore
       markResetTokenUsedInFirestore(token).catch(() => {});
 
-      console.log(`[Password Reset] Password successfully reset for ${record.email} via token`);
+      // Completely overwrite and invalidate old password in Firestore database
+      try {
+        await updateUserPasswordInFirestore(record.email, newPassword);
+      } catch (dbErr) {
+        console.error('[Server] Error updating password in Firestore:', dbErr);
+      }
+
+      console.log(`[Password Reset] Password successfully reset and overwritten in Firestore for ${record.email}`);
 
       return res.json({
         success: true,

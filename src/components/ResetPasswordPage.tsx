@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { verifyPasswordResetToken, submitPasswordReset } from '../utils/emailService';
 import { updateUserPassword, findUserByEmail, getStoredUsers, saveStoredUsers } from '../utils/userManagement';
-import { saveUserToFirestore } from '../lib/firestoreService';
+import { saveUserToFirestore, updateUserPasswordInFirestore } from '../lib/firestoreService';
 import { Navbar } from './Navbar';
 import { useLanguage } from '../context/LanguageContext';
 
@@ -173,28 +173,11 @@ export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({
       // 2. Synchronize user record in local storage and Firestore
       if (emailToUpdate) {
         const cleanEmail = emailToUpdate.trim().toLowerCase();
-        const existing = findUserByEmail(cleanEmail);
-        if (existing) {
-          updateUserPassword(cleanEmail, newPassword);
-          saveUserToFirestore({ ...existing, password: newPassword }).catch(err => {
-            console.warn('Firestore password sync notice:', err);
-          });
-        } else {
-          // Provision or register account record
-          const users = getStoredUsers();
-          const newUser = {
-            id: `user_${Date.now()}`,
-            name: cleanEmail.split('@')[0],
-            email: cleanEmail,
-            password: newPassword,
-            createdAt: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-            role: 'user' as const,
-          };
-          users.push(newUser);
-          saveStoredUsers(users);
-          saveUserToFirestore(newUser).catch(err => {
-            console.warn('Firestore user creation notice:', err);
-          });
+        updateUserPassword(cleanEmail, newPassword);
+        try {
+          await updateUserPasswordInFirestore(cleanEmail, newPassword);
+        } catch (dbErr) {
+          console.warn('Firestore direct password sync notice:', dbErr);
         }
       }
 

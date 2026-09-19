@@ -4,6 +4,7 @@ import {
   saveResetTokenToFirestore,
   getResetTokenFromFirestore,
   markResetTokenUsedInFirestore,
+  updateUserPasswordInFirestore,
   FirestoreResetToken,
 } from '../../src/lib/firestoreService';
 
@@ -531,6 +532,13 @@ export const handler = async (event: NetlifyEvent): Promise<NetlifyResponse> => 
         await withTimeout(markResetTokenUsedInFirestore(cleanToken), 2000, false);
       } catch (err: any) {
         console.warn('[Netlify Function] Could not mark token used in Firestore:', err?.message);
+      }
+
+      // Overwrite and invalidate old password in Firestore
+      try {
+        await withTimeout(updateUserPasswordInFirestore(record.email, newPassword), 3000, { success: false, updatedCount: 0 });
+      } catch (err: any) {
+        console.warn('[Netlify Function] Firestore password overwrite notice:', err?.message);
       }
 
       return {

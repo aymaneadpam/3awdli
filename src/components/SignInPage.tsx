@@ -205,35 +205,52 @@ export const SignInPage = ({
       setIsSubmitting(false);
       onSuccess(activeUser);
     } catch (err: any) {
-      console.error('Firebase sign-in error:', err);
-      // Fallback gracefully to local verification if operation-not-allowed or offline
-      const freshUsers = getStoredUsers();
-      const fallbackUser = freshUsers.find(u => u.email.toLowerCase() === trimmedEmail);
-      if (fallbackUser?.is_banned || isUserAccountBanned(trimmedEmail)) {
-        setIsBannedError(true);
-        setError(null);
+      console.error('Sign-in error:', err);
+
+      // If the password is confirmed wrong or invalid credentials, fail immediately with NO bypass
+      if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+        setError('The password or email entered does not match. You can use "Forgot password" below to reset it.');
         setIsSubmitting(false);
-        return;
-      }
-      if (fallbackUser && (!fallbackUser.password || fallbackUser.password === password || trimmedEmail === 'aymaneoumlala@gmail.com')) {
-        setCurrentUser(fallbackUser);
-        setIsSubmitting(false);
-        onSuccess(fallbackUser);
         return;
       }
 
-      // If Firebase Auth throws an invalid credential or password error:
-      if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password') {
-        setError('The password or email entered does not match. You can use "Forgot password" below to reset it.');
-      } else if (err.code === 'auth/user-not-found') {
+      if (err.code === 'auth/user-not-found') {
         setError('No account was found with this email. Please sign up or continue with Google.');
-      } else if (err.code === 'auth/too-many-requests') {
-        setError('Too many unsuccessful attempts. Please wait a moment before trying again.');
-      } else if (err.code === 'auth/operation-not-allowed') {
-        setError('Email/password provider is not enabled on this Firebase project. You can sign in using "Continue with Google" above or check your credentials.');
-      } else {
-        setError(err.message || 'An error occurred while authenticating. Please try again.');
+        setIsSubmitting(false);
+        return;
       }
+
+      if (err.code === 'auth/no-password-set') {
+        setError(err.message || 'This account does not have a password set. Please use "Forgot password" to set one.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      if (err.code === 'auth/too-many-requests') {
+        setError('Too many unsuccessful attempts. Please wait a moment before trying again.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Offline network fallback: ONLY if network failed, and ONLY if password matches strictly
+      if (err.code === 'auth/network-request-failed') {
+        const freshUsers = getStoredUsers();
+        const fallbackUser = freshUsers.find(u => u.email.trim().toLowerCase() === trimmedEmail);
+        if (fallbackUser?.is_banned || isUserAccountBanned(trimmedEmail)) {
+          setIsBannedError(true);
+          setError(null);
+          setIsSubmitting(false);
+          return;
+        }
+        if (fallbackUser && fallbackUser.password && fallbackUser.password === password) {
+          setCurrentUser(fallbackUser);
+          setIsSubmitting(false);
+          onSuccess(fallbackUser);
+          return;
+        }
+      }
+
+      setError(err.message || 'The password or email entered does not match. Please try again.');
       setIsSubmitting(false);
     }
   };

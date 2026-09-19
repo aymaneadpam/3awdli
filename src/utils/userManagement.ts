@@ -2,7 +2,8 @@ import { UserAccount, Gender } from '../types';
 import { 
   saveUserToFirestore, 
   fetchUsersFromFirestore, 
-  subscribeToUsers 
+  subscribeToUsers,
+  updateUserPasswordInFirestore
 } from '../lib/firestoreService';
 
 export interface StoredUser extends UserAccount {
@@ -821,26 +822,61 @@ export function findUserByEmail(email: string): StoredUser | null {
   return users.find(u => u.email.toLowerCase() === cleanEmail) || null;
 }
 
-// Update password directly in local storage for testing & recovery
+// Update password directly in local storage and Firestore to guarantee complete invalidation of old password
 export function updateUserPassword(email: string, newPassword: string): { success: boolean; user?: StoredUser; message?: string } {
   try {
     const users = getStoredUsers();
     const cleanEmail = email.trim().toLowerCase();
-    const userIndex = users.findIndex(u => u.email.toLowerCase() === cleanEmail);
+    let updatedCount = 0;
+    let targetUser: StoredUser | undefined;
 
-    if (userIndex === -1) {
-      return { 
-        success: false, 
-        message: 'No registered user was found with this email. Please check the spelling or sign up.' 
+    const updatedUsers = users.map(u => {
+      if (u.email && u.email.trim().toLowerCase() === cleanEmail) {
+        updatedCount++;
+        const updated = { ...u, password: newPassword };
+        targetUser = updated;
+        return updated;
+      }
+      return u;
+    });
+
+    if (updatedCount === 0) {
+      const isTargetAdmin = cleanEmail === ADMIN_EMAIL.toLowerCase() || cleanEmail === LEGACY_ADMIN_EMAIL.toLowerCase();
+      const newUser: StoredUser = {
+        id: `user_${Date.now()}`,
+        name: cleanEmail.split('@')[0],
+        email: cleanEmail,
+        password: newPassword,
+        createdAt: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+        role: isTargetAdmin ? 'admin' : 'user',
+        is_administrator: isTargetAdmin,
+        is_founder: isTargetAdmin,
       };
+      updatedUsers.push(newUser);
+      targetUser = newUser;
     }
 
-    users[userIndex].password = newPassword;
-    saveStoredUsers(users, users[userIndex]);
+    saveStoredUsers(updatedUsers, targetUser);
+
+    // Also update currently active session if same email
+    try {
+      const currentRaw = localStorage.getItem(CURRENT_USER_STORAGE_KEY);
+      if (currentRaw) {
+        const current = JSON.parse(currentRaw);
+        if (current.email && current.email.trim().toLowerCase() === cleanEmail) {
+          localStorage.setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify({ ...current, ...targetUser }));
+        }
+      }
+    } catch {}
+
+    // Synchronize to Firestore database
+    updateUserPasswordInFirestore(cleanEmail, newPassword).catch(err => {
+      console.warn('Firestore password overwrite notice:', err);
+    });
 
     return { 
       success: true, 
-      user: users[userIndex] 
+      user: targetUser 
     };
   } catch (err) {
     console.error('Failed to update user password:', err);
