@@ -124,7 +124,7 @@ async function startServer() {
       }
 
       const attemptSend = async (senderAddress: string) => {
-        console.log(`[Server Email] Attempting Resend dispatch to ${to} from "${senderAddress}" (reply-to: ${userReplyTo})...`);
+        console.log(`[Password Reset Flow] [Resend Send] POST https://api.resend.com/emails with From: "${senderAddress}", To: "${to}", ReplyTo: "${userReplyTo}"`);
         const response = await fetch('https://api.resend.com/emails', {
           method: 'POST',
           headers: {
@@ -142,6 +142,7 @@ async function startServer() {
         });
 
         const data = (await response.json().catch(() => ({}))) as any;
+        console.log(`[Password Reset Flow] [Resend Response] HTTP ${response.status} (OK: ${response.ok}):`, JSON.stringify(data));
         return { response, data };
       };
 
@@ -153,7 +154,7 @@ async function startServer() {
         if (!response.ok && activeFrom !== '3awdli Support <onboarding@resend.dev>') {
           const resendMsg = (data?.message || '').toLowerCase();
           if (response.status === 403 || resendMsg.includes('domain') || resendMsg.includes('verify')) {
-            console.warn(`[Server Email] Resend rejected "${activeFrom}" (${data?.message}). Retrying with "3awdli Support <onboarding@resend.dev>"...`);
+            console.warn(`[Password Reset Flow] [Resend Fallback] "${activeFrom}" unverified (${data?.message}). Retrying with "3awdli Support <onboarding@resend.dev>"...`);
             const retry = await attemptSend('3awdli Support <onboarding@resend.dev>');
             response = retry.response;
             data = retry.data;
@@ -161,15 +162,15 @@ async function startServer() {
         }
 
         if (response.ok && data?.id) {
-          console.log('[Server Email] Resend email dispatched successfully with ID:', data.id);
+          console.log('[Password Reset Flow] [Resend Success] Email delivered to queue with ID:', data.id);
           return { success: true, provider: 'resend', messageId: data.id };
         }
 
         const resendError = data?.message || data?.error?.message || `Resend HTTP ${response.status}`;
-        console.error('[Server Email] Resend API error response:', response.status, resendError, data);
+        console.error('[Password Reset Flow] [Resend Error] Failed to send via Resend:', response.status, resendError);
         lastError = `Resend: ${resendError}`;
       } catch (err: any) {
-        console.error('[Server Email] Resend API fetch network error:', err?.message);
+        console.error('[Password Reset Flow] [Resend Error] Network error during Resend fetch:', err?.message);
         lastError = `Resend network error: ${err?.message}`;
       }
     }
@@ -179,7 +180,7 @@ async function startServer() {
     if (transporter) {
       try {
         const user = process.env.GMAIL_USER || 'aymane.habbo@gmail.com';
-        console.log(`[Server Email] Attempting Gmail SMTP dispatch to ${to} from ${user}...`);
+        console.log(`[Password Reset Flow] [Gmail SMTP Send] Sending fallback email via Gmail SMTP to: ${to} from: ${user}...`);
         const info = await transporter.sendMail({
           from: `"3awdli Support" <${user}>`,
           to,
@@ -188,7 +189,7 @@ async function startServer() {
           html: html || text || '',
           replyTo: replyTo || user,
         });
-        console.log('[Server Email] Gmail SMTP dispatched successfully:', info.messageId);
+        console.log('[Password Reset Flow] [Gmail SMTP Success] Message sent with ID:', info.messageId);
         return { 
           success: true, 
           provider: 'smtp', 
@@ -196,7 +197,7 @@ async function startServer() {
           warning: lastError ? `Resend failed (${lastError}), but dispatched via Gmail SMTP.` : undefined
         };
       } catch (err: any) {
-        console.error('[Server Email] Gmail SMTP error:', err?.message);
+        console.error('[Password Reset Flow] [Gmail SMTP Error] SMTP failed:', err?.message);
         const smtpErr = `Gmail SMTP error: ${err?.message || 'SMTP sending failed'}`;
         lastError = lastError ? `${lastError}; ${smtpErr}` : smtpErr;
       }
@@ -391,15 +392,18 @@ async function startServer() {
     try {
       const { email, appUrl } = req.body;
       if (!email || !email.trim()) {
+        console.warn('[Password Reset Flow] [Step 1/5] Rejected: No email provided in request body');
         return res.status(400).json({ success: false, error: "Email address is required" });
       }
 
       const cleanEmail = email.trim().toLowerCase();
+      console.log(`[Password Reset Flow] [Step 1/5] Initiating reset flow for: "${cleanEmail}" (requested host: ${appUrl || 'auto'})`);
 
       // Generate a crypto-secure random reset token
       const token = crypto.randomBytes(32).toString('hex');
       const now = Date.now();
       const expiresAt = now + 60 * 60 * 1000; // 1-hour expiration
+      console.log(`[Password Reset Flow] [Step 2/5] Generated crypto token: ${token.substring(0, 10)}... (valid until ${new Date(expiresAt).toISOString()})`);
 
       // Save token to memory store & persist to JSON file
       const tokenRecord: PasswordResetToken = {
@@ -413,17 +417,22 @@ async function startServer() {
       saveTokensToFile(resetTokensStore);
 
       // Also persist to cloud Firestore database
-      saveResetTokenToFirestore(tokenRecord).catch((err) => {
-        console.warn('[Server] Firestore token sync notice:', err?.message);
+      saveResetTokenToFirestore(tokenRecord).then(() => {
+        console.log(`[Password Reset Flow] [Step 3/5] Token synced to Firestore database for ${cleanEmail}`);
+      }).catch((err) => {
+        console.warn('[Password Reset Flow] [Step 3/5] Firestore token sync notice:', err?.message);
       });
 
       // Determine public client origin URL
       const origin = resolvePublicAppUrl(req, appUrl);
       const resetUrl = `${origin}/reset-password?token=${token}&email=${encodeURIComponent(cleanEmail)}`;
+      console.log(`[Password Reset Flow] [Step 4/5] Generated secure reset URL: ${resetUrl}`);
 
       const sender = (process.env.RESEND_API_KEY && !process.env.RESEND_API_KEY.includes('re_your_api_key'))
         ? (process.env.RESEND_FROM || '3awdli Support <onboarding@resend.dev>')
         : (process.env.GMAIL_USER || 'aymane.habbo@gmail.com');
+
+      console.log(`[Password Reset Flow] [Step 5/5] Invoking email helper with sender preference: "${sender}"`);
 
       const emailHtml = `
         <!DOCTYPE html>

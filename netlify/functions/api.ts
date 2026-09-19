@@ -92,7 +92,7 @@ async function dispatchEmail({
     }
 
     const attemptSend = async (senderAddress: string) => {
-      console.log(`[Netlify Function Email] Attempting Resend dispatch to ${to} from "${senderAddress}" (reply-to: ${userReplyTo})...`);
+      console.log(`[Password Reset Flow] [Netlify Resend Send] POST https://api.resend.com/emails with From: "${senderAddress}", To: "${to}", ReplyTo: "${userReplyTo}"`);
       const res = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
@@ -110,6 +110,7 @@ async function dispatchEmail({
       });
 
       const data = (await res.json().catch(() => ({}))) as any;
+      console.log(`[Password Reset Flow] [Netlify Resend Response] HTTP ${res.status} (OK: ${res.ok}):`, JSON.stringify(data));
       return { res, data };
     };
 
@@ -121,7 +122,7 @@ async function dispatchEmail({
       if (!res.ok && activeFrom !== '3awdli Support <onboarding@resend.dev>') {
         const resendMsg = (data?.message || '').toLowerCase();
         if (res.status === 403 || resendMsg.includes('domain') || resendMsg.includes('verify')) {
-          console.warn(`[Netlify Function Email] Resend rejected "${activeFrom}" (${data?.message}). Retrying with "3awdli Support <onboarding@resend.dev>"...`);
+          console.warn(`[Password Reset Flow] [Netlify Resend Fallback] "${activeFrom}" unverified (${data?.message}). Retrying with "3awdli Support <onboarding@resend.dev>"...`);
           const retry = await attemptSend('3awdli Support <onboarding@resend.dev>');
           res = retry.res;
           data = retry.data;
@@ -129,15 +130,15 @@ async function dispatchEmail({
       }
 
       if (res.ok && data?.id) {
-        console.log('[Netlify Function Email] Resend email successfully dispatched with ID:', data.id);
+        console.log('[Password Reset Flow] [Netlify Resend Success] Resend email successfully dispatched with ID:', data.id);
         return { success: true, provider: 'resend', messageId: data.id };
       }
 
       const resendError = data?.message || data?.error?.message || `Resend HTTP error ${res.status}`;
-      console.error('[Netlify Function Email] Resend API error response:', res.status, resendError, data);
+      console.error('[Password Reset Flow] [Netlify Resend Error] Resend API error response:', res.status, resendError);
       lastError = `Resend: ${resendError}`;
     } catch (err: any) {
-      console.error('[Netlify Function Email] Resend API fetch failed:', err?.message);
+      console.error('[Password Reset Flow] [Netlify Resend Error] Resend API fetch failed:', err?.message);
       lastError = `Resend network error: ${err?.message}`;
     }
   }
@@ -147,7 +148,7 @@ async function dispatchEmail({
   if (transporter) {
     try {
       const sender = process.env.GMAIL_USER || 'aymane.habbo@gmail.com';
-      console.log(`[Netlify Function Email] Attempting Gmail SMTP dispatch to ${to} from ${sender}...`);
+      console.log(`[Password Reset Flow] [Netlify Gmail SMTP Send] Sending fallback email via Gmail SMTP to: ${to} from: ${sender}...`);
       const info = await transporter.sendMail({
         from: `"3awdli Support" <${sender}>`,
         to,
@@ -156,7 +157,7 @@ async function dispatchEmail({
         html: html || text || '',
         replyTo: replyTo || sender,
       });
-      console.log('[Netlify Function Email] Gmail SMTP successfully dispatched:', info.messageId);
+      console.log('[Password Reset Flow] [Netlify Gmail SMTP Success] Gmail SMTP successfully dispatched:', info.messageId);
       return { 
         success: true, 
         provider: 'smtp', 
@@ -164,7 +165,7 @@ async function dispatchEmail({
         warning: lastError ? `Resend failed (${lastError}), but dispatched successfully via Gmail SMTP.` : undefined
       };
     } catch (err: any) {
-      console.error('[Netlify Function Email] Gmail SMTP error:', err?.message);
+      console.error('[Password Reset Flow] [Netlify Gmail SMTP Error] Gmail SMTP error:', err?.message);
       const smtpErr = `Gmail SMTP error: ${err?.message || 'SMTP sending failed'}`;
       lastError = lastError ? `${lastError}; ${smtpErr}` : smtpErr;
     }
@@ -365,6 +366,7 @@ export const handler = async (event: NetlifyEvent): Promise<NetlifyResponse> => 
     if (isRequestPasswordReset && event.httpMethod === 'POST') {
       const email = (body.email || '').trim().toLowerCase();
       if (!email) {
+        console.warn('[Password Reset Flow] [Netlify Step 1/5] Rejected: No email provided in request body');
         return {
           statusCode: 400,
           headers: CORS_HEADERS,
@@ -372,10 +374,13 @@ export const handler = async (event: NetlifyEvent): Promise<NetlifyResponse> => 
         };
       }
 
+      console.log(`[Password Reset Flow] [Netlify Step 1/5] Initiating reset request for: "${email}" (client host: ${body.appUrl || 'auto'})`);
+
       // 1. Generate secure 32-byte hex token
       const token = crypto.randomBytes(32).toString('hex');
       const now = Date.now();
       const expiresAt = now + 60 * 60 * 1000; // 1-hour expiration
+      console.log(`[Password Reset Flow] [Netlify Step 2/5] Generated crypto token: ${token.substring(0, 10)}... (valid until ${new Date(expiresAt).toISOString()})`);
 
       const tokenRecord: FirestoreResetToken = {
         token,
@@ -391,13 +396,17 @@ export const handler = async (event: NetlifyEvent): Promise<NetlifyResponse> => 
       // Save to Firestore cloud database with timeout protection
       try {
         await withTimeout(saveResetTokenToFirestore(tokenRecord), 2000, undefined);
+        console.log(`[Password Reset Flow] [Netlify Step 3/5] Token synced to Firestore database for ${email}`);
       } catch (err: any) {
-        console.warn('[Netlify Function] Could not persist token to Firestore:', err?.message);
+        console.warn('[Password Reset Flow] [Netlify Step 3/5] Firestore sync notice:', err?.message);
       }
 
       // Build reset URL
       const origin = resolveAppUrl(event, body.appUrl);
       const resetUrl = `${origin}/reset-password?token=${token}&email=${encodeURIComponent(email)}`;
+      console.log(`[Password Reset Flow] [Netlify Step 4/5] Generated secure reset URL: ${resetUrl}`);
+
+      console.log(`[Password Reset Flow] [Netlify Step 5/5] Invoking dispatchEmail for recipient: "${email}"`);
 
       // 2. Dispatch email
       const emailHtml = `

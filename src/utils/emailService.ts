@@ -169,6 +169,7 @@ export interface RequestPasswordResetResult {
   success: boolean;
   emailSent: boolean;
   provider?: 'resend' | 'smtp' | 'firebase' | 'none' | string;
+  messageId?: string;
   message?: string;
   error?: string;
   warning?: string;
@@ -243,6 +244,7 @@ export async function requestPasswordResetViaEmail(
         success: true,
         emailSent: true,
         provider,
+        messageId: result.data.messageId,
         message: `Password reset email dispatched via ${provider.toUpperCase()}.${result.data.messageId ? ` Message ID: ${result.data.messageId}` : ''}`,
         warning: result.data.warning,
         resetUrl: result.data.resetUrl,

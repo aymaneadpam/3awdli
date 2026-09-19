@@ -85,6 +85,8 @@ export const SignInPage = ({
   const [isSendingReset, setIsSendingReset] = useState(false);
   const [sentToEmail, setSentToEmail] = useState('');
   const [sentProvider, setSentProvider] = useState<string>('smtp');
+  const [sentMessageId, setSentMessageId] = useState<string | null>(null);
+  const [sentWarning, setSentWarning] = useState<string | null>(null);
   const [recoveryError, setRecoveryError] = useState<string | null>(null);
   const [resendCooldown, setResendCooldown] = useState(0);
   const [isResending, setIsResending] = useState(false);
@@ -272,6 +274,8 @@ export const SignInPage = ({
 
       setSentToEmail(cleanEmail);
       setSentProvider(res.provider || 'smtp');
+      setSentMessageId(res.messageId || null);
+      setSentWarning(res.warning || null);
       setRecoveryStep('sent');
       setResendCooldown(30);
       setResendSuccessNotice(null);
@@ -297,6 +301,8 @@ export const SignInPage = ({
 
       if (res.emailSent) {
         setSentProvider(res.provider || 'smtp');
+        setSentMessageId(res.messageId || null);
+        setSentWarning(res.warning || null);
         setResendSuccessNotice('A fresh password reset link has been dispatched to your inbox.');
         setResendCooldown(30);
       } else {
@@ -663,9 +669,9 @@ export const SignInPage = ({
                     </p>
                   </div>
 
-                  <div className="p-3 bg-white border border-[#D9D1C5] rounded-xl text-center">
+                  <div className="p-3 bg-white border border-[#D9D1C5] rounded-xl text-center space-y-1">
                     <span className="text-xs font-mono font-bold text-[#1F3329] break-all">{sentToEmail}</span>
-                    <div className="text-[11px] text-[#6B7E74] mt-1 flex items-center justify-center gap-1.5">
+                    <div className="text-[11px] text-[#6B7E74] flex items-center justify-center gap-1.5">
                       <span>Service:</span>
                       <strong className="text-[#2F473A]">
                         {sentProvider === 'resend'
@@ -675,7 +681,23 @@ export const SignInPage = ({
                           : 'Gmail SMTP (aymane.habbo@gmail.com)'}
                       </strong>
                     </div>
+                    {sentMessageId && (
+                      <div className="text-[10px] font-mono text-[#829188] break-all">
+                        ID: {sentMessageId}
+                      </div>
+                    )}
                   </div>
+
+                  {/* Provider notice / warning if fallback was engaged */}
+                  {sentWarning && (
+                    <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl text-xs flex items-start gap-2 text-start">
+                      <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600" />
+                      <div className="space-y-0.5">
+                        <strong className="block text-[11px] text-amber-800">Delivery Channel Notice:</strong>
+                        <span className="text-[11px] leading-relaxed text-amber-700">{sentWarning}</span>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Resend success banner */}
                   {resendSuccessNotice && (
