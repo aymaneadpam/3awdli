@@ -266,7 +266,7 @@ export const SignInPage = ({
       if (!res.emailSent) {
         setRecoveryError(
           res.error || 
-          'Email delivery failed. If hosted on Netlify, please ensure RESEND_API_KEY or GMAIL_APP_PASSWORD is set in your Netlify Site Environment Variables.'
+          'Email delivery failed. If hosted on Netlify, please ensure GMAIL_APP_PASSWORD is set in your Netlify Site Environment Variables.'
         );
         setIsSendingReset(false);
         return;
@@ -308,7 +308,7 @@ export const SignInPage = ({
       } else {
         setRecoveryError(
           res.error ||
-          'Failed to resend reset email. Please ensure your email credentials (RESEND_API_KEY or GMAIL_APP_PASSWORD) are set in Netlify site environment variables.'
+          'Failed to resend reset email. Please ensure GMAIL_APP_PASSWORD is set in Netlify site environment variables.'
         );
       }
     } catch (err: any) {
@@ -674,11 +674,9 @@ export const SignInPage = ({
                     <div className="text-[11px] text-[#6B7E74] flex items-center justify-center gap-1.5">
                       <span>Service:</span>
                       <strong className="text-[#2F473A]">
-                        {sentProvider === 'resend'
-                          ? 'Resend API'
-                          : sentProvider === 'firebase'
+                        {sentProvider === 'firebase'
                           ? 'Firebase Auth'
-                          : 'Gmail SMTP (aymane.habbo@gmail.com)'}
+                          : 'Gmail (aymane.habbo@gmail.com)'}
                       </strong>
                     </div>
                     {sentMessageId && (

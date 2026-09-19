@@ -58,7 +58,7 @@ function getTransporter(): any {
 }
 
 /**
- * Sends email using either Resend API or Gmail SMTP based on environment configuration.
+ * Sends email using Gmail SMTP based on environment configuration.
  */
 async function dispatchEmail({
   to,
@@ -72,110 +72,49 @@ async function dispatchEmail({
   html?: string;
   text?: string;
   replyTo?: string;
-}): Promise<{ success: boolean; provider?: string; messageId?: string; error?: string; warning?: string }> {
-  let lastError = '';
-
-  // 1. Prioritize Resend API if RESEND_API_KEY is configured
-  const resendApiKey = process.env.RESEND_API_KEY?.trim();
-  if (resendApiKey && !resendApiKey.includes('re_your_api_key')) {
-    const configuredFrom = process.env.RESEND_FROM?.trim();
-    const userReplyTo = replyTo || (configuredFrom && configuredFrom.includes('@') ? configuredFrom : 'aymane.habbo@gmail.com');
-
-    // Resend strictly forbids sending from public webmail domains (@gmail.com, @yahoo.com, etc.)
-    const isPublicWebmail = configuredFrom && /@(gmail|yahoo|hotmail|outlook|live|icloud)\.com/i.test(configuredFrom);
-    let activeFrom = (!configuredFrom || isPublicWebmail)
-      ? '3awdli Support <onboarding@resend.dev>'
-      : configuredFrom;
-
-    if (isPublicWebmail) {
-      console.warn(`[Netlify Function Email] Notice: RESEND_FROM is set to "${configuredFrom}", but Resend forbids public webmail domains without a custom verified domain. Using "3awdli Support <onboarding@resend.dev>" with reply_to set to "${userReplyTo}".`);
-    }
-
-    const attemptSend = async (senderAddress: string) => {
-      console.log(`[Password Reset Flow] [Netlify Resend Send] POST https://api.resend.com/emails with From: "${senderAddress}", To: "${to}", ReplyTo: "${userReplyTo}"`);
-      const res = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${resendApiKey}`,
-        },
-        body: JSON.stringify({
-          from: senderAddress,
-          to: [to],
-          subject,
-          html: html || text,
-          text: text || '',
-          reply_to: userReplyTo,
-        }),
-      });
-
-      const data = (await res.json().catch(() => ({}))) as any;
-      console.log(`[Password Reset Flow] [Netlify Resend Response] HTTP ${res.status} (OK: ${res.ok}):`, JSON.stringify(data));
-      return { res, data };
-    };
-
-    try {
-      let { res, data } = await attemptSend(activeFrom);
-
-      // If rejected due to domain verification (e.g. custom domain not yet DNS-verified in Resend),
-      // automatically fallback to onboarding@resend.dev so the email is dispatched and visible in Resend logs!
-      if (!res.ok && activeFrom !== '3awdli Support <onboarding@resend.dev>') {
-        const resendMsg = (data?.message || '').toLowerCase();
-        if (res.status === 403 || resendMsg.includes('domain') || resendMsg.includes('verify')) {
-          console.warn(`[Password Reset Flow] [Netlify Resend Fallback] "${activeFrom}" unverified (${data?.message}). Retrying with "3awdli Support <onboarding@resend.dev>"...`);
-          const retry = await attemptSend('3awdli Support <onboarding@resend.dev>');
-          res = retry.res;
-          data = retry.data;
-        }
-      }
-
-      if (res.ok && data?.id) {
-        console.log('[Password Reset Flow] [Netlify Resend Success] Resend email successfully dispatched with ID:', data.id);
-        return { success: true, provider: 'resend', messageId: data.id };
-      }
-
-      const resendError = data?.message || data?.error?.message || `Resend HTTP error ${res.status}`;
-      console.error('[Password Reset Flow] [Netlify Resend Error] Resend API error response:', res.status, resendError);
-      lastError = `Resend: ${resendError}`;
-    } catch (err: any) {
-      console.error('[Password Reset Flow] [Netlify Resend Error] Resend API fetch failed:', err?.message);
-      lastError = `Resend network error: ${err?.message}`;
-    }
-  }
-
-  // 2. Gmail SMTP fallback if GMAIL_APP_PASSWORD is configured
+}): Promise<{ success: boolean; provider?: string; messageId?: string; error?: string }> {
   const transporter = getTransporter();
-  if (transporter) {
-    try {
-      const sender = process.env.GMAIL_USER || 'aymane.habbo@gmail.com';
-      console.log(`[Password Reset Flow] [Netlify Gmail SMTP Send] Sending fallback email via Gmail SMTP to: ${to} from: ${sender}...`);
-      const info = await transporter.sendMail({
-        from: `"3awdli Support" <${sender}>`,
-        to,
-        subject,
-        text: text || '',
-        html: html || text || '',
-        replyTo: replyTo || sender,
-      });
-      console.log('[Password Reset Flow] [Netlify Gmail SMTP Success] Gmail SMTP successfully dispatched:', info.messageId);
-      return { 
-        success: true, 
-        provider: 'smtp', 
-        messageId: info.messageId,
-        warning: lastError ? `Resend failed (${lastError}), but dispatched successfully via Gmail SMTP.` : undefined
-      };
-    } catch (err: any) {
-      console.error('[Password Reset Flow] [Netlify Gmail SMTP Error] Gmail SMTP error:', err?.message);
-      const smtpErr = `Gmail SMTP error: ${err?.message || 'SMTP sending failed'}`;
-      lastError = lastError ? `${lastError}; ${smtpErr}` : smtpErr;
-    }
+  if (!transporter) {
+    console.error('[Netlify Function Email] Gmail SMTP not configured: GMAIL_APP_PASSWORD is missing in Netlify environment.');
+    return {
+      success: false,
+      provider: 'none',
+      error: 'Gmail credentials not configured. Please set GMAIL_APP_PASSWORD in your Netlify site environment variables.',
+    };
   }
 
-  return {
-    success: false,
-    provider: 'none',
-    error: lastError || 'No email service credentials configured. Set RESEND_API_KEY or GMAIL_APP_PASSWORD in Netlify site environment variables.',
-  };
+  const sender = (process.env.GMAIL_USER || 'aymane.habbo@gmail.com').trim();
+  console.log(`[Password Reset Flow] [Netlify Gmail SMTP Send] Sending email via Gmail SMTP to: "${to}" from: "${sender}"...`);
+
+  try {
+    const info = await transporter.sendMail({
+      from: `"3awdli Support" <${sender}>`,
+      to,
+      subject,
+      text: text || '',
+      html: html || text || '',
+      replyTo: replyTo || sender,
+    });
+
+    console.log('[Password Reset Flow] [Netlify Gmail SMTP Success] Gmail SMTP successfully dispatched:', info.messageId);
+    return {
+      success: true,
+      provider: 'smtp',
+      messageId: info.messageId,
+    };
+  } catch (err: any) {
+    console.error('[Password Reset Flow] [Netlify Gmail SMTP Error] Gmail SMTP error:', err?.message);
+    const isAuthError = err?.message && (err.message.includes('Username and Password not accepted') || err.message.includes('Invalid login') || err.code === 'EAUTH');
+    const errorMessage = isAuthError
+      ? 'Gmail authentication failed. Please verify that your 16-character GMAIL_APP_PASSWORD is correctly configured without spaces in Netlify.'
+      : `Gmail SMTP error: ${err?.message || 'Failed to send email via Gmail'}`;
+
+    return {
+      success: false,
+      provider: 'smtp',
+      error: errorMessage,
+    };
+  }
 }
 
 /**
@@ -270,9 +209,8 @@ export const handler = async (event: NetlifyEvent): Promise<NetlifyResponse> => 
     isEmailStatus ? 'email-status' :
     isSupportNotification ? 'support-notification' : 'UNKNOWN'
   }`, {
-    hasResendKey: Boolean(process.env.RESEND_API_KEY),
-    resendFrom: process.env.RESEND_FROM || '(not set)',
     hasGmailPass: Boolean(process.env.GMAIL_APP_PASSWORD),
+    gmailUser: process.env.GMAIL_USER || 'aymane.habbo@gmail.com',
   });
 
   try {
@@ -280,18 +218,15 @@ export const handler = async (event: NetlifyEvent): Promise<NetlifyResponse> => 
     // GET /email-status
     // -------------------------------------------------------------
     if (isEmailStatus && event.httpMethod === 'GET') {
-      const hasResend = Boolean(process.env.RESEND_API_KEY && !process.env.RESEND_API_KEY.includes('re_your_api_key'));
       const hasSmtp = Boolean(process.env.GMAIL_APP_PASSWORD && !process.env.GMAIL_APP_PASSWORD.includes('YOUR_GMAIL_APP_PASSWORD'));
-      const sender = hasResend
-        ? (process.env.RESEND_FROM || '3awdli Support <onboarding@resend.dev>')
-        : (process.env.GMAIL_USER || 'aymane.habbo@gmail.com');
+      const sender = (process.env.GMAIL_USER || 'aymane.habbo@gmail.com').trim();
 
       return {
         statusCode: 200,
         headers: CORS_HEADERS,
         body: JSON.stringify({
-          configured: hasResend || hasSmtp,
-          provider: hasResend ? 'resend' : hasSmtp ? 'smtp' : 'none',
+          configured: hasSmtp,
+          provider: hasSmtp ? 'smtp' : 'none',
           sender,
         }),
       };
@@ -457,7 +392,6 @@ export const handler = async (event: NetlifyEvent): Promise<NetlifyResponse> => 
           provider: emailResult.provider || 'none',
           messageId: emailResult.messageId,
           error: emailResult.error,
-          warning: emailResult.warning,
           smtpConfigured: emailResult.success,
           message: emailResult.success
             ? 'Password reset email sent successfully.'

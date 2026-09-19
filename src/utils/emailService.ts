@@ -83,7 +83,7 @@ function generateClientResetToken(): string {
 }
 
 /**
- * Checks if the backend has GMAIL_APP_PASSWORD or RESEND_API_KEY configured.
+ * Checks if the backend has GMAIL_APP_PASSWORD configured.
  */
 export async function checkEmailConfigStatus(): Promise<EmailConfigStatus> {
   const result = await safeFetchJson<any>('/api/email-status');
@@ -97,7 +97,7 @@ export async function checkEmailConfigStatus(): Promise<EmailConfigStatus> {
 }
 
 /**
- * Sends a real email through Gmail SMTP or Resend via backend API.
+ * Sends a real email through Gmail SMTP via backend API.
  */
 export async function sendEmailViaSMTP(payload: SendEmailPayload): Promise<SendEmailResult> {
   const result = await safeFetchJson<any>('/api/send-email', {
@@ -168,7 +168,7 @@ export async function forwardSupportRequestViaSMTP(request: SupportRequest): Pro
 export interface RequestPasswordResetResult {
   success: boolean;
   emailSent: boolean;
-  provider?: 'resend' | 'smtp' | 'firebase' | 'none' | string;
+  provider?: 'smtp' | 'firebase' | 'none' | string;
   messageId?: string;
   message?: string;
   error?: string;
@@ -180,7 +180,7 @@ export interface RequestPasswordResetResult {
 /**
  * Requests a real password reset email.
  * Works seamlessly across both:
- * 1. Live Backend (Netlify Functions or Express server running Nodemailer/Resend)
+ * 1. Live Backend (Netlify Functions or Express server running Gmail SMTP)
  * 2. Client-side Firebase Auth backup (built-in Google email delivery)
  */
 export async function requestPasswordResetViaEmail(
@@ -215,7 +215,7 @@ export async function requestPasswordResetViaEmail(
   // If backend API responded
   if (result.ok && result.data) {
     const isEmailSent = Boolean(result.data.emailSent || (result.data.success && result.data.smtpConfigured));
-    const provider = result.data.provider || 'resend';
+    const provider = result.data.provider || 'smtp';
 
     // Also persist token copy to Firestore for maximum cross-environment resilience
     if (result.data.resetUrl) {
@@ -239,24 +239,24 @@ export async function requestPasswordResetViaEmail(
     }
 
     if (isEmailSent) {
-      console.log(`[Email Service] Reset email confirmed dispatched via ${provider}. Message ID: ${result.data.messageId || 'N/A'}`);
+      console.log(`[Email Service] Reset email confirmed dispatched via Gmail SMTP. Message ID: ${result.data.messageId || 'N/A'}`);
       return {
         success: true,
         emailSent: true,
         provider,
         messageId: result.data.messageId,
-        message: `Password reset email dispatched via ${provider.toUpperCase()}.${result.data.messageId ? ` Message ID: ${result.data.messageId}` : ''}`,
+        message: `Password reset email dispatched via Gmail (aymane.habbo@gmail.com).${result.data.messageId ? ` Message ID: ${result.data.messageId}` : ''}`,
         warning: result.data.warning,
         resetUrl: result.data.resetUrl,
         smtpConfigured: true,
       };
     }
 
-    // Backend reached, but email dispatch failed (e.g. missing credentials or Resend API error)
-    const backendError = result.data.error || 'Email delivery failed on backend';
+    // Backend reached, but email dispatch failed (e.g. missing GMAIL_APP_PASSWORD)
+    const backendError = result.data.error || 'Gmail delivery failed on backend';
     console.error('[Email Service] Backend was reached, but email dispatch failed:', backendError);
 
-    // Attempt Firebase Auth as fallback, but be transparent
+    // Attempt Firebase Auth as fallback
     let fbBackupSent = false;
     try {
       await firebaseSendPasswordReset(cleanEmail);
@@ -271,8 +271,8 @@ export async function requestPasswordResetViaEmail(
         success: true,
         emailSent: true,
         provider: 'firebase',
-        message: `Reset link dispatched via Firebase Auth backup (Resend failed: ${backendError}).`,
-        warning: `Primary email provider failed: ${backendError}`,
+        message: 'Password reset link sent via Firebase Auth backup.',
+        warning: `Gmail delivery was unavailable: ${backendError}`,
         resetUrl: result.data.resetUrl,
         smtpConfigured: false,
       };
@@ -282,7 +282,7 @@ export async function requestPasswordResetViaEmail(
       success: false,
       emailSent: false,
       provider: 'none',
-      message: `Failed to dispatch reset email: ${backendError}`,
+      message: backendError,
       error: backendError,
       resetUrl: result.data.resetUrl,
       smtpConfigured: false,
