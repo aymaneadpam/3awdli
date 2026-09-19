@@ -268,6 +268,18 @@ export function getWaitingDiscussionsCount(): number {
   return getUnopenedDiscussions().length;
 }
 
+// Check if a listener is currently free (has no active/open conversation of their own)
+export function isListenerFree(listenerId?: string | null): boolean {
+  if (!listenerId) return false;
+  const all = getStoredDiscussions();
+  const hasActiveConversation = all.some((d) => {
+    if (d.status !== 'opened') return false;
+    if (d.excludedListeners?.some((e) => e.listenerId === listenerId)) return false;
+    return d.openedByListenerId === listenerId || d.joinedListenerId === listenerId;
+  });
+  return !hasActiveConversation;
+}
+
 export interface DiscussionCreatorInfo {
   isRegistered: boolean;
   name: string;

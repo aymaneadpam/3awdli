@@ -25,7 +25,10 @@ import {
   FolderLock,
   Archive,
   Mail,
-  HelpCircle
+  HelpCircle,
+  Bell,
+  BellRing,
+  BellOff
 } from 'lucide-react';
 import { UserAccount, DiscussionConversation } from '../types';
 import { 
@@ -57,6 +60,12 @@ import { getPendingReportsCount, getStoredReports } from '../utils/reportManagem
 import { useLanguage } from '../context/LanguageContext';
 import { Navbar } from './Navbar';
 import { MemberDiscussionsPage } from './MemberDiscussionsPage';
+import { 
+  getNotificationPermission, 
+  autoPromptNotificationOnFirstVisit,
+  NotificationPermissionStatus 
+} from '../utils/listenerNotificationService';
+import { NotificationSettingsModal } from './NotificationSettingsModal';
 
 interface DiscussionsPageProps {
   user: UserAccount;
@@ -141,6 +150,37 @@ export const DiscussionsPage = ({
   const [unreadShareCount, setUnreadShareCount] = useState(() => getUnreadShareNotificationsCount(user));
   const [pendingReportsCount, setPendingReportsCount] = useState(() => getPendingReportsCount());
   const [totalReportsCount, setTotalReportsCount] = useState(() => getStoredReports().length);
+
+  // Browser notifications state
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermissionStatus>(() => getNotificationPermission());
+  const [isNotificationSettingsOpen, setIsNotificationSettingsOpen] = useState(false);
+
+  // Ask for notification permission on first visit (only prompts once; respects user's choice)
+  useEffect(() => {
+    if (isListener || isHead) {
+      autoPromptNotificationOnFirstVisit().then(() => {
+        setNotificationPermission(getNotificationPermission());
+      });
+    }
+  }, [isListener, isHead]);
+
+  // Sync notification events and handle notification click action
+  useEffect(() => {
+    const handlePermChange = () => {
+      setNotificationPermission(getNotificationPermission());
+    };
+    const handleOpenUnopened = () => {
+      setSelectedDiscussion(null);
+      setActiveTab('unopened');
+    };
+
+    window.addEventListener('3awdli_notification_permission_changed', handlePermChange);
+    window.addEventListener('3awdli_open_unopened_discussions', handleOpenUnopened);
+    return () => {
+      window.removeEventListener('3awdli_notification_permission_changed', handlePermChange);
+      window.removeEventListener('3awdli_open_unopened_discussions', handleOpenUnopened);
+    };
+  }, []);
 
   useEffect(() => {
     const syncReports = () => {
@@ -510,7 +550,37 @@ export const DiscussionsPage = ({
             <span>{language === 'ar' ? 'العودة إلى المحادثات' : language === 'fr' ? 'Retour aux discussions' : 'Return to Discussions'}</span>
           </button>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              id="listener-notifications-config-btn"
+              onClick={() => setIsNotificationSettingsOpen(true)}
+              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border transition-colors cursor-pointer ${
+                notificationPermission === 'granted'
+                  ? 'bg-[#E4EFE8] text-[#1E3B2C] border-[#CCE0D3] hover:bg-[#D5E6DC]'
+                  : notificationPermission === 'denied'
+                  ? 'bg-amber-50 text-amber-900 border-amber-200 hover:bg-amber-100'
+                  : 'bg-[#F2ECE3] text-[#55695E] border-[#DDD5C7] hover:bg-[#E8E0D2]'
+              }`}
+              title="Browser Notification Settings for Waiting Queue"
+            >
+              {notificationPermission === 'granted' ? (
+                <>
+                  <BellRing className="w-3.5 h-3.5 text-emerald-700" />
+                  <span>Waiting Alerts: Active</span>
+                </>
+              ) : notificationPermission === 'denied' ? (
+                <>
+                  <BellOff className="w-3.5 h-3.5 text-amber-700" />
+                  <span>Alerts Blocked (Re-enable)</span>
+                </>
+              ) : (
+                <>
+                  <Bell className="w-3.5 h-3.5 text-[#55695E]" />
+                  <span>Enable Waiting Alerts</span>
+                </>
+              )}
+            </button>
+
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#E4EFE8] text-[#224634] border border-[#CCE0D3]">
               <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
               Verified Listener
@@ -634,6 +704,25 @@ export const DiscussionsPage = ({
           /* DISCUSSIONS TABS & LIST VIEW                                  */
           /* ------------------------------------------------------------- */
           <div className="space-y-6">
+            {/* If notifications are denied in browser settings, show a gentle banner to help them re-enable */}
+            {notificationPermission === 'denied' && (
+              <div className="p-4 rounded-2xl bg-amber-50/90 border border-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-amber-900 shadow-2xs">
+                <div className="flex items-center gap-2.5">
+                  <BellOff className="w-4 h-4 text-amber-700 shrink-0" />
+                  <div>
+                    <strong className="font-semibold text-amber-950">Waiting queue notifications are blocked:</strong>{' '}
+                    Your browser is currently preventing desktop alerts when new discussions arrive while you are free.
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsNotificationSettingsOpen(true)}
+                  className="px-3 py-1.5 bg-amber-800 hover:bg-amber-900 text-white rounded-xl font-semibold shrink-0 cursor-pointer text-xs transition-colors self-start sm:self-auto"
+                >
+                  How to Re-enable
+                </button>
+              </div>
+            )}
+
             {/* View Tabs */}
             <div className="flex items-center gap-2 border-b border-[#E5DFD5] pb-3 overflow-x-auto">
               <button
@@ -1367,6 +1456,14 @@ export const DiscussionsPage = ({
           </div>
         </div>
       )}
+
+      {/* Browser Notification Settings & Troubleshooting Modal */}
+      <NotificationSettingsModal
+        isOpen={isNotificationSettingsOpen}
+        onClose={() => setIsNotificationSettingsOpen(false)}
+        currentPermission={notificationPermission}
+        onPermissionChange={setNotificationPermission}
+      />
     </>
   );
 };

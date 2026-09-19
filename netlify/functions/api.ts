@@ -478,11 +478,14 @@ export const handler = async (event: NetlifyEvent): Promise<NetlifyResponse> => 
         };
       }
 
-      if (newPassword.length < 6) {
+      if (newPassword.length < 8 || !/[a-zA-Z]/.test(newPassword) || !/[0-9]/.test(newPassword)) {
         return {
           statusCode: 400,
           headers: CORS_HEADERS,
-          body: JSON.stringify({ success: false, error: 'Password must be at least 6 characters' }),
+          body: JSON.stringify({
+            success: false,
+            error: 'Password must be at least 8 characters long and contain both letters and numbers.'
+          }),
         };
       }
 

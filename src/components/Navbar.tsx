@@ -30,6 +30,7 @@ import { getPendingReportsCount, getPendingTransferredReportsCount } from '../ut
 import { getStoredSupportRequests } from '../utils/supportRequests';
 import { isSuperAdmin, isAdministrator } from '../utils/userManagement';
 import { getWaitingDiscussionsCount } from '../utils/discussionManagement';
+import { checkAndNotifyWaitingDiscussions } from '../utils/listenerNotificationService';
 import { ConnectedTeamIndicator } from './ConnectedTeamIndicator';
 
 export interface NavbarProps {
@@ -237,7 +238,12 @@ export const Navbar: React.FC<NavbarProps> = ({
     const handleShareUpdate = () => updateCount();
     const handleReportUpdate = () => updateCount();
     const handleSupportUpdate = () => updateCount();
-    const handleDiscussionUpdate = () => updateCount();
+    const handleDiscussionUpdate = () => {
+      updateCount();
+      if (canSeeDiscussionsQueueBadge && currentUser?.id) {
+        checkAndNotifyWaitingDiscussions(currentUser.id);
+      }
+    };
 
     window.addEventListener('3awdli_discussion_sync', handleDiscussionUpdate);
     window.addEventListener('3awdli_user_mailbox_updated', handleMailboxUpdate);

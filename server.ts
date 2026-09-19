@@ -520,10 +520,10 @@ Sent from ${sender} (3awdli Platform).
         return res.status(400).json({ success: false, error: 'Token and new password are required' });
       }
 
-      if (newPassword.length < 6) {
+      if (newPassword.length < 8 || !/[a-zA-Z]/.test(newPassword) || !/[0-9]/.test(newPassword)) {
         return res.status(400).json({
           success: false,
-          error: 'Password must be at least 6 characters long',
+          error: 'Password must be at least 8 characters long and contain both letters and numbers.',
         });
       }
 

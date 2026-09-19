@@ -11,7 +11,8 @@ import {
   ShieldCheck, 
   Mail, 
   Loader2,
-  Sparkles
+  Sparkles,
+  Check
 } from 'lucide-react';
 import { verifyPasswordResetToken, submitPasswordReset } from '../utils/emailService';
 import { updateUserPassword, findUserByEmail, getStoredUsers, saveStoredUsers } from '../utils/userManagement';
@@ -62,6 +63,13 @@ export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+
+  // Password requirements calculation
+  const hasMinLength = newPassword.length >= 8;
+  const hasLetter = /[a-zA-Z]/.test(newPassword);
+  const hasNumber = /[0-9]/.test(newPassword);
+  const hasMix = hasLetter && hasNumber;
+  const hasMatch = Boolean(newPassword && confirmPassword && newPassword === confirmPassword);
 
   // Resolve token from props or directly from URL query/hash parameters
   const getActiveToken = () => {
@@ -142,17 +150,48 @@ export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({
     }
 
     if (!newPassword) {
-      setFormError('Please enter a new password.');
+      setFormError(
+        language === 'ar'
+          ? 'يرجى إدخال كلمة المرور الجديدة.'
+          : language === 'fr'
+          ? 'Veuillez saisir un nouveau mot de passe.'
+          : 'Please enter a new password.'
+      );
       return;
     }
 
-    if (newPassword.length < 6) {
-      setFormError('Password must be at least 6 characters long.');
+    if (newPassword.length < 8) {
+      setFormError(
+        strings.auth?.passwordRuleMinLengthError ||
+        (language === 'ar'
+          ? 'يجب أن تتكون كلمة المرور من 8 أحرف على الأقل.'
+          : language === 'fr'
+          ? 'Le mot de passe doit comporter au moins 8 caractères.'
+          : 'Password must be at least 8 characters long.')
+      );
+      return;
+    }
+
+    if (!/[a-zA-Z]/.test(newPassword) || !/[0-9]/.test(newPassword)) {
+      setFormError(
+        strings.auth?.passwordRuleMixError ||
+        (language === 'ar'
+          ? 'يجب أن تحتوي كلمة المرور على مزيج من الحروف والأرقام.'
+          : language === 'fr'
+          ? 'Le mot de passe doit contenir un mélange de lettres et de chiffres.'
+          : 'Password must include both letters and numbers.')
+      );
       return;
     }
 
     if (newPassword !== confirmPassword) {
-      setFormError('Passwords do not match. Please ensure both fields are identical.');
+      setFormError(
+        language === 'ar'
+          ? 'كلمتا المرور غير متطابقتين. يرجى التأكد من تطابق الحقلين تماماً.'
+          : language === 'fr'
+          ? 'Les mots de passe ne correspondent pas. Veuillez vérifier que les deux champs sont identiques.'
+          : 'Passwords do not match. Please ensure both fields are identical.'
+      );
       return;
     }
 
@@ -325,8 +364,9 @@ export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({
                         required
                         value={newPassword}
                         onChange={(e) => setNewPassword(e.target.value)}
-                        placeholder="Enter at least 6 characters"
-                        className="w-full bg-[#FAF8F5] border border-[#D5CEC0] rounded-xl px-3.5 py-2.5 pe-10 text-xs sm:text-sm text-[#233129] outline-none focus:border-[#315243] focus:bg-white transition-colors"
+                        placeholder={strings.auth?.newPasswordPlaceholder || 'At least 8 characters (letters & numbers)'}
+                        minLength={8}
+                        className="w-full bg-[#FAF8F5] border border-[#D5CEC0] rounded-xl px-3.5 py-2.5 pe-10 text-xs sm:text-sm text-[#233129] outline-none focus:border-[#315243] focus:bg-white transition-colors text-start"
                       />
                       <button
                         type="button"
@@ -352,24 +392,36 @@ export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({
                       required
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
-                      placeholder="Re-enter your new password"
-                      className="w-full bg-[#FAF8F5] border border-[#D5CEC0] rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-[#233129] outline-none focus:border-[#315243] focus:bg-white transition-colors"
+                      placeholder={strings.auth?.confirmPasswordPlaceholder || 'Re-enter your new password'}
+                      className="w-full bg-[#FAF8F5] border border-[#D5CEC0] rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-[#233129] outline-none focus:border-[#315243] focus:bg-white transition-colors text-start"
                     />
                   </div>
 
-                  <div className="p-3 bg-[#FAF8F5] rounded-xl border border-[#E8E1D5] space-y-1 text-[11px] text-[#697870]">
+                  <div className="p-3 bg-[#FAF8F5] rounded-xl border border-[#E8E1D5] space-y-1.5 text-[11px] text-[#697870]">
                     <div className="flex items-center gap-1.5 text-[#315243] font-semibold">
                       <Sparkles className="w-3.5 h-3.5" />
                       <span>Password Requirements</span>
                     </div>
-                    <ul className="list-disc pl-4 space-y-0.5 text-[#5B6D63]">
-                      <li className={newPassword.length >= 6 ? 'text-emerald-700 font-semibold' : ''}>
-                        At least 6 characters long
-                      </li>
-                      <li className={newPassword && confirmPassword && newPassword === confirmPassword ? 'text-emerald-700 font-semibold' : ''}>
-                        Both fields must match exactly
-                      </li>
-                    </ul>
+                    <div className="grid grid-cols-1 gap-1.5 pt-0.5">
+                      <div className={`flex items-center gap-1.5 transition-colors ${hasMinLength ? 'text-emerald-700 font-medium' : 'text-[#7D8C83]'}`}>
+                        <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-[9px] ${hasMinLength ? 'bg-emerald-100 text-emerald-700' : 'bg-[#E5DFD5] text-[#7D8C83]'}`}>
+                          {hasMinLength ? <Check className="w-2.5 h-2.5" /> : '•'}
+                        </span>
+                        <span>{strings.auth?.passwordRequirementLength || (language === 'ar' ? '8 أحرف على الأقل' : language === 'fr' ? 'Au moins 8 caractères' : 'At least 8 characters')}</span>
+                      </div>
+                      <div className={`flex items-center gap-1.5 transition-colors ${hasMix ? 'text-emerald-700 font-medium' : 'text-[#7D8C83]'}`}>
+                        <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-[9px] ${hasMix ? 'bg-emerald-100 text-emerald-700' : 'bg-[#E5DFD5] text-[#7D8C83]'}`}>
+                          {hasMix ? <Check className="w-2.5 h-2.5" /> : '•'}
+                        </span>
+                        <span>{strings.auth?.passwordRequirementLettersNumbers || (language === 'ar' ? 'مزيج من الحروف والأرقام' : language === 'fr' ? 'Mélange de lettres et de chiffres' : 'Mix of letters and numbers')}</span>
+                      </div>
+                      <div className={`flex items-center gap-1.5 transition-colors ${hasMatch ? 'text-emerald-700 font-medium' : 'text-[#7D8C83]'}`}>
+                        <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-[9px] ${hasMatch ? 'bg-emerald-100 text-emerald-700' : 'bg-[#E5DFD5] text-[#7D8C83]'}`}>
+                          {hasMatch ? <Check className="w-2.5 h-2.5" /> : '•'}
+                        </span>
+                        <span>{strings.auth?.passwordRequirementMatch || (language === 'ar' ? 'كلمتا المرور متطابقتان' : language === 'fr' ? 'Les mots de passe correspondent' : 'Passwords match exactly')}</span>
+                      </div>
+                    </div>
                   </div>
 
                   <button
