@@ -110,9 +110,21 @@ async function startServer() {
     // 1. Resend API
     const resendApiKey = process.env.RESEND_API_KEY?.trim();
     if (resendApiKey && !resendApiKey.includes('re_your_api_key')) {
-      try {
-        const from = process.env.RESEND_FROM?.trim() || '3awdli Support <onboarding@resend.dev>';
-        console.log(`[Server Email] Attempting Resend dispatch to ${to} from ${from}...`);
+      const configuredFrom = process.env.RESEND_FROM?.trim();
+      const userReplyTo = replyTo || (configuredFrom && configuredFrom.includes('@') ? configuredFrom : 'aymane.habbo@gmail.com');
+      
+      // Resend forbids sending from public webmail domains (@gmail.com, @yahoo.com, etc.)
+      const isPublicWebmail = configuredFrom && /@(gmail|yahoo|hotmail|outlook|live|icloud)\.com/i.test(configuredFrom);
+      let activeFrom = (!configuredFrom || isPublicWebmail)
+        ? '3awdli Support <onboarding@resend.dev>'
+        : configuredFrom;
+
+      if (isPublicWebmail) {
+        console.warn(`[Server Email] Notice: RESEND_FROM is set to "${configuredFrom}", but Resend forbids public webmail domains without a custom verified domain. Using "3awdli Support <onboarding@resend.dev>" with reply_to set to "${userReplyTo}".`);
+      }
+
+      const attemptSend = async (senderAddress: string) => {
+        console.log(`[Server Email] Attempting Resend dispatch to ${to} from "${senderAddress}" (reply-to: ${userReplyTo})...`);
         const response = await fetch('https://api.resend.com/emails', {
           method: 'POST',
           headers: {
@@ -120,24 +132,44 @@ async function startServer() {
             Authorization: `Bearer ${resendApiKey}`,
           },
           body: JSON.stringify({
-            from,
+            from: senderAddress,
             to: [to],
             subject,
             html: html || text,
             text: text || '',
-            reply_to: replyTo,
+            reply_to: userReplyTo,
           }),
         });
+
         const data = (await response.json().catch(() => ({}))) as any;
+        return { response, data };
+      };
+
+      try {
+        let { response, data } = await attemptSend(activeFrom);
+
+        // If rejected due to domain verification (e.g. custom domain not yet DNS-verified in Resend),
+        // automatically fallback to onboarding@resend.dev so the email is dispatched and visible in Resend logs!
+        if (!response.ok && activeFrom !== '3awdli Support <onboarding@resend.dev>') {
+          const resendMsg = (data?.message || '').toLowerCase();
+          if (response.status === 403 || resendMsg.includes('domain') || resendMsg.includes('verify')) {
+            console.warn(`[Server Email] Resend rejected "${activeFrom}" (${data?.message}). Retrying with "3awdli Support <onboarding@resend.dev>"...`);
+            const retry = await attemptSend('3awdli Support <onboarding@resend.dev>');
+            response = retry.response;
+            data = retry.data;
+          }
+        }
+
         if (response.ok && data?.id) {
-          console.log('[Server Email] Resend email dispatched successfully:', data.id);
+          console.log('[Server Email] Resend email dispatched successfully with ID:', data.id);
           return { success: true, provider: 'resend', messageId: data.id };
         }
-        const resendError = data?.message || data?.error?.message || `Resend HTTP error ${response.status}`;
+
+        const resendError = data?.message || data?.error?.message || `Resend HTTP ${response.status}`;
         console.error('[Server Email] Resend API error response:', response.status, resendError, data);
         lastError = `Resend: ${resendError}`;
       } catch (err: any) {
-        console.error('[Server Email] Resend API fetch failed:', err?.message);
+        console.error('[Server Email] Resend API fetch network error:', err?.message);
         lastError = `Resend network error: ${err?.message}`;
       }
     }

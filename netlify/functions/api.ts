@@ -25,6 +25,14 @@ interface NetlifyResponse {
 // In-memory token cache for ultra-fast validation
 const inMemoryTokens = new Map<string, FirestoreResetToken>();
 
+// Safe timeout wrapper for cloud database calls in serverless context
+async function withTimeout<T>(promise: Promise<T>, ms = 2000, fallback: T): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
+  ]);
+}
+
 // Cached nodemailer transporter
 let cachedTransporter: any = null;
 
@@ -70,10 +78,21 @@ async function dispatchEmail({
   // 1. Prioritize Resend API if RESEND_API_KEY is configured
   const resendApiKey = process.env.RESEND_API_KEY?.trim();
   if (resendApiKey && !resendApiKey.includes('re_your_api_key')) {
-    try {
-      const from = process.env.RESEND_FROM?.trim() || '3awdli Support <onboarding@resend.dev>';
-      console.log(`[Netlify Function Email] Attempting Resend dispatch to ${to} from ${from}...`);
-      
+    const configuredFrom = process.env.RESEND_FROM?.trim();
+    const userReplyTo = replyTo || (configuredFrom && configuredFrom.includes('@') ? configuredFrom : 'aymane.habbo@gmail.com');
+
+    // Resend strictly forbids sending from public webmail domains (@gmail.com, @yahoo.com, etc.)
+    const isPublicWebmail = configuredFrom && /@(gmail|yahoo|hotmail|outlook|live|icloud)\.com/i.test(configuredFrom);
+    let activeFrom = (!configuredFrom || isPublicWebmail)
+      ? '3awdli Support <onboarding@resend.dev>'
+      : configuredFrom;
+
+    if (isPublicWebmail) {
+      console.warn(`[Netlify Function Email] Notice: RESEND_FROM is set to "${configuredFrom}", but Resend forbids public webmail domains without a custom verified domain. Using "3awdli Support <onboarding@resend.dev>" with reply_to set to "${userReplyTo}".`);
+    }
+
+    const attemptSend = async (senderAddress: string) => {
+      console.log(`[Netlify Function Email] Attempting Resend dispatch to ${to} from "${senderAddress}" (reply-to: ${userReplyTo})...`);
       const res = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
@@ -81,18 +100,36 @@ async function dispatchEmail({
           Authorization: `Bearer ${resendApiKey}`,
         },
         body: JSON.stringify({
-          from,
+          from: senderAddress,
           to: [to],
           subject,
           html: html || text,
           text: text || '',
-          reply_to: replyTo,
+          reply_to: userReplyTo,
         }),
       });
 
       const data = (await res.json().catch(() => ({}))) as any;
+      return { res, data };
+    };
+
+    try {
+      let { res, data } = await attemptSend(activeFrom);
+
+      // If rejected due to domain verification (e.g. custom domain not yet DNS-verified in Resend),
+      // automatically fallback to onboarding@resend.dev so the email is dispatched and visible in Resend logs!
+      if (!res.ok && activeFrom !== '3awdli Support <onboarding@resend.dev>') {
+        const resendMsg = (data?.message || '').toLowerCase();
+        if (res.status === 403 || resendMsg.includes('domain') || resendMsg.includes('verify')) {
+          console.warn(`[Netlify Function Email] Resend rejected "${activeFrom}" (${data?.message}). Retrying with "3awdli Support <onboarding@resend.dev>"...`);
+          const retry = await attemptSend('3awdli Support <onboarding@resend.dev>');
+          res = retry.res;
+          data = retry.data;
+        }
+      }
+
       if (res.ok && data?.id) {
-        console.log('[Netlify Function Email] Resend email successfully dispatched:', data.id);
+        console.log('[Netlify Function Email] Resend email successfully dispatched with ID:', data.id);
         return { success: true, provider: 'resend', messageId: data.id };
       }
 
@@ -192,7 +229,7 @@ export const handler = async (event: NetlifyEvent): Promise<NetlifyResponse> => 
   }
 
   // Normalize request route path
-  let path = event.path
+  let path = (event.path || '')
     .replace(/^\/\.netlify\/functions\/api/, '')
     .replace(/^\/api/, '')
     .replace(/\/+$/, '');
@@ -202,12 +239,6 @@ export const handler = async (event: NetlifyEvent): Promise<NetlifyResponse> => 
   }
 
   const cleanPath = path.toLowerCase();
-  const isEmailStatus = cleanPath === '/email-status' || cleanPath.endsWith('/email-status');
-  const isSendEmail = cleanPath === '/send-email' || cleanPath.endsWith('/send-email');
-  const isSupportNotification = cleanPath === '/support-notification' || cleanPath.endsWith('/support-notification');
-  const isRequestPasswordReset = cleanPath === '/request-password-reset' || cleanPath.endsWith('/request-password-reset');
-  const isVerifyResetToken = cleanPath === '/verify-reset-token' || cleanPath.endsWith('/verify-reset-token');
-  const isResetPassword = cleanPath === '/reset-password' || cleanPath.endsWith('/reset-password');
 
   let body: any = {};
   if (event.body) {
@@ -220,6 +251,28 @@ export const handler = async (event: NetlifyEvent): Promise<NetlifyResponse> => 
       body = {};
     }
   }
+
+  const requestedAction = (body?.action || event.queryStringParameters?.action || '').toLowerCase();
+
+  const isEmailStatus = cleanPath === '/email-status' || cleanPath.endsWith('/email-status') || requestedAction === 'email-status';
+  const isSendEmail = cleanPath === '/send-email' || cleanPath.endsWith('/send-email') || requestedAction === 'send-email';
+  const isSupportNotification = cleanPath === '/support-notification' || cleanPath.endsWith('/support-notification') || requestedAction === 'support-notification';
+  const isRequestPasswordReset = cleanPath === '/request-password-reset' || cleanPath.endsWith('/request-password-reset') || requestedAction === 'request-password-reset';
+  const isVerifyResetToken = cleanPath === '/verify-reset-token' || cleanPath.endsWith('/verify-reset-token') || requestedAction === 'verify-reset-token';
+  const isResetPassword = cleanPath === '/reset-password' || cleanPath.endsWith('/reset-password') || requestedAction === 'reset-password';
+
+  console.log(`[Netlify Function] Request: ${event.httpMethod} ${event.path} -> cleanPath="${cleanPath}", matched=${
+    isRequestPasswordReset ? 'request-password-reset' :
+    isVerifyResetToken ? 'verify-reset-token' :
+    isResetPassword ? 'reset-password' :
+    isSendEmail ? 'send-email' :
+    isEmailStatus ? 'email-status' :
+    isSupportNotification ? 'support-notification' : 'UNKNOWN'
+  }`, {
+    hasResendKey: Boolean(process.env.RESEND_API_KEY),
+    resendFrom: process.env.RESEND_FROM || '(not set)',
+    hasGmailPass: Boolean(process.env.GMAIL_APP_PASSWORD),
+  });
 
   try {
     // -------------------------------------------------------------
@@ -335,9 +388,9 @@ export const handler = async (event: NetlifyEvent): Promise<NetlifyResponse> => 
       // Save to memory cache
       inMemoryTokens.set(token, tokenRecord);
 
-      // Save to Firestore cloud database
+      // Save to Firestore cloud database with timeout protection
       try {
-        await saveResetTokenToFirestore(tokenRecord);
+        await withTimeout(saveResetTokenToFirestore(tokenRecord), 2000, undefined);
       } catch (err: any) {
         console.warn('[Netlify Function] Could not persist token to Firestore:', err?.message);
       }
@@ -425,7 +478,7 @@ export const handler = async (event: NetlifyEvent): Promise<NetlifyResponse> => 
       // Check Firestore if not found in memory
       if (!record) {
         try {
-          const fromFirestore = await getResetTokenFromFirestore(token);
+          const fromFirestore = await withTimeout(getResetTokenFromFirestore(token), 2000, null);
           if (fromFirestore) {
             record = fromFirestore;
             inMemoryTokens.set(token, record);
@@ -493,7 +546,7 @@ export const handler = async (event: NetlifyEvent): Promise<NetlifyResponse> => 
       let record = inMemoryTokens.get(cleanToken);
       if (!record) {
         try {
-          const fromFirestore = await getResetTokenFromFirestore(cleanToken);
+          const fromFirestore = await withTimeout(getResetTokenFromFirestore(cleanToken), 2000, null);
           if (fromFirestore) {
             record = fromFirestore;
           }
@@ -532,7 +585,7 @@ export const handler = async (event: NetlifyEvent): Promise<NetlifyResponse> => 
       inMemoryTokens.set(cleanToken, record);
 
       try {
-        await markResetTokenUsedInFirestore(cleanToken);
+        await withTimeout(markResetTokenUsedInFirestore(cleanToken), 2000, false);
       } catch (err: any) {
         console.warn('[Netlify Function] Could not mark token used in Firestore:', err?.message);
       }
