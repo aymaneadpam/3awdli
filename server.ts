@@ -11,7 +11,7 @@ import {
   markResetTokenUsedInFirestore,
 } from "./src/lib/firestoreService";
 
-dotenv.config();
+dotenv.config({ override: true });
 
 interface PasswordResetToken {
   token: string;
