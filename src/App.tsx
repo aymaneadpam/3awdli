@@ -369,6 +369,9 @@ export default function App() {
           onNavigateTeenSpace={handleNavigateTeenSpace}
           onNavigateLounge={handleNavigateLounge}
           onNavigateRules={handleNavigateRules}
+          onOpenContactSupport={() => setIsContactSupportOpen(true)}
+          onOpenEmergencyModal={() => setIsEmergencyModalOpen(true)}
+          onTalkAnonymously={handleTalkAnonymously}
         />
         <ContactSupportModal
           isOpen={isContactSupportOpen}

@@ -28,6 +28,9 @@ interface ResetPasswordPageProps {
   onNavigateTeenSpace?: () => void;
   onNavigateLounge?: () => void;
   onNavigateRules?: () => void;
+  onOpenContactSupport?: () => void;
+  onOpenEmergencyModal?: () => void;
+  onTalkAnonymously?: () => void;
 }
 
 export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({
@@ -39,6 +42,9 @@ export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({
   onNavigateTeenSpace,
   onNavigateLounge,
   onNavigateRules,
+  onOpenContactSupport,
+  onOpenEmergencyModal,
+  onTalkAnonymously,
 }) => {
   const { language, strings } = useLanguage();
 
@@ -201,18 +207,20 @@ export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-[#FAF8F5] flex flex-col font-['Plus_Jakarta_Sans',sans-serif]">
-      <Navbar
-        currentView="signin"
-        onNavigateHome={onNavigateHome}
-        onNavigateGames={onNavigateGames}
-        onNavigateTeenSpace={onNavigateTeenSpace}
-        onNavigateLounge={onNavigateLounge}
-        onNavigateRules={onNavigateRules}
-      />
-
-      <main className="flex-1 flex items-center justify-center p-4 sm:p-6 lg:p-8">
-        <div className="w-full max-w-md">
+    <Navbar
+      currentView="signin"
+      onNavigateHome={onNavigateHome}
+      onNavigateGames={onNavigateGames}
+      onNavigateTeenSpace={onNavigateTeenSpace}
+      onNavigateLounge={onNavigateLounge}
+      onNavigateRules={onNavigateRules}
+      onOpenAuth={() => onNavigateSignIn(targetEmail)}
+      onOpenContactSupport={onOpenContactSupport}
+      onOpenEmergencyModal={onOpenEmergencyModal}
+      onTalkAnonymously={onTalkAnonymously}
+    >
+      <main className="flex-1 flex items-center justify-center p-4 sm:p-6 my-auto">
+        <div className="w-full max-w-md my-auto">
           {/* Card Container */}
           <div className="bg-white rounded-3xl border border-[#EBE5DC] shadow-sm overflow-hidden">
             {/* Header Banner */}
@@ -434,8 +442,20 @@ export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({
               )}
             </div>
           </div>
+
+          {/* Return to Sign In link */}
+          <div className="text-center mt-4">
+            <button
+              type="button"
+              id="reset-return-to-signin-link"
+              onClick={() => onNavigateSignIn(targetEmail)}
+              className="text-xs text-[#5A6D63] hover:text-[#1F362C] hover:underline underline-offset-4 cursor-pointer"
+            >
+              Return to Sign In
+            </button>
+          </div>
         </div>
       </main>
-    </div>
+    </Navbar>
   );
 };
