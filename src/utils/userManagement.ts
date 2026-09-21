@@ -1105,4 +1105,56 @@ export function resetUserWarningCount(userId: string): { success: boolean; user?
   }
 }
 
+/**
+ * Update a user's display name
+ */
+export function updateUserDisplayName(userId: string, newName: string): { success: boolean; user?: UserAccount; error?: string } {
+  try {
+    const cleanName = newName.trim();
+    if (!cleanName) {
+      return { success: false, error: 'Name cannot be empty.' };
+    }
+    if (cleanName.length > 50) {
+      return { success: false, error: 'Name cannot exceed 50 characters.' };
+    }
+
+    const users = getStoredUsers();
+    const index = users.findIndex(u => u.id === userId);
+    if (index === -1) {
+      return { success: false, error: 'User account not found.' };
+    }
+
+    const updatedUser: StoredUser = {
+      ...users[index],
+      name: cleanName,
+    };
+
+    users[index] = updatedUser;
+    saveStoredUsers(users, updatedUser);
+
+    const raw = localStorage.getItem(CURRENT_USER_STORAGE_KEY);
+    if (raw) {
+      try {
+        const current: UserAccount = JSON.parse(raw);
+        if (current.id === userId) {
+          current.name = cleanName;
+          setCurrentUser(current);
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('3awdli_users_updated', { detail: { users } }));
+    }
+
+    return { success: true, user: updatedUser };
+  } catch (err) {
+    console.error('Failed to update user display name:', err);
+    return { success: false, error: 'Failed to update name.' };
+  }
+}
+
+
 

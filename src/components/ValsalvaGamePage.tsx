@@ -115,7 +115,7 @@ export const ValsalvaGamePage: React.FC<ValsalvaGamePageProps> = ({
         </div>
 
         {/* The Valsalva Interactive Game */}
-        <ValsalvaGame />
+        <ValsalvaGame onSelectOtherGame={onNavigateGames} />
       </main>
 
       <Footer

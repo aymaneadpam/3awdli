@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   User, 
   Briefcase, 
@@ -11,10 +11,13 @@ import {
   Star, 
   Sparkles, 
   PenTool, 
-  HelpCircle 
+  HelpCircle,
+  Check,
+  Edit3
 } from 'lucide-react';
 import { UserAccount } from '../types';
-import { isWriter } from '../utils/userManagement';
+import { isWriter, updateUserDisplayName } from '../utils/userManagement';
+import { useLanguage } from '../context/LanguageContext';
 import { Navbar } from './Navbar';
 
 interface PersonalDashboardProps {
@@ -60,6 +63,49 @@ export const PersonalDashboard: React.FC<PersonalDashboardProps> = ({
   const isHead = Boolean(user.is_head_of_listeners);
   const isAdmin = Boolean(user.role === 'admin' || user.is_administrator);
   const isWriterUser = isWriter(user);
+
+  const { language } = useLanguage();
+  const [displayName, setDisplayName] = useState(user.name || '');
+  const [isSavingName, setIsSavingName] = useState(false);
+  const [nameFeedback, setNameFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  useEffect(() => {
+    setDisplayName(user.name || '');
+  }, [user.name]);
+
+  const handleSaveName = (e: React.FormEvent) => {
+    e.preventDefault();
+    const clean = displayName.trim();
+    if (!clean) {
+      setNameFeedback({
+        type: 'error',
+        message: language === 'ar' ? 'يرجى إدخال اسم صحيح' : language === 'fr' ? 'Veuillez saisir un nom valide' : 'Please enter a valid name'
+      });
+      return;
+    }
+    if (clean === user.name) {
+      return;
+    }
+
+    setIsSavingName(true);
+    const result = updateUserDisplayName(user.id, clean);
+    setIsSavingName(false);
+
+    if (result.success) {
+      setNameFeedback({
+        type: 'success',
+        message: language === 'ar' ? 'تم حفظ الاسم بنجاح' : language === 'fr' ? 'Nom enregistré avec succès' : 'Name updated successfully'
+      });
+      setTimeout(() => {
+        setNameFeedback(null);
+      }, 4000);
+    } else {
+      setNameFeedback({
+        type: 'error',
+        message: result.error || (language === 'ar' ? 'تعذر حفظ الاسم' : language === 'fr' ? 'Erreur lors de la mise à jour' : 'Failed to update name')
+      });
+    }
+  };
 
   // Determine special role if any (regular users have nothing special)
   let specialRole: { label: string; icon: React.ReactNode; badgeClass: string } | null = null;
@@ -161,6 +207,63 @@ export const PersonalDashboard: React.FC<PersonalDashboardProps> = ({
 
           {/* Section Divider */}
           <div className="border-t border-[#EFECE5] my-8" />
+
+          {/* Change Display Name Option */}
+          <div className="bg-[#FAF8F5] border border-[#E8E3D8] rounded-2xl p-5 sm:p-6 mb-6">
+            <div className="flex items-center gap-2 mb-1.5">
+              <Edit3 className="w-4 h-4 text-[#315243]" />
+              <h2 className="text-sm sm:text-base font-bold font-['Lora',serif] text-[#1E2E25]">
+                {language === 'ar' ? 'تغيير الاسم' : language === 'fr' ? 'Changer votre nom' : 'Change Name'}
+              </h2>
+            </div>
+            <p className="text-xs text-[#5B6E63] mb-4">
+              {language === 'ar'
+                ? 'يمكنك تعديل اسمك أو اللقب الذي يظهر في حسابك ومحادثاتك.'
+                : language === 'fr'
+                ? 'Modifiez votre nom d\'affichage pour votre espace personnel et vos échanges.'
+                : 'Update your display name visible across your personal space and discussions.'}
+            </p>
+
+            <form onSubmit={handleSaveName} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+              <div className="relative flex-1">
+                <input
+                  id="personal-space-change-name-input"
+                  type="text"
+                  value={displayName}
+                  onChange={(e) => {
+                    setDisplayName(e.target.value);
+                    if (nameFeedback) setNameFeedback(null);
+                  }}
+                  placeholder={language === 'ar' ? 'أدخل اسمك أو لقبك' : language === 'fr' ? 'Entrez votre nom' : 'Enter your name'}
+                  maxLength={50}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#D5CEC2] bg-white text-sm text-[#1E2E25] placeholder-[#889B90] focus:outline-none focus:ring-2 focus:ring-[#315243]/20 focus:border-[#315243] transition-all"
+                />
+              </div>
+
+              <button
+                id="personal-space-save-name-btn"
+                type="submit"
+                disabled={isSavingName || !displayName.trim() || displayName.trim() === user.name}
+                className="inline-flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-xl bg-[#264536] hover:bg-[#1E382B] disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs sm:text-sm font-semibold transition-colors cursor-pointer shrink-0 shadow-xs"
+              >
+                {isSavingName ? (
+                  <span>{language === 'ar' ? 'جاري الحفظ...' : language === 'fr' ? 'Enregistrement...' : 'Saving...'}</span>
+                ) : (
+                  <>
+                    <Check className="w-4 h-4" />
+                    <span>{language === 'ar' ? 'حفظ' : language === 'fr' ? 'Enregistrer' : 'Save'}</span>
+                  </>
+                )}
+              </button>
+            </form>
+
+            {nameFeedback && (
+              <p className={`mt-2.5 text-xs font-medium flex items-center gap-1.5 ${nameFeedback.type === 'success' ? 'text-emerald-700' : 'text-[#8B362A]'}`}>
+                {nameFeedback.type === 'success' && <Check className="w-3.5 h-3.5 shrink-0" />}
+                <span>{nameFeedback.message}</span>
+              </p>
+            )}
+          </div>
 
           {/* Single Discussions History Action */}
           <div className="bg-[#FAF8F5] border border-[#E8E3D8] rounded-2xl p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-5">

@@ -73,21 +73,22 @@ export const EmergencyModal = ({
           </p>
 
           <div className="space-y-2.5">
+            {/* 15: Protection Civile */}
             <div className="bg-white border border-[#E5E0D6] rounded-2xl p-3.5 flex items-center justify-between gap-3">
               <div>
                 <p className="text-xs font-semibold text-[#25322A]">
                   {language === 'ar'
-                    ? 'الإسعاف الطبي السريع / SAMU'
+                    ? 'الوقاية المدنية (Protection Civile)'
                     : language === 'fr'
-                    ? 'Urgences médicales / SAMU'
-                    : 'Local Medical Emergencies / SAMU'}
+                    ? 'Protection Civile'
+                    : 'Protection Civile'}
                 </p>
                 <p className="text-xs text-[#6A7870]">
                   {language === 'ar'
-                    ? 'سيارة الإسعاف والحالات الطبية الحرجة'
+                    ? 'الإسعاف، الإنقاذ والتدخل في حالات الطوارئ والحرائق'
                     : language === 'fr'
-                    ? 'Ambulance & urgence médicale vitale'
-                    : 'Ambulance & immediate medical crisis'}
+                    ? 'Secours, ambulance et urgences'
+                    : 'Civil protection, ambulance & rescue'}
                 </p>
               </div>
               <a 
@@ -99,21 +100,22 @@ export const EmergencyModal = ({
               </a>
             </div>
 
+            {/* 19: Police Secours */}
             <div className="bg-white border border-[#E5E0D6] rounded-2xl p-3.5 flex items-center justify-between gap-3">
               <div>
                 <p className="text-xs font-semibold text-[#25322A]">
                   {language === 'ar'
-                    ? 'الشرطة والدرك الملكي / الحماية المدنية'
+                    ? 'الشرطة والأمن الوطني (Police Secours)'
                     : language === 'fr'
-                    ? 'Police Secours & Gendarmerie'
-                    : 'Police & Civil Safety'}
+                    ? 'Police Secours'
+                    : 'Police Secours'}
                 </p>
                 <p className="text-xs text-[#6A7870]">
                   {language === 'ar'
-                    ? 'الحماية المدنية والنجدة الفورية في حالات الخطر'
+                    ? 'الأمن والنجدة الفورية في المناطق الحضرية'
                     : language === 'fr'
-                    ? 'Protection civile d\'urgence ou danger'
-                    : 'Urgent civil protection or danger'}
+                    ? 'Secours de police en zone urbaine'
+                    : 'Emergency urban police safety'}
                 </p>
               </div>
               <a 
@@ -121,7 +123,34 @@ export const EmergencyModal = ({
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-[#315243] text-white text-xs font-medium rounded-xl hover:bg-[#253F33] transition-colors shrink-0"
               >
                 <Phone className="w-3.5 h-3.5" />
-                <span>{language === 'ar' ? 'اتصال بـ 19 / 112' : language === 'fr' ? 'Appeler 19 / 112' : 'Call 19 / 112'}</span>
+                <span>{language === 'ar' ? 'اتصال بـ 19' : language === 'fr' ? 'Appeler 19' : 'Call 19'}</span>
+              </a>
+            </div>
+
+            {/* 177: Gendarmerie Royale */}
+            <div className="bg-white border border-[#E5E0D6] rounded-2xl p-3.5 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold text-[#25322A]">
+                  {language === 'ar'
+                    ? 'الدرك الملكي (Gendarmerie Royale)'
+                    : language === 'fr'
+                    ? 'Gendarmerie Royale'
+                    : 'Gendarmerie Royale'}
+                </p>
+                <p className="text-xs text-[#6A7870]">
+                  {language === 'ar'
+                    ? 'النجدة والأمن في المناطق القروية والخارجية'
+                    : language === 'fr'
+                    ? 'Secours et sécurité en zone rurale'
+                    : 'Rural areas & highway emergency safety'}
+                </p>
+              </div>
+              <a 
+                href="tel:177"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-[#315243] text-white text-xs font-medium rounded-xl hover:bg-[#253F33] transition-colors shrink-0"
+              >
+                <Phone className="w-3.5 h-3.5" />
+                <span>{language === 'ar' ? 'اتصال بـ 177' : language === 'fr' ? 'Appeler 177' : 'Call 177'}</span>
               </a>
             </div>
 

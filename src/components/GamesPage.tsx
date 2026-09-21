@@ -161,7 +161,9 @@ export const GamesPage: React.FC<GamesPageProps> = ({
           {selectedGameId === 'companion' && <CompanionGame />}
           {selectedGameId === 'heartbeat' && <HeartbeatGame />}
           {selectedGameId === 'breathing_pebble' && <BreathingPebbleGame />}
-          {selectedGameId === 'valsalva' && <ValsalvaGame />}
+          {selectedGameId === 'valsalva' && (
+            <ValsalvaGame onSelectOtherGame={() => setSelectedGameId('breathing_pebble')} />
+          )}
           {selectedGameId === 'rain_light' && <RainLightGame />}
         </div>
 

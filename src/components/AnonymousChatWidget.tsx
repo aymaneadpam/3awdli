@@ -875,7 +875,7 @@ export const AnonymousChatWidget = ({
           <div className="bg-[#F1EFEA] border-b border-[#E6E1D8] px-3 py-1 sm:px-3.5 sm:py-1.5 text-[10.5px] sm:text-[11px] text-[#556059] flex items-center justify-between shrink-0">
             <span className="flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-              {language === 'ar' ? 'أخصائيون ومستمعون متأهبون' : language === 'fr' ? 'Psychologues & Écoutants en attente' : 'Psychologists & Students on standby'}
+              {language === 'ar' ? 'مستمعون مدربون متأهبون' : language === 'fr' ? 'Écoutants formés en attente' : 'Trained listeners on standby'}
             </span>
             <span className="text-[10px] text-[#7A867E]">
               {language === 'ar' ? 'الهوية محجوبة' : language === 'fr' ? 'Identité masquée' : 'Identity masked'}

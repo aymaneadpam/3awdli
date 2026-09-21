@@ -193,58 +193,6 @@ export const VoiceCallOverlay: React.FC<VoiceCallOverlayProps> = ({
     };
   }, []);
 
-  // Automatically start WebRTC on Caller Side when ringing starts
-  useEffect(() => {
-    if (!activeCall) return;
-
-    if (activeCall.status === 'ringing' && isCaller && initializedCallerForCallId.current !== activeCall.id) {
-      initializedCallerForCallId.current = activeCall.id;
-
-      const receiverRole = currentRole === 'listener' ? 'user' : 'listener';
-      const receiverId = currentRole === 'listener' 
-        ? (discussion.userId || '') 
-        : (discussion.openedByListenerId || discussion.joinedListenerId || '');
-
-      startCallerWebRTC(
-        activeCall.id,
-        discussion.id,
-        currentUserId,
-        currentRole,
-        receiverId,
-        receiverRole
-      ).catch((err) => {
-        console.error('[WebRTC] Caller initialization failed:', err);
-      });
-    }
-  }, [activeCall?.id, activeCall?.status, isCaller, currentRole, currentUserId, discussion]);
-
-  // Auto reconnect if page refreshed while call is active
-  useEffect(() => {
-    if (!activeCall || activeCall.status !== 'active') return;
-
-    if (webrtcStatus.connectionState === 'idle') {
-      if (isCaller && initializedCallerForCallId.current !== activeCall.id) {
-        initializedCallerForCallId.current = activeCall.id;
-        const receiverRole = currentRole === 'listener' ? 'user' : 'listener';
-        const receiverId = currentRole === 'listener' 
-          ? (discussion.userId || '') 
-          : (discussion.openedByListenerId || discussion.joinedListenerId || '');
-
-        startCallerWebRTC(
-          activeCall.id,
-          discussion.id,
-          currentUserId,
-          currentRole,
-          receiverId,
-          receiverRole
-        ).catch(() => {});
-      } else if (isReceiver && initializedReceiverForCallId.current !== activeCall.id) {
-        initializedReceiverForCallId.current = activeCall.id;
-        startReceiverWebRTC(activeCall.id, currentRole).catch(() => {});
-      }
-    }
-  }, [activeCall?.status, webrtcStatus.connectionState, isCaller, isReceiver, activeCall?.id, currentRole]);
-
   // Timer loop for Active Call & Ringing Timeout check
   useEffect(() => {
     if (!activeCall) return;
@@ -285,6 +233,32 @@ export const VoiceCallOverlay: React.FC<VoiceCallOverlayProps> = ({
       await startReceiverWebRTC(activeCall.id, currentRole);
     } catch (err) {
       console.error('[WebRTC] Receiver failed to accept and connect:', err);
+    }
+  };
+
+  const handleJoinActiveCall = async () => {
+    if (!activeCall) return;
+    try {
+      if (isCaller) {
+        initializedCallerForCallId.current = activeCall.id;
+        const receiverRole = currentRole === 'listener' ? 'user' : 'listener';
+        const receiverId = currentRole === 'listener' 
+          ? (discussion.userId || '') 
+          : (discussion.openedByListenerId || discussion.joinedListenerId || '');
+        await startCallerWebRTC(
+          activeCall.id,
+          discussion.id,
+          currentUserId,
+          currentRole,
+          receiverId,
+          receiverRole
+        );
+      } else {
+        initializedReceiverForCallId.current = activeCall.id;
+        await startReceiverWebRTC(activeCall.id, currentRole);
+      }
+    } catch (err) {
+      console.error('[WebRTC] Failed to join active call audio:', err);
     }
   };
 
@@ -545,49 +519,60 @@ export const VoiceCallOverlay: React.FC<VoiceCallOverlayProps> = ({
             </span>
           </div>
 
-          {/* Call Controls: Diagnostics + Mute/Unmute & Hang Up */}
+          {/* Call Controls: Join Audio (if idle) / Mute / Hang Up */}
           <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-            {/* Audio Diagnostics Modal Toggle */}
-            <button
-              id="voice-call-diagnostics-btn"
-              type="button"
-              onClick={() => {
-                setShowDiagnosticModal(true);
-                handleRunDiagnostic();
-              }}
-              className="px-2.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-emerald-200 hover:text-white border border-white/20 text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer"
-              title="Test microphone, speakers & WebRTC network"
-            >
-              <Activity className="w-3.5 h-3.5 text-emerald-300" />
-              <span className="hidden md:inline text-[11px]">
-                {language === 'fr' ? 'Statut audio' : language === 'ar' ? 'فحص الصوت' : 'Audio Status'}
-              </span>
-            </button>
+            {webrtcStatus.connectionState === 'idle' ? (
+              <button
+                id="voice-call-join-btn"
+                type="button"
+                onClick={handleJoinActiveCall}
+                className="px-3.5 py-1.5 rounded-xl bg-emerald-400 hover:bg-emerald-300 text-[#12241A] text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-md active:scale-95"
+              >
+                <Phone className="w-3.5 h-3.5 fill-current" />
+                <span>{language === 'fr' ? 'Rejoindre l\'audio' : language === 'ar' ? 'الانضمام للصوت' : 'Join Audio Call'}</span>
+              </button>
+            ) : (
+              <>
+                {/* Audio Diagnostics Modal Toggle */}
+                <button
+                  id="voice-call-diagnostics-btn"
+                  type="button"
+                  onClick={() => setShowDiagnosticModal(true)}
+                  className="px-2.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-emerald-200 hover:text-white border border-white/20 text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer"
+                  title="Test microphone, speakers & WebRTC network"
+                >
+                  <Activity className="w-3.5 h-3.5 text-emerald-300" />
+                  <span className="hidden md:inline text-[11px]">
+                    {language === 'fr' ? 'Statut audio' : language === 'ar' ? 'فحص الصوت' : 'Audio Status'}
+                  </span>
+                </button>
 
-            {/* Mute/Unmute Real Hardware Input */}
-            <button
-              id="voice-call-mute-toggle-btn"
-              type="button"
-              onClick={handleToggleMute}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-95 border ${
-                isMutedLocally
-                  ? 'bg-amber-600/90 hover:bg-amber-600 text-white border-amber-400/50 ring-2 ring-amber-400/30'
-                  : 'bg-white/10 hover:bg-white/20 text-emerald-100 border-white/20'
-              }`}
-              title={isMutedLocally ? 'Unmute microphone' : 'Mute microphone'}
-            >
-              {isMutedLocally ? (
-                <>
-                  <MicOff className="w-3.5 h-3.5 text-amber-200" />
-                  <span>{language === 'fr' ? 'Micro désactivé' : language === 'ar' ? 'مكتوم' : 'Muted'}</span>
-                </>
-              ) : (
-                <>
-                  <Mic className="w-3.5 h-3.5 text-emerald-300" />
-                  <span>{language === 'fr' ? 'Couper micro' : language === 'ar' ? 'كتم' : 'Mute'}</span>
-                </>
-              )}
-            </button>
+                {/* Mute/Unmute Real Hardware Input */}
+                <button
+                  id="voice-call-mute-toggle-btn"
+                  type="button"
+                  onClick={handleToggleMute}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-95 border ${
+                    isMutedLocally
+                      ? 'bg-amber-600/90 hover:bg-amber-600 text-white border-amber-400/50 ring-2 ring-amber-400/30'
+                      : 'bg-white/10 hover:bg-white/20 text-emerald-100 border-white/20'
+                  }`}
+                  title={isMutedLocally ? 'Unmute microphone' : 'Mute microphone'}
+                >
+                  {isMutedLocally ? (
+                    <>
+                      <MicOff className="w-3.5 h-3.5 text-amber-200" />
+                      <span>{language === 'fr' ? 'Micro désactivé' : language === 'ar' ? 'مكتوم' : 'Muted'}</span>
+                    </>
+                  ) : (
+                    <>
+                      <Mic className="w-3.5 h-3.5 text-emerald-300" />
+                      <span>{language === 'fr' ? 'Couper micro' : language === 'ar' ? 'كتم' : 'Mute'}</span>
+                    </>
+                  )}
+                </button>
+              </>
+            )}
 
             {/* Hang Up Real Call */}
             <button
@@ -714,7 +699,15 @@ export const VoiceCallOverlay: React.FC<VoiceCallOverlayProps> = ({
                       </span>
                     </div>
                   </div>
-                ) : null}
+                ) : (
+                  <div className="p-3 bg-stone-50 rounded-xl border border-stone-200 text-[11px] text-stone-600">
+                    {language === 'fr' 
+                      ? 'Cliquez sur "Tester l\'audio" ci-dessous pour vérifier votre microphone et vos haut-parleurs.'
+                      : language === 'ar'
+                      ? 'اضغط على "اختبار الصوت" أدناه لفحص الميكروفون ومكبر الصوت.'
+                      : 'Click "Test Audio" below if you wish to verify your microphone and speakers.'}
+                  </div>
+                )}
               </div>
 
               <div className="pt-3 border-t border-stone-100 flex items-center justify-end gap-2">
@@ -725,7 +718,11 @@ export const VoiceCallOverlay: React.FC<VoiceCallOverlayProps> = ({
                   className="px-3 py-1.5 rounded-xl bg-[#2F5342] hover:bg-[#244234] text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${diagnosticTesting ? 'animate-spin' : ''}`} />
-                  <span>{language === 'fr' ? 'Tester à nouveau' : language === 'ar' ? 'إعادة الاختبار' : 'Retest Audio'}</span>
+                  <span>
+                    {diagnosticResult 
+                      ? (language === 'fr' ? 'Tester à nouveau' : language === 'ar' ? 'إعادة الاختبار' : 'Retest Audio')
+                      : (language === 'fr' ? 'Tester l\'audio' : language === 'ar' ? 'اختبار الصوت' : 'Test Audio')}
+                  </span>
                 </button>
                 <button
                   type="button"
@@ -777,11 +774,28 @@ export const CallButton: React.FC<CallButtonProps> = ({
 
   const handleClick = () => {
     if (isOngoing) return;
-    initiateVoiceCall(
+    const updated = initiateVoiceCall(
       discussion.id,
       { id: currentUserId, name: currentUserName },
       currentRole
     );
+    if (updated?.activeCall) {
+      const receiverRole = currentRole === 'listener' ? 'user' : 'listener';
+      const receiverId = currentRole === 'listener' 
+        ? (discussion.userId || '') 
+        : (discussion.openedByListenerId || discussion.joinedListenerId || '');
+
+      startCallerWebRTC(
+        updated.activeCall.id,
+        discussion.id,
+        currentUserId,
+        currentRole,
+        receiverId,
+        receiverRole
+      ).catch((err) => {
+        console.error('[WebRTC] Caller initialization failed:', err);
+      });
+    }
   };
 
   return (
