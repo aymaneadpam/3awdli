@@ -208,7 +208,7 @@ export function checkAndNotifyWaitingDiscussions(listenerId?: string | null): vo
         const first = newlyWaiting[0];
         sendDiscussionWaitingNotification(
           unopened.length,
-          first?.category || (first as any)?.primaryTopic
+          (first as any)?.category || (first as any)?.primaryTopic
         );
       }
     }

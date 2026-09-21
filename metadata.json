@@ -1,6 +1,6 @@
 {
   "name": "3awdli",
   "description": "A free, confidential mental health support platform connecting individuals with compassionate psychologists and psychology students.",
-  "requestFramePermissions": [],
+  "requestFramePermissions": ["microphone"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

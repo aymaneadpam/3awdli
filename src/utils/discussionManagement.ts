@@ -16,7 +16,7 @@ import {
   subscribeToDiscussions
 } from '../lib/firestoreService';
 
-const DISCUSSIONS_STORAGE_KEY = '3awdli_discussions';
+export const DISCUSSIONS_STORAGE_KEY = '3awdli_discussions';
 
 export const INITIAL_DISCUSSION_SYSTEM_MESSAGE = "Salam, l'message dialk tsift l team. Chwia w yjawbk chi wa7d";
 
@@ -161,7 +161,7 @@ export function saveStoredDiscussions(
 }
 
 // Helper to safely merge remote discussions from Firestore with local discussions
-function reconcileDiscussionsWithLocal(
+export function reconcileDiscussionsWithLocal(
   remoteDiscussions: DiscussionConversation[],
   localDiscussions: DiscussionConversation[]
 ): DiscussionConversation[] {
@@ -172,15 +172,12 @@ function reconcileDiscussionsWithLocal(
     mergedMap.set(r.id, { ...r });
   }
 
-  const now = Date.now();
   for (const l of localDiscussions) {
     if (isFakeDiscussion(l)) continue;
     const remote = mergedMap.get(l.id);
     if (!remote) {
-      // Pending local discussion created in last 30s not yet in Firestore
-      if (l.startedAtTimestamp && now - l.startedAtTimestamp < 30000) {
-        mergedMap.set(l.id, l);
-      }
+      // Local discussion not yet in remote snapshot - preserve it!
+      mergedMap.set(l.id, l);
     } else {
       // If locally closed, prevent remote from un-closing it unless explicitly reopened
       if (l.status === 'closed') {
@@ -194,8 +191,25 @@ function reconcileDiscussionsWithLocal(
           remote.closedByUserName = l.closedByUserName || remote.closedByUserName;
         }
       }
-      if ((l.messages?.length || 0) > (remote.messages?.length || 0)) {
-        remote.messages = l.messages;
+      // Safely merge messages by ID so messages from either side are never dropped
+      const messageMap = new Map<string, ChatMessage>();
+      (remote.messages || []).forEach((m) => messageMap.set(m.id, m));
+      (l.messages || []).forEach((m) => {
+        if (!messageMap.has(m.id)) {
+          messageMap.set(m.id, m);
+        }
+      });
+      remote.messages = Array.from(messageMap.values()).sort(
+        (a, b) => (a.timestampMs || 0) - (b.timestampMs || 0)
+      );
+
+      // Preserve newer activeCall state
+      if (l.activeCall) {
+        if (!remote.activeCall) {
+          remote.activeCall = l.activeCall;
+        } else if ((l.activeCall.startedAtTimestamp || 0) > (remote.activeCall.startedAtTimestamp || 0)) {
+          remote.activeCall = l.activeCall;
+        }
       }
     }
   }
@@ -212,24 +226,7 @@ export function initFirestoreDiscussionsSync(): () => void {
   }
   isDiscussionsSyncInitialized = true;
 
-  // 1. Initial population from Firestore
-  fetchDiscussionsFromFirestore()
-    .then((remoteDiscussions) => {
-      if (remoteDiscussions) {
-        const local = getStoredDiscussions();
-        const merged = reconcileDiscussionsWithLocal(remoteDiscussions, local);
-        localStorage.setItem(DISCUSSIONS_STORAGE_KEY, JSON.stringify(merged));
-        clearActiveDiscussionReferences();
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('3awdli_discussion_sync', { detail: { timestamp: Date.now() } }));
-        }
-      }
-    })
-    .catch((err) => {
-      console.warn('Initial Firestore discussions fetch notice:', err);
-    });
-
-  // 2. Real-time Firestore subscription
+  // Real-time Firestore subscription handles initial snapshot AND continuous updates
   const unsubscribeFirestore = subscribeToDiscussions((remoteDiscussions) => {
     if (!remoteDiscussions) return;
     const local = getStoredDiscussions();
@@ -238,7 +235,6 @@ export function initFirestoreDiscussionsSync(): () => void {
     const mergedRaw = JSON.stringify(merged);
     if (currentRaw !== mergedRaw) {
       localStorage.setItem(DISCUSSIONS_STORAGE_KEY, mergedRaw);
-      clearActiveDiscussionReferences();
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('3awdli_discussion_sync', { detail: { timestamp: Date.now() } }));
       }
@@ -490,7 +486,7 @@ export function clearActiveDiscussionReferences(discussionId?: string, userId?: 
       localStorage.removeItem(`3awdli_active_user_disc_${userId}`);
     }
 
-    // 3. Scan all keys in localStorage for any 3awdli_active_user_disc_ that matches discussionId or points to a closed discussion
+    // 3. Scan all keys in localStorage for any 3awdli_active_user_disc_ that matches discussionId, points to a closed discussion, or full clear
     const all = getStoredDiscussions();
     const closedIds = new Set(all.filter((d) => d.status === 'closed').map((d) => d.id));
     if (discussionId) closedIds.add(discussionId);
@@ -500,15 +496,18 @@ export function clearActiveDiscussionReferences(discussionId?: string, userId?: 
       const key = localStorage.key(i);
       if (key && key.startsWith('3awdli_active_user_disc_')) {
         const val = localStorage.getItem(key);
-        if (val && (closedIds.has(val) || val === discussionId)) {
+        if (!discussionId && !userId) {
+          keysToRemove.push(key);
+        } else if (val && (closedIds.has(val) || val === discussionId)) {
           keysToRemove.push(key);
         }
       }
     }
     keysToRemove.forEach((k) => localStorage.removeItem(k));
 
-    // 4. Dispatch sync event
+    // 4. Dispatch sync and cleared events
     if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('3awdli_active_discussion_cleared', { detail: { discussionId, userId, timestamp: Date.now() } }));
       window.dispatchEvent(new CustomEvent('3awdli_discussion_sync', { detail: { timestamp: Date.now() } }));
     }
   } catch (e) {

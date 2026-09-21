@@ -143,9 +143,31 @@ export interface DiscussionConversation {
   joinedListenerRole?: string;
   joinedAt?: string;
   excludedListeners?: DiscussionExcludedListener[];
+  activeCall?: DiscussionVoiceCall | null;
 }
 
-export type ViewState = 'home' | 'signin' | 'signup' | 'dashboard' | 'admin' | 'member-management' | 'discussions' | 'games' | 'lounge' | 'teen-space' | 'user-mailbox' | 'reports' | 'admin-reports' | 'admin-support' | 'reset-password' | 'rules';
+export type CallStatus = 'ringing' | 'active' | 'ended';
+
+export interface DiscussionVoiceCall {
+  id: string;
+  status: CallStatus;
+  callerId: string;
+  callerName: string;
+  callerRole: 'user' | 'listener';
+  receiverId?: string;
+  receiverName?: string;
+  receiverRole?: 'user' | 'listener';
+  startedAtTimestamp: number;
+  acceptedAtTimestamp?: number;
+  endedAtTimestamp?: number;
+  endedByRole?: 'user' | 'listener' | 'timeout';
+  isMuted?: {
+    user?: boolean;
+    listener?: boolean;
+  };
+}
+
+export type ViewState = 'home' | 'signin' | 'signup' | 'dashboard' | 'admin' | 'member-management' | 'discussions' | 'games' | 'lounge' | 'teen-space' | 'user-mailbox' | 'reports' | 'admin-reports' | 'admin-support' | 'reset-password' | 'rules' | 'valsalva';
 export type AuthMode = 'signin' | 'signup' | null;
 
 export interface UserMailboxMessage {

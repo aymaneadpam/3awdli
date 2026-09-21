@@ -31,7 +31,9 @@ import {
   recordLiveDiscussionMessage,
   updateDiscussionGenderPreference,
   closeDiscussion,
-  isFakeDiscussion
+  isFakeDiscussion,
+  reconcileDiscussionsWithLocal,
+  DISCUSSIONS_STORAGE_KEY
 } from '../utils/discussionManagement';
 import { 
   fetchDiscussionsFromFirestore, 
@@ -42,6 +44,7 @@ import { ConversationParticipantBar } from './ConversationParticipantBar';
 import { GenderPreferenceTag } from './GenderPreferenceTag';
 import { GenderPreferenceModal } from './GenderPreferenceModal';
 import { ReportDiscussionModal } from './ReportDiscussionModal';
+import { VoiceCallOverlay, CallButton } from './VoiceCallOverlay';
 import { useLanguage } from '../context/LanguageContext';
 
 interface MemberDiscussionsPageProps {
@@ -127,23 +130,14 @@ export const MemberDiscussionsPage: React.FC<MemberDiscussionsPageProps> = ({
       return list;
     });
 
-    // Active discussion resolution
+    // Active discussion resolution - ONLY check explicitly stored activeId
     const activeId = getActiveUserDiscussionId(user.id);
     let foundActive: DiscussionConversation | undefined;
 
     if (activeId) {
       foundActive = list.find((d) => d.id === activeId && d.status !== 'closed');
-    }
-
-    if (!foundActive) {
-      foundActive = list.find(
-        (d) =>
-          d.status !== 'closed' &&
-          ((d.userId && d.userId === user.id) ||
-            (d.userEmail && user.email && d.userEmail.trim().toLowerCase() === user.email.trim().toLowerCase()))
-      );
-      if (foundActive) {
-        setActiveUserDiscussionId(user.id, foundActive.id);
+      if (!foundActive) {
+        setActiveUserDiscussionId(user.id, null);
       }
     }
 
@@ -154,7 +148,8 @@ export const MemberDiscussionsPage: React.FC<MemberDiscussionsPageProps> = ({
         foundActive &&
         prev.id === foundActive.id &&
         prev.status === foundActive.status &&
-        prev.messages?.length === foundActive.messages?.length
+        prev.messages?.length === foundActive.messages?.length &&
+        JSON.stringify(prev.activeCall) === JSON.stringify(foundActive.activeCall)
       ) {
         return prev;
       }
@@ -182,17 +177,32 @@ export const MemberDiscussionsPage: React.FC<MemberDiscussionsPageProps> = ({
     // Fetch directly from Firestore on mount
     fetchDiscussionsFromFirestore()
       .then((remote) => {
-        if (remote) {
+        if (remote && remote.length > 0) {
+          const clean = remote.filter((d) => !isFakeDiscussion(d));
+          const local = getStoredDiscussions();
+          const merged = reconcileDiscussionsWithLocal(clean, local);
+          localStorage.setItem(DISCUSSIONS_STORAGE_KEY, JSON.stringify(merged));
           syncDiscussions();
         }
       })
       .catch((err) => console.warn('MemberDiscussionsPage direct fetch notice:', err));
+
+    // Real-time Firestore subscription for instantaneous cross-device sync
+    const unsubFirestore = subscribeToDiscussions((remote) => {
+      if (!remote) return;
+      const clean = remote.filter((d) => !isFakeDiscussion(d));
+      const local = getStoredDiscussions();
+      const merged = reconcileDiscussionsWithLocal(clean, local);
+      localStorage.setItem(DISCUSSIONS_STORAGE_KEY, JSON.stringify(merged));
+      syncDiscussions();
+    });
 
     const handleSync = () => syncDiscussions();
     window.addEventListener('3awdli_discussion_sync', handleSync);
     window.addEventListener('storage', handleSync);
 
     return () => {
+      unsubFirestore();
       window.removeEventListener('3awdli_discussion_sync', handleSync);
       window.removeEventListener('storage', handleSync);
     };
@@ -505,18 +515,25 @@ export const MemberDiscussionsPage: React.FC<MemberDiscussionsPageProps> = ({
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                      <CallButton
+                        discussion={activeDiscussion}
+                        currentRole="user"
+                        currentUserId={user.id}
+                        currentUserName={user.name}
+                      />
+
                       <button
                         id="member-report-active-disc-btn"
                         onClick={() => {
                           setReportTargetDiscussion(activeDiscussion);
                           setIsReportModalOpen(true);
                         }}
-                        className="px-2.5 py-1.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-100 border border-rose-300/30 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                        className="h-8 sm:h-9 px-2 sm:px-2.5 md:px-3 py-1.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-100 border border-rose-300/30 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 active:scale-95"
                         title="Report this discussion"
                       >
-                        <Flag className="w-3.5 h-3.5 text-rose-300" />
-                        <span className="hidden sm:inline">
+                        <Flag className="w-3.5 h-3.5 text-rose-300 shrink-0" />
+                        <span className="hidden md:inline">
                           {language === 'fr' ? 'Signaler' : 'Report'}
                         </span>
                       </button>
@@ -524,14 +541,23 @@ export const MemberDiscussionsPage: React.FC<MemberDiscussionsPageProps> = ({
                       <button
                         id="member-end-active-disc-btn"
                         onClick={handleEndDiscussion}
-                        className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white border border-white/20 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                        className="h-8 sm:h-9 px-2.5 sm:px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white border border-white/20 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 active:scale-95"
                         title="Conclude discussion"
                       >
-                        <RotateCcw className="w-3 h-3 text-emerald-200" />
-                        <span>{language === 'fr' ? 'Terminer' : 'End Discussion'}</span>
+                        <RotateCcw className="w-3.5 h-3.5 text-emerald-200 shrink-0" />
+                        <span className="hidden sm:inline">{language === 'fr' ? 'Terminer' : 'End Discussion'}</span>
+                        <span className="sm:hidden">{language === 'fr' ? 'Fin' : 'End'}</span>
                       </button>
                     </div>
                   </div>
+
+                  {/* Real-time Voice Call Overlay (Incoming Modal / Ringing Banner / Active In-Call Screen) */}
+                  <VoiceCallOverlay
+                    discussion={activeDiscussion}
+                    currentRole="user"
+                    currentUserId={user.id}
+                    currentUserName={user.name}
+                  />
 
                   {/* Participant & Preference Sub-bar */}
                   <div className="bg-[#FAF7F2] border-b border-[#EAE4D9] px-4 py-2 text-xs flex items-center justify-between gap-3 shrink-0">

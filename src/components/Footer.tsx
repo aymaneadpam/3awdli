@@ -1,6 +1,7 @@
 import { Heart, Shield, AlertCircle, PhoneCall, HelpCircle } from 'lucide-react';
 import { AuthMode, User } from '../types';
 import { useLanguage } from '../context/LanguageContext';
+import { Logo } from './Logo';
 
 interface FooterProps {
   currentUser?: User | null;
@@ -61,9 +62,7 @@ export const Footer = ({
           {/* Brand & mission */}
           <div className="md:col-span-2 space-y-3">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-[#315243] text-white flex items-center justify-center">
-                <Heart className="w-4 h-4 text-emerald-200 fill-emerald-200/20" />
-              </div>
+              <Logo className="w-8 h-8 shrink-0" />
               <span className="text-xl font-bold text-[#1C2C24] font-['Lora',serif]">
                 3awdli
               </span>

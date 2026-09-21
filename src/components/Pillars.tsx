@@ -105,11 +105,11 @@ export const Pillars = ({ currentUser, onTalkAnonymously }: PillarsProps) => {
         ];
 
   return (
-    <section className="py-16 sm:py-20 border-t border-[#EAE5DC] bg-[#F7F4EE]">
+    <section className="py-20 sm:py-28 border-t border-[#EAE5DC] bg-[#F7F4EE]/70">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Section Heading */}
-        <div className="max-w-2xl mx-auto text-center mb-12 sm:mb-16">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#E5EEE9] text-[#2F5342] text-xs font-medium mb-3.5 border border-[#CFDFD6]">
+        <div className="max-w-2xl mx-auto text-center mb-14 sm:mb-20">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#E5EEE9] text-[#2F5342] text-xs font-medium mb-4 border border-[#CFDFD6]">
             <Sparkles className="w-3.5 h-3.5 text-[#315243]" />
             <span>
               {language === 'ar'
@@ -119,14 +119,14 @@ export const Pillars = ({ currentUser, onTalkAnonymously }: PillarsProps) => {
                 : 'How 3awdli Supports You'}
             </span>
           </div>
-          <h2 className="text-2xl sm:text-3xl font-semibold text-[#1F2F26] tracking-tight font-['Lora',serif]">
+          <h2 className="text-2xl sm:text-3xl font-normal text-[#1F2F26] tracking-tight font-['Lora',serif]">
             {language === 'ar'
               ? 'ملاذ هادئ عندما تضيق بك تفاصيل الحياة'
               : language === 'fr'
               ? 'Un havre de paix quand le monde devient trop lourd'
               : 'A quiet sanctuary when the world feels too loud'}
           </h2>
-          <p className="mt-3 text-sm sm:text-base text-[#57645C] leading-relaxed">
+          <p className="mt-3.5 text-sm sm:text-base text-[#57645C] leading-relaxed font-light">
             {language === 'ar' ? (
               <>في الثقافة المغربية والدارجة، كلمة <em className="italic font-medium text-[#2F4F3F]">"عاود ليا"</em> تعني "احكِ لي كل شيء". إنها دعوة للتعبير عن مشاعرك بصدق وأمان دون خوف من الأحكام.</>
             ) : language === 'fr' ? (
@@ -138,27 +138,27 @@ export const Pillars = ({ currentUser, onTalkAnonymously }: PillarsProps) => {
         </div>
 
         {/* 3 Core Pillars */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-16">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-7 mb-16 sm:mb-20">
           {pillars.map((pillar, idx) => {
             const Icon = pillar.icon;
             return (
               <div 
                 key={idx}
-                className="bg-white/80 backdrop-blur-xs border border-[#E7E2D8] rounded-3xl p-6 sm:p-7 shadow-xs hover:shadow-md transition-all duration-300 flex flex-col justify-between"
+                className="bg-white/75 backdrop-blur-xs border border-[#E7E2D8] rounded-3xl p-6 sm:p-7 shadow-2xs flex flex-col justify-between"
               >
                 <div>
                   <div className="flex items-center justify-between mb-4">
-                    <div className="w-12 h-12 rounded-2xl bg-[#EAF1ED] text-[#2A493B] flex items-center justify-center border border-[#D5E4DC]">
-                      <Icon className="w-6 h-6" />
+                    <div className="w-11 h-11 rounded-2xl bg-[#EAF1ED] text-[#2A493B] flex items-center justify-center border border-[#D5E4DC]">
+                      <Icon className="w-5 h-5" />
                     </div>
                     <span className="text-[11px] font-medium text-[#466657] bg-[#EAF1ED] px-2.5 py-1 rounded-full">
                       {pillar.tag}
                     </span>
                   </div>
-                  <h3 className="text-lg font-semibold text-[#203027] mb-2 font-['Lora',serif]">
+                  <h3 className="text-base sm:text-lg font-semibold text-[#203027] mb-2 font-['Lora',serif]">
                     {pillar.title}
                   </h3>
-                  <p className="text-xs sm:text-sm text-[#5B6860] leading-relaxed">
+                  <p className="text-xs sm:text-sm text-[#5B6860] leading-relaxed font-light">
                     {pillar.description}
                   </p>
                 </div>
@@ -168,7 +168,7 @@ export const Pillars = ({ currentUser, onTalkAnonymously }: PillarsProps) => {
         </div>
 
         {/* What You Can Bring to Us Banner */}
-        <div className="bg-[#ECE7DE]/60 border border-[#DDD6CA] rounded-3xl p-6 sm:p-8 flex flex-col md:flex-row items-center justify-between gap-6">
+        <div className="bg-[#EBE6DD]/70 border border-[#DDD6CA] rounded-3xl p-6 sm:p-8 flex flex-col md:flex-row items-center justify-between gap-6 shadow-2xs">
           <div className="max-w-xl">
             <div className="flex items-center gap-2 mb-2">
               <HeartHandshake className="w-4 h-4 text-[#315243]" />

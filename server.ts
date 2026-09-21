@@ -591,6 +591,9 @@ Sent from ${sender} (3awdli Platform).
     }
   });
 
+  // Serve static assets from public folder
+  app.use(express.static(path.join(process.cwd(), 'public')));
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

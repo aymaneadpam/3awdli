@@ -42,7 +42,8 @@
         "messages": { "type": "array" },
         "closedAt": { "type": "string" },
         "closedBy": { "type": "string" },
-        "updatedAtTimestamp": { "type": "number" }
+        "updatedAtTimestamp": { "type": "number" },
+        "activeCall": { "type": "object" }
       },
       "required": ["id", "type", "userName", "status", "messages"]
     },
@@ -142,6 +143,26 @@
         "usedAt": { "type": "number" }
       },
       "required": ["token", "email", "createdAt", "expiresAt", "used"]
+    },
+    "CallSignalingSession": {
+      "title": "Call Signaling Session",
+      "description": "WebRTC real-time peer-to-peer audio connection handshake, offer, answer, and ICE candidates",
+      "type": "object",
+      "properties": {
+        "callId": { "type": "string" },
+        "discussionId": { "type": "string" },
+        "callerId": { "type": "string" },
+        "callerRole": { "type": "string", "enum": ["user", "listener"] },
+        "receiverId": { "type": "string" },
+        "receiverRole": { "type": "string", "enum": ["user", "listener"] },
+        "status": { "type": "string", "enum": ["ringing", "active", "ended"] },
+        "offer": { "type": "object" },
+        "answer": { "type": "object" },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" },
+        "endedAt": { "type": "number" }
+      },
+      "required": ["callId", "discussionId", "callerId", "receiverId", "status", "createdAt"]
     }
   },
   "firestore": {
@@ -172,6 +193,10 @@
     "password_reset_tokens": {
       "entity": "PasswordResetToken",
       "description": "Secure one-time password recovery tokens with 1-hour expiration"
+    },
+    "call_signaling": {
+      "entity": "CallSignalingSession",
+      "description": "Real-time WebRTC audio session signaling documents and candidate collections"
     }
   }
 }

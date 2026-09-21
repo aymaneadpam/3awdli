@@ -66,6 +66,19 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    // WebRTC Peer-to-peer audio call signaling (offer, answer, and ICE candidates)
+    match /call_signaling/{callId} {
+      allow read, write: if true;
+
+      match /callerCandidates/{candidateId} {
+        allow read, write: if true;
+      }
+
+      match /receiverCandidates/{candidateId} {
+        allow read, write: if true;
+      }
+    }
+
     // Default safety fallback
     match /{document=**} {
       allow read, write: if true;

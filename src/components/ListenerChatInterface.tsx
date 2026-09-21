@@ -18,7 +18,8 @@ import {
   RefreshCw,
   Archive,
   Share2,
-  Flag
+  Flag,
+  MoreVertical
 } from 'lucide-react';
 import { DiscussionConversation, UserAccount, ChatMessage } from '../types';
 import { ShareConversationModal } from './ShareConversationModal';
@@ -26,6 +27,7 @@ import { ReportDiscussionModal } from './ReportDiscussionModal';
 import { ListenerGenderIcon } from './ListenerGenderDisplay';
 import { GenderPreferenceTag } from './GenderPreferenceTag';
 import { ConversationParticipantBar } from './ConversationParticipantBar';
+import { VoiceCallOverlay, CallButton } from './VoiceCallOverlay';
 import { getShareRequestsForDiscussion } from '../utils/shareManagement';
 import { 
   getVisibleMessagesForListener, 
@@ -57,8 +59,26 @@ export const ListenerChatInterface = ({
   const [shareRequestsCount, setShareRequestsCount] = useState(() => getShareRequestsForDiscussion(discussion.id).length);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [reportPreselectedMsgId, setReportPreselectedMsgId] = useState<string | null>(null);
+  const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [isTypingLocally, setIsTypingLocally] = useState(false);
   const [showScrollBottomBtn, setShowScrollBottomBtn] = useState(false);
+
+  const moreMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close more menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target as Node)) {
+        setIsMoreMenuOpen(false);
+      }
+    };
+    if (isMoreMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isMoreMenuOpen]);
 
   // Check exclusion status for current listener
   const exclusionRecord = isListenerExcludedFromDiscussion(discussion, currentListener.id);
@@ -217,10 +237,10 @@ export const ListenerChatInterface = ({
   };
 
   return (
-    <div className="bg-white border border-[#DDD7CB] rounded-3xl shadow-lg overflow-hidden flex flex-col w-full h-[840px] min-h-[580px] max-h-[min(92vh,880px)]">
+    <div className="bg-white border border-[#DDD7CB] rounded-3xl shadow-xl overflow-hidden flex flex-col w-full h-[920px] sm:h-[980px] min-h-[700px] max-h-[min(96vh,1080px)]">
       {/* Header */}
-      <header className="bg-[#264134] text-white px-4 sm:px-5 py-3.5 flex items-center justify-between border-b border-[#1E352A] shrink-0">
-        <div className="flex items-center gap-2.5 min-w-0">
+      <header className="bg-[#264134] text-white px-3 sm:px-5 py-3 sm:py-3.5 flex items-center justify-between border-b border-[#1E352A] shrink-0 gap-2 sm:gap-4 relative">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1 mr-1 rtl:mr-0 rtl:ml-1">
           <button
             id="listener-back-to-list-btn"
             onClick={onBack}
@@ -232,7 +252,7 @@ export const ListenerChatInterface = ({
 
           <div className="min-w-0">
             <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="font-semibold text-sm sm:text-base tracking-tight font-['Lora',serif] truncate">
+              <span className="font-semibold text-sm sm:text-base tracking-tight font-['Lora',serif] truncate max-w-[130px] xs:max-w-[180px] sm:max-w-[260px] md:max-w-[380px] lg:max-w-[480px]">
                 {discussion.type === 'anonymous' 
                   ? (language === 'ar' ? 'دعم زائر مجهول الهوية' : language === 'fr' ? 'Soutien visiteur anonyme' : 'Anonymous Visitor Support') 
                   : (language === 'ar' ? `محادثة مع ${discussion.userName || 'عضو'}` : language === 'fr' ? `Discussion avec ${discussion.userName || 'Membre'}` : `Discussion with ${discussion.userName || 'Member'}`)}
@@ -240,7 +260,7 @@ export const ListenerChatInterface = ({
               {discussion.type === 'anonymous' ? (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-900/60 text-indigo-200 border border-indigo-400/30 shrink-0">
                   <UserX className="w-3 h-3" />
-                  {language === 'ar' ? 'مجهول الهوية' : language === 'fr' ? 'Anonyme' : 'Anonymous'}
+                  {language === 'ar' ? 'مجهول' : language === 'fr' ? 'Anonyme' : 'Anonymous'}
                 </span>
               ) : (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-sky-900/60 text-sky-200 border border-sky-400/30 shrink-0">
@@ -268,32 +288,28 @@ export const ListenerChatInterface = ({
           </div>
         </div>
 
-        {/* Action Controls: Share Conversation + Report + End Discussion */}
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            id="listener-report-discussion-btn"
-            onClick={() => {
-              setReportPreselectedMsgId(null);
-              setIsReportModalOpen(true);
-            }}
-            className="px-2.5 py-1.5 rounded-xl bg-white/10 hover:bg-rose-900/40 text-emerald-100 hover:text-rose-200 border border-white/20 transition-all cursor-pointer flex items-center gap-1.5 text-xs font-semibold"
-            title={language === 'ar' ? 'إبلاغ مسؤول المستمعين عن هذه المحادثة' : language === 'fr' ? 'Signaler cette discussion' : 'Report this discussion to Head of Listeners'}
-          >
-            <Flag className="w-3.5 h-3.5 text-rose-300" />
-            <span className="hidden sm:inline">{language === 'ar' ? 'إبلاغ' : language === 'fr' ? 'Signaler' : 'Report'}</span>
-          </button>
+        {/* Action Toolbar: Call + Share + End Discussion + More (⋮) */}
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          {!isClosed && !isExcluded && (
+            <CallButton
+              discussion={discussion}
+              currentRole="listener"
+              currentUserId={currentListener.id}
+              currentUserName={currentListener.name}
+            />
+          )}
 
           {!isExcluded && (
             <button
               id="listener-share-conversation-btn"
               onClick={() => setIsShareModalOpen(true)}
-              className="px-2.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-emerald-100 hover:text-white border border-white/20 transition-all cursor-pointer flex items-center gap-1.5 text-xs font-semibold"
+              className="h-8 sm:h-9 px-2 sm:px-2.5 md:px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-emerald-100 hover:text-white border border-white/20 transition-all cursor-pointer flex items-center gap-1.5 text-xs font-semibold whitespace-nowrap shrink-0 active:scale-95"
               title={language === 'ar' ? 'مشاركة هذه المحادثة مع الزملاء أو المشرفين' : language === 'fr' ? 'Partager cette discussion' : 'Share this conversation with colleagues or supervisors'}
             >
-              <Share2 className="w-3.5 h-3.5 text-emerald-300" />
-              <span className="hidden sm:inline">{language === 'ar' ? 'مشاركة' : language === 'fr' ? 'Partager' : 'Share'}</span>
+              <Share2 className="w-3.5 h-3.5 text-emerald-300 shrink-0" />
+              <span className="hidden md:inline">{language === 'ar' ? 'مشاركة' : language === 'fr' ? 'Partager' : 'Share'}</span>
               {shareRequestsCount > 0 && (
-                <span className="w-4 h-4 rounded-full bg-emerald-400 text-[#132A1F] text-[10px] font-bold flex items-center justify-center">
+                <span className="w-4 h-4 rounded-full bg-emerald-400 text-[#132A1F] text-[10px] font-bold flex items-center justify-center shrink-0">
                   {shareRequestsCount}
                 </span>
               )}
@@ -304,22 +320,103 @@ export const ListenerChatInterface = ({
             <button
               id="listener-end-discussion-x-btn"
               onClick={() => setIsConfirmCloseModalOpen(true)}
-              className="px-2.5 py-1.5 rounded-xl bg-red-900/30 hover:bg-red-800/50 text-red-200 hover:text-white border border-red-500/30 transition-all cursor-pointer flex items-center gap-1.5 text-xs font-semibold"
+              className="h-8 sm:h-9 px-2 sm:px-2.5 md:px-3 py-1.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 hover:text-white border border-rose-400/30 transition-all cursor-pointer flex items-center gap-1.5 text-xs font-semibold whitespace-nowrap shrink-0 active:scale-95"
               title={language === 'ar' ? 'إنهاء هذه المحادثة' : language === 'fr' ? 'Terminer cette discussion' : 'End this conversation'}
             >
-              <X className="w-3.5 h-3.5 text-red-300" />
-              <span className="hidden sm:inline">{language === 'ar' ? 'إنهاء المحادثة' : language === 'fr' ? 'Terminer la discussion' : 'End Discussion'}</span>
+              <X className="w-3.5 h-3.5 text-rose-300 shrink-0" />
+              <span className="hidden md:inline">{language === 'ar' ? 'إنهاء' : language === 'fr' ? 'Terminer' : 'End'}</span>
             </button>
           )}
 
+          {/* More Options Menu (⋮) */}
+          <div className="relative" ref={moreMenuRef}>
+            <button
+              id="listener-more-options-btn"
+              type="button"
+              onClick={() => setIsMoreMenuOpen((prev) => !prev)}
+              className={`h-8 sm:h-9 w-8 sm:w-9 rounded-xl transition-all cursor-pointer flex items-center justify-center shrink-0 border ${
+                isMoreMenuOpen
+                  ? 'bg-white/25 text-white border-white/40 shadow-xs'
+                  : 'bg-white/10 hover:bg-white/20 text-emerald-100 hover:text-white border-white/20 active:scale-95'
+              }`}
+              title={language === 'ar' ? 'خيارات إضافية' : language === 'fr' ? 'Plus d\'options' : 'More options'}
+              aria-label="More options"
+              aria-expanded={isMoreMenuOpen}
+            >
+              <MoreVertical className="w-4 h-4" />
+            </button>
+
+            {isMoreMenuOpen && (
+              <div 
+                id="listener-more-options-dropdown"
+                className="absolute right-0 rtl:right-auto rtl:left-0 top-full mt-2 w-56 sm:w-60 bg-white text-[#1C3227] rounded-2xl shadow-xl border border-[#E3DDD1] py-1.5 z-50 animate-in fade-in zoom-in-95 duration-100"
+              >
+                <button
+                  id="listener-more-report-btn"
+                  type="button"
+                  onClick={() => {
+                    setIsMoreMenuOpen(false);
+                    setReportPreselectedMsgId(null);
+                    setIsReportModalOpen(true);
+                  }}
+                  className="w-full px-3.5 py-2.5 text-start flex items-center gap-2.5 hover:bg-rose-50 text-xs font-semibold text-rose-700 transition-colors cursor-pointer"
+                >
+                  <Flag className="w-4 h-4 text-rose-500 shrink-0" />
+                  <span>
+                    {language === 'ar' 
+                      ? 'إبلاغ مسؤول المستمعين' 
+                      : language === 'fr' 
+                      ? 'Signaler cette discussion' 
+                      : 'Report to Head of Listeners'}
+                  </span>
+                </button>
+
+                {!isExcluded && (
+                  <button
+                    id="listener-more-share-btn"
+                    type="button"
+                    onClick={() => {
+                      setIsMoreMenuOpen(false);
+                      setIsShareModalOpen(true);
+                    }}
+                    className="w-full px-3.5 py-2.5 text-start flex items-center gap-2.5 hover:bg-[#F2ECE3] text-xs font-medium text-[#2E4A3A] transition-colors cursor-pointer sm:hidden"
+                  >
+                    <Share2 className="w-4 h-4 text-[#3C6450] shrink-0" />
+                    <span>
+                      {language === 'ar' 
+                        ? 'مشاركة المحادثة' 
+                        : language === 'fr' 
+                        ? 'Partager la discussion' 
+                        : 'Share Conversation'}
+                    </span>
+                  </button>
+                )}
+
+                {isClosed && (
+                  <div className="px-3.5 py-2 text-[11px] text-[#69796F] border-t border-[#EAE4D9]">
+                    {language === 'ar' ? 'تم إغلاق هذه الجلسة وأرشفتها.' : language === 'fr' ? 'Cette session est fermée et archivée.' : 'This session is closed and archived.'}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           {isExcluded && (
-            <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-amber-900/40 text-amber-200 border border-amber-500/30 text-xs font-medium">
+            <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-amber-900/40 text-amber-200 border border-amber-500/30 text-xs font-medium shrink-0">
               <Lock className="w-3 h-3 text-amber-300" />
-              <span>{language === 'ar' ? 'تم التحويل (سجل سابق)' : language === 'fr' ? 'Transfert (historique)' : 'Handover (Past Record)'}</span>
+              <span>{language === 'ar' ? 'تم التحويل' : language === 'fr' ? 'Transfert' : 'Handover'}</span>
             </div>
           )}
         </div>
       </header>
+
+      {/* Real-time Voice Call Overlay (Incoming Modal / Ringing Banner / Active In-Call Screen) */}
+      <VoiceCallOverlay
+        discussion={discussion}
+        currentRole="listener"
+        currentUserId={currentListener.id}
+        currentUserName={currentListener.name}
+      />
 
       {/* Participant transparency bar */}
       <ConversationParticipantBar discussion={discussion} />

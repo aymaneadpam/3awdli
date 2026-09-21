@@ -40,10 +40,11 @@ import {
   getDiscussionById,
   isListenerExcludedFromDiscussion,
   isFakeDiscussion,
-  getDiscussionCreatorInfo
+  getDiscussionCreatorInfo,
+  reconcileDiscussionsWithLocal,
+  DISCUSSIONS_STORAGE_KEY
 } from '../utils/discussionManagement';
 import { 
-  fetchDiscussionsFromFirestore, 
   subscribeToDiscussions 
 } from '../lib/firestoreService';
 import { 
@@ -220,37 +221,24 @@ export const DiscussionsPage = ({
   useEffect(() => {
     refreshDiscussions();
 
-    // Direct Firestore fetch on component mount
-    fetchDiscussionsFromFirestore()
-      .then((remote) => {
-        if (remote) {
-          const clean = remote.filter((d) => !isFakeDiscussion(d));
-          setDiscussions(clean);
-        }
-      })
-      .catch((err) => console.warn('DiscussionsPage direct fetch notice:', err));
-
     // Real-time Firestore subscription for instantaneous cross-device sync
+    // onSnapshot immediately delivers the current state AND watches for new discussions
     const unsubFirestore = subscribeToDiscussions((remote) => {
       if (!remote) return;
       const clean = remote.filter((d) => !isFakeDiscussion(d));
-      setDiscussions((prev) => {
-        if (
-          prev.length === clean.length &&
-          prev.every((p, i) => p.id === clean[i]?.id && p.status === clean[i]?.status && p.messages?.length === clean[i]?.messages?.length)
-        ) {
-          return prev;
-        }
-        return clean;
-      });
+      const local = getStoredDiscussions();
+      const merged = reconcileDiscussionsWithLocal(clean, local);
+      localStorage.setItem(DISCUSSIONS_STORAGE_KEY, JSON.stringify(merged));
+      setDiscussions(merged);
       setSelectedDiscussion((prev) => {
         if (!prev) return null;
-        const updated = clean.find((d) => d.id === prev.id);
+        const updated = merged.find((d) => d.id === prev.id);
         if (!updated) return null;
         if (
           prev.status === updated.status &&
           prev.messages?.length === updated.messages?.length &&
-          prev.listenerAttentionStatus === updated.listenerAttentionStatus
+          prev.listenerAttentionStatus === updated.listenerAttentionStatus &&
+          JSON.stringify(prev.activeCall) === JSON.stringify(updated.activeCall)
         ) {
           return prev;
         }
@@ -278,7 +266,8 @@ export const DiscussionsPage = ({
         if (
           prev.status === updated.status &&
           prev.messages?.length === updated.messages?.length &&
-          prev.listenerAttentionStatus === updated.listenerAttentionStatus
+          prev.listenerAttentionStatus === updated.listenerAttentionStatus &&
+          JSON.stringify(prev.activeCall) === JSON.stringify(updated.activeCall)
         ) {
           return prev;
         }
@@ -671,7 +660,7 @@ export const DiscussionsPage = ({
         {/* ------------------------------------------------------------- */}
         {selectedDiscussion ? (
           <div className="flex flex-col items-center w-full pb-8">
-            <div className="w-full max-w-[440px]">
+            <div className="w-full max-w-4xl lg:max-w-5xl xl:max-w-6xl">
               <ListenerChatInterface
                 discussion={selectedDiscussion}
                 currentListener={user}

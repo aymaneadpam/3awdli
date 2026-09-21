@@ -34,6 +34,7 @@ import {
 import { GenderPreferenceTag } from './GenderPreferenceTag';
 import { ConversationParticipantBar } from './ConversationParticipantBar';
 import { ReportDiscussionModal } from './ReportDiscussionModal';
+import { VoiceCallOverlay, CallButton } from './VoiceCallOverlay';
 import { isAnonymousSessionBlocked } from '../utils/anonymousBanManagement';
 import { User } from '../types';
 import { useLanguage } from '../context/LanguageContext';
@@ -46,6 +47,8 @@ interface AnonymousChatWidgetProps {
   genderPreference?: ListenerGenderPreference;
   onChangeGenderPreference?: () => void;
   currentUser?: User | null;
+  onRequestTalkOpenly?: () => void;
+  onAutoOpenCall?: () => void;
 }
 
 export const AnonymousChatWidget = ({
@@ -56,6 +59,8 @@ export const AnonymousChatWidget = ({
   genderPreference = 'any',
   onChangeGenderPreference,
   currentUser,
+  onRequestTalkOpenly,
+  onAutoOpenCall,
 }: AnonymousChatWidgetProps) => {
   const { language } = useLanguage();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -247,7 +252,11 @@ export const AnonymousChatWidget = ({
       'user'
     );
 
+    // Thoroughly clear active discussion references immediately
+    clearActiveDiscussionReferences(currentDiscussion.id, currentDiscussion.userId || currentUser?.id);
+
     if (res.success && res.discussion) {
+      currentDiscussionRef.current = res.discussion;
       setCurrentDiscussion(res.discussion);
       setMessages(res.discussion.messages || []);
       setIsClosed(true);
@@ -259,19 +268,60 @@ export const AnonymousChatWidget = ({
     }
   };
 
+  // Start a fresh new discussion unconditionally from within the widget
+  const handleStartNewDiscussion = () => {
+    // Thoroughly clear all references to the closed discussion
+    clearActiveDiscussionReferences(currentDiscussion?.id, currentDiscussion?.userId || currentUser?.id);
+    setCurrentDiscussion(null);
+    currentDiscussionRef.current = null;
+    setIsClosed(false);
+    setAttentionStatus(null);
+    setActiveListenerName(null);
+    setInputText('');
+
+    if (onRequestTalkOpenly) {
+      onRequestTalkOpenly();
+    } else {
+      // Direct unconditional creation of a brand new discussion
+      let newDisc: DiscussionConversation;
+      if (currentUser) {
+        newDisc = createNewDiscussion('registered', {
+          userId: currentUser.id,
+          userName: currentUser.name,
+          userEmail: currentUser.email,
+          genderPreference,
+        });
+      } else {
+        newDisc = createNewDiscussion('anonymous', { genderPreference });
+      }
+      currentDiscussionRef.current = newDisc;
+      setCurrentDiscussion(newDisc);
+      setMessages(newDisc.messages || [
+        {
+          id: `msg_sys_welcome_${Date.now()}`,
+          sender: 'system',
+          text: INITIAL_DISCUSSION_SYSTEM_MESSAGE,
+          timestamp: 'Just now',
+          timestampMs: Date.now(),
+        },
+      ]);
+      setIsClosed(false);
+      setAttentionStatus(null);
+      setActiveListenerName(null);
+    }
+  };
+
   // Dismiss / close chat widget from user side (only available once conversation is concluded)
   const handleCloseWidget = () => {
     if (onClose) {
       onClose();
     }
     // Clean up active discussion pointers for this closed discussion permanently
-    if (currentDiscussion) {
-      clearActiveDiscussionReferences(currentDiscussion.id, currentDiscussion.userId);
-    } else {
-      clearActiveDiscussionReferences();
-    }
+    clearActiveDiscussionReferences(currentDiscussion?.id, currentDiscussion?.userId || currentUser?.id);
+
     // Reset local state so next opening is completely clean
     setCurrentDiscussion(null);
+    currentDiscussionRef.current = null;
     setMessages([
       {
         id: `msg_sys_init_${Date.now()}`,
@@ -304,6 +354,7 @@ export const AnonymousChatWidget = ({
         existing.userEmail = currentUser.email;
         saveStoredDiscussions([existing], existing);
       }
+      currentDiscussionRef.current = existing;
       setCurrentDiscussion(existing);
       setMessages(existing.messages || []);
       setIsClosed(false);
@@ -315,6 +366,7 @@ export const AnonymousChatWidget = ({
     // Previous discussion was closed or no active discussion exists:
     // Create a completely fresh, separate discussion record in the database,
     // starting with ONLY the single opening system message
+    clearActiveDiscussionReferences(undefined, currentUser?.id);
     let newDisc: DiscussionConversation;
     if (currentUser) {
       newDisc = createNewDiscussion('registered', {
@@ -326,6 +378,7 @@ export const AnonymousChatWidget = ({
     } else {
       newDisc = createNewDiscussion('anonymous', { genderPreference });
     }
+    currentDiscussionRef.current = newDisc;
     setCurrentDiscussion(newDisc);
     setMessages(newDisc.messages || [
       {
@@ -412,18 +465,36 @@ export const AnonymousChatWidget = ({
     const syncFromStorage = () => {
       const curDisc = currentDiscussionRef.current;
       const curUser = currentUserRef.current;
-      const targetId = curDisc?.id || (curUser ? getActiveUserDiscussionId(curUser.id) : getActiveAnonymousDiscussionId());
-      if (!targetId) return;
+
+      // CRITICAL: If the current discussion is already closed, do NOT re-fetch it from storage
+      // and do NOT re-lock the widget onto it!
+      if (curDisc && curDisc.status === 'closed') {
+        return;
+      }
+
+      const activeId = curDisc?.id || (curUser ? getActiveUserDiscussionId(curUser.id) : getActiveAnonymousDiscussionId());
+      if (!activeId) return;
       const all = getStoredDiscussions();
-      const disc = all.find((d) => d.id === targetId);
+      const disc = all.find((d) => d.id === activeId);
       if (disc) {
         const newlyClosed = disc.status === 'closed';
         setIsClosed(newlyClosed);
         if (newlyClosed) {
           setAttentionStatus(null);
+          // When a discussion is detected as closed, clear its storage pointers immediately
+          clearActiveDiscussionReferences(disc.id, disc.userId || curUser?.id);
         } else {
           setAttentionStatus(disc.listenerAttentionStatus || null);
           setActiveListenerName(disc.openedByListenerName || null);
+        }
+
+        // If an incoming call arrives for a registered user while chat is closed, open the widget
+        if (disc.activeCall?.status === 'ringing' && disc.activeCall?.callerRole === 'listener' && !isOpen) {
+          if (onAutoOpenCall) {
+            onAutoOpenCall();
+          } else {
+            onOpen();
+          }
         }
 
         setCurrentDiscussion((prev) => {
@@ -433,7 +504,8 @@ export const AnonymousChatWidget = ({
             prev.status === disc.status &&
             prev.messages?.length === disc.messages?.length &&
             prev.listenerAttentionStatus === disc.listenerAttentionStatus &&
-            prev.openedByListenerName === disc.openedByListenerName
+            prev.openedByListenerName === disc.openedByListenerName &&
+            JSON.stringify(prev.activeCall) === JSON.stringify(disc.activeCall)
           ) {
             return prev;
           }
@@ -463,6 +535,7 @@ export const AnonymousChatWidget = ({
       const customEvt = e as CustomEvent<{ discussion: DiscussionConversation }>;
       if (customEvt.detail?.discussion) {
         const disc = customEvt.detail.discussion;
+        currentDiscussionRef.current = disc;
         setCurrentDiscussion(disc);
         setMessages(disc.messages || []);
         setIsClosed(false);
@@ -474,12 +547,22 @@ export const AnonymousChatWidget = ({
     };
     window.addEventListener('3awdli_open_new_discussion', handleOpenNew);
 
+    const handleCleared = () => {
+      if (currentDiscussionRef.current?.status === 'closed') {
+        currentDiscussionRef.current = null;
+        setCurrentDiscussion(null);
+        setIsClosed(false);
+      }
+    };
+    window.addEventListener('3awdli_active_discussion_cleared', handleCleared);
+
     const interval = setInterval(syncFromStorage, 1000);
 
     return () => {
       window.removeEventListener('3awdli_discussion_sync', handleSync);
       window.removeEventListener('storage', handleSync);
       window.removeEventListener('3awdli_open_new_discussion', handleOpenNew);
+      window.removeEventListener('3awdli_active_discussion_cleared', handleCleared);
       clearInterval(interval);
     };
   }, []);
@@ -607,7 +690,7 @@ export const AnonymousChatWidget = ({
         className="fixed bottom-6 right-6 z-50 flex items-center gap-3"
       >
         <button
-          onClick={onOpen}
+          onClick={onRequestTalkOpenly || onOpen}
           className="group flex items-center gap-3 px-5 py-3.5 bg-[#315243] hover:bg-[#274236] text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-0.5 focus:outline-none focus:ring-4 focus:ring-[#315243]/20 cursor-pointer"
           id="floating-chat-trigger"
           title={currentUser ? "Talk Openly with 3awdli" : "Talk Anonymously with 3awdli"}
@@ -724,6 +807,15 @@ export const AnonymousChatWidget = ({
               </button>
             ) : (
               <>
+                {currentDiscussion && currentUser && (
+                  <CallButton
+                    discussion={currentDiscussion}
+                    currentRole="user"
+                    currentUserId={currentUser.id}
+                    currentUserName={currentUser.name}
+                  />
+                )}
+
                 <button
                   id="anon-report-discussion-btn"
                   onClick={(e) => {
@@ -762,6 +854,16 @@ export const AnonymousChatWidget = ({
             </div>
           </div>
         </header>
+
+        {/* Real-time Voice Call Overlay (Incoming Modal / Ringing Banner / Active In-Call Screen) */}
+        {currentDiscussion && (
+          <VoiceCallOverlay
+            discussion={currentDiscussion}
+            currentRole="user"
+            currentUserId={currentUser?.id || currentDiscussion.userId || 'anonymous_user'}
+            currentUserName={currentUser?.name || currentDiscussion.userName || 'Anonymous Visitor'}
+          />
+        )}
 
         {/* Dynamic Participants Bar (User, Active Listener, Co-Listener, Excluded Profile) - Hidden when keyboard is open on mobile */}
         {currentDiscussion && !isKeyboardOpen && (
@@ -945,6 +1047,15 @@ export const AnonymousChatWidget = ({
               </div>
               <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
                 <button
+                  id="chat-closed-start-new-btn"
+                  onClick={handleStartNewDiscussion}
+                  className="px-3.5 py-2 bg-[#315243] hover:bg-[#253E33] text-white text-xs font-semibold rounded-xl transition-all cursor-pointer inline-flex items-center gap-1.5 shadow-xs"
+                  title={currentUser ? "Talk Openly Again" : "Start New Discussion"}
+                >
+                  <MessageCircle className="w-3.5 h-3.5" />
+                  <span>{currentUser ? (language === 'ar' ? 'محادثة جديدة' : language === 'fr' ? 'Parler à cœur ouvert' : 'Talk Openly Again') : (language === 'ar' ? 'بدء محادثة جديدة' : language === 'fr' ? 'Démarrer une nouvelle discussion' : 'Start New Discussion')}</span>
+                </button>
+                <button
                   id="chat-closed-dismiss-btn"
                   onClick={handleCloseWidget}
                   className="px-3.5 py-2 bg-[#EDE7DE] hover:bg-[#E1D9CD] text-[#2C4134] text-xs font-semibold rounded-xl transition-all cursor-pointer inline-flex items-center gap-1.5 shadow-2xs border border-[#D5CDBD]"
@@ -1013,37 +1124,59 @@ export const AnonymousChatWidget = ({
                 )}
               </div>
               {currentUser || currentDiscussion?.type === 'registered' ? (
-                <button
-                  id="chat-footer-close-btn"
-                  type="button"
-                  onClick={handleCloseWidget}
-                  className="w-full py-2.5 px-3 bg-[#EDE8E0] hover:bg-[#E2DDD3] text-[#283C30] text-xs font-semibold rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer border border-[#DDD5C7]"
-                  title={language === 'ar' ? 'إغلاق النافذة' : language === 'fr' ? 'Fermer la fenêtre' : 'Close Window'}
-                >
-                  <X className="w-3.5 h-3.5" />
-                  <span>{language === 'ar' ? 'إغلاق النافذة' : language === 'fr' ? 'Fermer la fenêtre' : 'Close Window'}</span>
-                </button>
-              ) : (
                 <div className="flex items-center gap-2">
+                  <button
+                    id="chat-footer-start-new-btn"
+                    type="button"
+                    onClick={handleStartNewDiscussion}
+                    className="flex-1 py-2.5 px-3 bg-[#315243] hover:bg-[#253E33] text-white text-xs font-semibold rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+                    title={currentUser ? "Talk Openly Again" : "Start New Discussion"}
+                  >
+                    <MessageCircle className="w-3.5 h-3.5" />
+                    <span>{currentUser ? (language === 'ar' ? 'محادثة جديدة' : language === 'fr' ? 'Parler à cœur ouvert' : 'Talk Openly Again') : (language === 'ar' ? 'بدء محادثة جديدة' : language === 'fr' ? 'Démarrer une nouvelle discussion' : 'Start New Discussion')}</span>
+                  </button>
                   <button
                     id="chat-footer-close-btn"
                     type="button"
                     onClick={handleCloseWidget}
-                    className="flex-1 py-2.5 px-3 bg-[#EDE8E0] hover:bg-[#E2DDD3] text-[#283C30] text-xs font-semibold rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer border border-[#DDD5C7]"
+                    className="py-2.5 px-3 bg-[#EDE8E0] hover:bg-[#E2DDD3] text-[#283C30] text-xs font-semibold rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer border border-[#DDD5C7]"
                     title={language === 'ar' ? 'إغلاق النافذة' : language === 'fr' ? 'Fermer la fenêtre' : 'Close Window'}
                   >
                     <X className="w-3.5 h-3.5" />
-                    <span>{language === 'ar' ? 'إغلاق النافذة' : language === 'fr' ? 'Fermer la fenêtre' : 'Close Window'}</span>
+                    <span>{language === 'ar' ? 'إغلاق' : language === 'fr' ? 'Fermer' : 'Close'}</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <button
+                    id="chat-footer-start-new-btn"
+                    type="button"
+                    onClick={handleStartNewDiscussion}
+                    className="flex-1 py-2.5 px-3 bg-[#315243] hover:bg-[#253E33] text-white text-xs font-semibold rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+                    title="Start New Discussion"
+                  >
+                    <MessageCircle className="w-3.5 h-3.5" />
+                    <span>{language === 'ar' ? 'بدء محادثة جديدة' : language === 'fr' ? 'Démarrer une nouvelle discussion' : 'Start New Discussion'}</span>
+                  </button>
+                  <button
+                    id="chat-footer-close-btn"
+                    type="button"
+                    onClick={handleCloseWidget}
+                    className="py-2.5 px-3 bg-[#EDE8E0] hover:bg-[#E2DDD3] text-[#283C30] text-xs font-semibold rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer border border-[#DDD5C7]"
+                    title={language === 'ar' ? 'إغلاق النافذة' : language === 'fr' ? 'Fermer la fenêtre' : 'Close Window'}
+                  >
+                    <X className="w-3.5 h-3.5" />
+                    <span>{language === 'ar' ? 'إغلاق' : language === 'fr' ? 'Fermer' : 'Close'}</span>
                   </button>
                   {onOpenSignUp && (
                     <button
                       id="chat-footer-create-account-btn"
                       type="button"
                       onClick={onOpenSignUp}
-                      className="flex-1 py-2.5 px-3 bg-[#315243] hover:bg-[#253E33] text-white text-xs font-semibold rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+                      className="py-2.5 px-3 bg-[#EDE8E0] hover:bg-[#E2DDD3] text-[#283C30] text-xs font-semibold rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer border border-[#DDD5C7]"
                     >
                       <UserPlus className="w-3.5 h-3.5" />
-                      <span>{language === 'ar' ? 'إنشاء حساب' : language === 'fr' ? 'Créer un compte' : 'Create an Account'}</span>
+                      <span>{language === 'ar' ? 'حساب' : language === 'fr' ? 'Compte' : 'Sign Up'}</span>
                     </button>
                   )}
                 </div>

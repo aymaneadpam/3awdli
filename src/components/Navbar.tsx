@@ -28,6 +28,7 @@ import { getUnreadShareNotificationsCount } from '../utils/shareManagement';
 import { getUnreadUserMailboxCount } from '../utils/userMailboxManagement';
 import { getPendingReportsCount, getPendingTransferredReportsCount } from '../utils/reportManagement';
 import { getStoredSupportRequests } from '../utils/supportRequests';
+import { Logo } from './Logo';
 import { isSuperAdmin, isAdministrator } from '../utils/userManagement';
 import { getWaitingDiscussionsCount } from '../utils/discussionManagement';
 import { checkAndNotifyWaitingDiscussions } from '../utils/listenerNotificationService';
@@ -799,9 +800,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             className="flex items-center gap-3 text-left rtl:text-right group cursor-pointer focus:outline-none min-w-0"
             title="3awdli • Return to Home"
           >
-            <div className="w-10 h-10 rounded-2xl bg-[#315243] text-white flex items-center justify-center shadow-xs group-hover:bg-[#244133] transition-colors shrink-0">
-              <Heart className="w-5 h-5 text-emerald-200 fill-emerald-200/20" />
-            </div>
+            <Logo className="w-9 h-9 shrink-0" />
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <span className="text-xl font-bold tracking-tight text-[#1F362C] font-['Lora',serif]">
@@ -1096,17 +1095,15 @@ export const Navbar: React.FC<NavbarProps> = ({
                 type="button"
                 id="topbar-brand-logo-btn"
                 onClick={handleHome}
-                className="hidden lg:flex items-center gap-2 cursor-pointer group focus:outline-none shrink-0"
+                className="flex items-center gap-2 cursor-pointer group focus:outline-none shrink-0"
                 title="Return to 3awdli Home"
               >
-                <div className="w-8 h-8 rounded-xl bg-[#315243] text-white flex items-center justify-center shadow-xs group-hover:bg-[#244133] transition-colors">
-                  <Heart className="w-4 h-4 text-emerald-200 fill-emerald-200/20" />
-                </div>
+                <Logo className="w-7 h-7 shrink-0" />
                 <div className="flex items-center gap-1.5">
                   <span className="text-base sm:text-lg font-bold tracking-tight text-[#1F362C] font-['Lora',serif]">
                     3awdli
                   </span>
-                  <span className="inline-block text-[10px] px-1.5 py-0.2 rounded-full bg-[#E5EEE9] text-[#2F5342] font-semibold border border-[#D0E0D7]">
+                  <span className="hidden sm:inline-block text-[10px] px-1.5 py-0.2 rounded-full bg-[#E5EEE9] text-[#2F5342] font-semibold border border-[#D0E0D7]">
                     {language === 'ar' ? 'فريق الدعم' : language === 'fr' ? 'Équipe' : 'Team'}
                   </span>
                 </div>

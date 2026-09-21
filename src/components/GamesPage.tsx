@@ -7,9 +7,11 @@ import { CompanionGame } from './CompanionGame';
 import { HeartbeatGame } from './HeartbeatGame';
 import { BreathingPebbleGame } from './BreathingPebbleGame';
 import { RainLightGame } from './RainLightGame';
+import { ValsalvaGame } from './ValsalvaGame';
 import { useLanguage } from '../context/LanguageContext';
 
 interface GamesPageProps {
+  initialGameId?: string;
   currentUser?: UserAccount | null;
   onNavigateHome: () => void;
   onNavigateDashboard?: () => void;
@@ -28,6 +30,7 @@ interface GamesPageProps {
 }
 
 export const GamesPage: React.FC<GamesPageProps> = ({
+  initialGameId = 'companion',
   currentUser,
   onNavigateHome,
   onNavigateDashboard,
@@ -45,7 +48,7 @@ export const GamesPage: React.FC<GamesPageProps> = ({
   onSignOut,
 }) => {
   const { language, strings } = useLanguage();
-  const [selectedGameId, setSelectedGameId] = useState<string>('companion');
+  const [selectedGameId, setSelectedGameId] = useState<string>(initialGameId);
 
   const gamesList = [
     {
@@ -55,15 +58,21 @@ export const GamesPage: React.FC<GamesPageProps> = ({
       isAvailable: true,
     },
     {
-      id: 'heartbeat',
-      title: strings.games?.heartbeatTitle || (language === 'ar' ? 'مُوائم نبضات القلب' : language === 'fr' ? 'Harmoniseur de Pulsations' : 'Heartbeat Rhythm'),
-      tag: language === 'ar' ? 'إيقاع السكينة' : language === 'fr' ? 'Rythme' : 'Rhythm',
-      isAvailable: true,
-    },
-    {
       id: 'breathing_pebble',
       title: strings.games?.breathingPebbleTitle || (language === 'ar' ? 'تأمل الحصاة والتنفس' : language === 'fr' ? 'Méditation du Galet' : 'Breathing Pals'),
       tag: language === 'ar' ? 'تنفس موجه' : language === 'fr' ? 'Respiration' : 'Breathing',
+      isAvailable: true,
+    },
+    {
+      id: 'valsalva',
+      title: language === 'ar' ? 'تقنية فالسالفا' : language === 'fr' ? 'Technique de Valsalva' : 'Valsalva Technique',
+      tag: language === 'ar' ? 'تهدئة العصب المبهم' : language === 'fr' ? 'Régulation' : 'Vagus Reset',
+      isAvailable: true,
+    },
+    {
+      id: 'heartbeat',
+      title: strings.games?.heartbeatTitle || (language === 'ar' ? 'مُوائم نبضات القلب' : language === 'fr' ? 'Harmoniseur de Pulsations' : 'Heartbeat Rhythm'),
+      tag: language === 'ar' ? 'إيقاع السكينة' : language === 'fr' ? 'Rythme' : 'Rhythm',
       isAvailable: true,
     },
     {
@@ -152,6 +161,7 @@ export const GamesPage: React.FC<GamesPageProps> = ({
           {selectedGameId === 'companion' && <CompanionGame />}
           {selectedGameId === 'heartbeat' && <HeartbeatGame />}
           {selectedGameId === 'breathing_pebble' && <BreathingPebbleGame />}
+          {selectedGameId === 'valsalva' && <ValsalvaGame />}
           {selectedGameId === 'rain_light' && <RainLightGame />}
         </div>
 

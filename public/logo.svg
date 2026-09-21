@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <!-- 3awdli Official Logo: Handshake Heart -->
+  <g id="heart-handshake-logo">
+    <!-- Heart Background with Mint Green Border -->
+    <path
+      d="M256 460 C236 442 70 320 70 195 C70 115 130 65 205 65 C235 65 250 80 256 92 C262 80 277 65 307 65 C382 65 442 115 442 195 C442 320 276 442 256 460 Z"
+      fill="#163829"
+      stroke="#50E8A8"
+      stroke-width="26"
+      stroke-linejoin="round"
+    />
+
+    <!-- Upper Hand & Arm (from right) -->
+    <path
+      d="M375 140 C325 180 265 225 210 225 C185 225 180 250 195 265 C220 280 270 240 330 195"
+      fill="#163829"
+      stroke="#50E8A8"
+      stroke-width="22"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+
+    <!-- Clasping Thumb & Palm Contour -->
+    <path
+      d="M245 200 C215 220 195 240 205 270 C215 295 255 270 285 240 L370 170"
+      fill="none"
+      stroke="#50E8A8"
+      stroke-width="22"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+
+    <!-- Right Hand's Fingers (extending down-left) -->
+    <path
+      d="M295 275 L350 330"
+      stroke="#50E8A8"
+      stroke-width="22"
+      stroke-linecap="round"
+    />
+    <path
+      d="M265 305 L320 360"
+      stroke="#50E8A8"
+      stroke-width="22"
+      stroke-linecap="round"
+    />
+    <path
+      d="M235 335 L290 390"
+      stroke="#50E8A8"
+      stroke-width="22"
+      stroke-linecap="round"
+    />
+
+    <!-- Left Hand Fingers (4 rounded clasps) -->
+    <!-- Finger 1 -->
+    <rect
+      x="130"
+      y="260"
+      width="34"
+      height="70"
+      rx="17"
+      transform="rotate(-40 130 260)"
+      fill="#163829"
+      stroke="#50E8A8"
+      stroke-width="22"
+    />
+    <!-- Finger 2 -->
+    <rect
+      x="165"
+      y="295"
+      width="34"
+      height="70"
+      rx="17"
+      transform="rotate(-40 165 295)"
+      fill="#163829"
+      stroke="#50E8A8"
+      stroke-width="22"
+    />
+    <!-- Finger 3 -->
+    <rect
+      x="200"
+      y="330"
+      width="34"
+      height="70"
+      rx="17"
+      transform="rotate(-40 200 330)"
+      fill="#163829"
+      stroke="#50E8A8"
+      stroke-width="22"
+    />
+    <!-- Finger 4 -->
+    <rect
+      x="235"
+      y="365"
+      width="34"
+      height="70"
+      rx="17"
+      transform="rotate(-40 235 365)"
+      fill="#163829"
+      stroke="#50E8A8"
+      stroke-width="22"
+    />
+  </g>
+</svg>
