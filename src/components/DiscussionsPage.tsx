@@ -526,7 +526,9 @@ export const DiscussionsPage = ({
         onSignOut={onSignOut}
       >
         {/* Main Container */}
-        <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 py-8 sm:py-10">
+        <main className={`flex-1 w-full mx-auto px-2 sm:px-4 md:px-6 py-4 sm:py-6 transition-all duration-200 ${
+          selectedDiscussion ? 'max-w-[1536px] 2xl:max-w-[1680px]' : 'max-w-5xl px-4 sm:px-6 py-6 sm:py-8'
+        }`}>
         {/* Navigation Breadcrumb */}
         <div className="mb-6 flex items-center justify-between flex-wrap gap-3">
           <button
@@ -660,7 +662,7 @@ export const DiscussionsPage = ({
         {/* ------------------------------------------------------------- */}
         {selectedDiscussion ? (
           <div className="flex flex-col items-center w-full pb-8">
-            <div className="w-full max-w-4xl lg:max-w-5xl xl:max-w-6xl">
+            <div className="w-full">
               <ListenerChatInterface
                 discussion={selectedDiscussion}
                 currentListener={user}

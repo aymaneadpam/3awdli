@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
+import { useState, useEffect, useRef, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type MouseEvent as ReactMouseEvent } from 'react';
 import { 
   MessageCircle, 
   Send, 
@@ -13,7 +13,11 @@ import {
   UserPlus,
   ArrowDown,
   Flag,
-  X
+  X,
+  Maximize2,
+  Minimize2,
+  ZoomIn,
+  ZoomOut
 } from 'lucide-react';
 import { ChatMessage, ListenerGenderPreference, DiscussionConversation } from '../types';
 import { 
@@ -77,6 +81,49 @@ export const AnonymousChatWidget = ({
   const [reportPreselectedMsgId, setReportPreselectedMsgId] = useState<string | null>(null);
   const [isConfirmCloseModalOpen, setIsConfirmCloseModalOpen] = useState(false);
 
+  // User-adjustable Widget Dimensions (Width & Height)
+  const [customSize, setCustomSize] = useState<{ width: number; height: number }>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('3awdli_chat_widget_size');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed && typeof parsed.width === 'number' && typeof parsed.height === 'number') {
+            const w = Math.max(340, Math.min(parsed.width, window.innerWidth - 20));
+            const h = Math.max(480, Math.min(parsed.height, window.innerHeight - 20));
+            return { width: w, height: h };
+          }
+        }
+      } catch {}
+      const defW = Math.min(420, Math.max(360, window.innerWidth - 32));
+      const defH = Math.min(760, Math.max(540, window.innerHeight - 40));
+      return { width: defW, height: defH };
+    }
+    return { width: 420, height: 740 };
+  });
+
+  const [isResizing, setIsResizing] = useState(false);
+  const [isMaximized, setIsMaximized] = useState(false);
+  const sizeBeforeMaximizeRef = useRef<{ width: number; height: number }>({ width: 420, height: 740 });
+
+  const resizeStartRef = useRef<{
+    pointerX: number;
+    pointerY: number;
+    startWidth: number;
+    startHeight: number;
+    startPosX: number;
+    startPosY: number;
+    handle: 'top-left' | 'bottom-left' | 'bottom-right' | 'top' | 'left';
+  }>({
+    pointerX: 0,
+    pointerY: 0,
+    startWidth: 420,
+    startHeight: 740,
+    startPosX: 0,
+    startPosY: 0,
+    handle: 'top-left',
+  });
+
   // Mobile Viewport & Virtual Keyboard Detection
   const [isMobile, setIsMobile] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
@@ -127,8 +174,8 @@ export const AnonymousChatWidget = ({
           setPosition(null);
           return;
         }
-        const estimatedWidth = Math.min(365, window.innerWidth - 24);
-        const estimatedHeight = Math.min(880, window.innerHeight - 32);
+        const estimatedWidth = Math.min(customSize.width, window.innerWidth - 24);
+        const estimatedHeight = Math.min(customSize.height, window.innerHeight - 32);
         const margin = 16;
         const initialX = Math.max(margin, window.innerWidth - estimatedWidth - margin);
         const initialY = Math.max(margin, window.innerHeight - estimatedHeight - margin);
@@ -631,6 +678,157 @@ export const AnonymousChatWidget = ({
     window.addEventListener('pointercancel', handlePointerUp);
   };
 
+  // Quick size stepping (increase / decrease by discrete steps)
+  const handleStepSize = (e: ReactMouseEvent, direction: 'increase' | 'decrease') => {
+    e.stopPropagation();
+    setCustomSize((prev) => {
+      const minW = 340;
+      const maxW = Math.max(minW, window.innerWidth - 24);
+      const minH = 480;
+      const maxH = Math.max(minH, window.innerHeight - 24);
+
+      const stepW = 45;
+      const stepH = 60;
+
+      const newW = direction === 'increase'
+        ? Math.min(maxW, prev.width + stepW)
+        : Math.max(minW, prev.width - stepW);
+
+      const newH = direction === 'increase'
+        ? Math.min(maxH, prev.height + stepH)
+        : Math.max(minH, prev.height - stepH);
+
+      const updated = { width: Math.round(newW), height: Math.round(newH) };
+      try {
+        localStorage.setItem('3awdli_chat_widget_size', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    if (isMaximized) setIsMaximized(false);
+  };
+
+  // Toggle maximize / normal size
+  const handleToggleMaximize = (e: ReactMouseEvent) => {
+    e.stopPropagation();
+    if (isMaximized) {
+      const restored = sizeBeforeMaximizeRef.current;
+      setCustomSize(restored);
+      setIsMaximized(false);
+      try {
+        localStorage.setItem('3awdli_chat_widget_size', JSON.stringify(restored));
+      } catch {}
+    } else {
+      sizeBeforeMaximizeRef.current = customSize;
+      const maxW = Math.min(720, Math.max(420, window.innerWidth - 32));
+      const maxH = Math.min(940, Math.max(580, window.innerHeight - 32));
+      const maxed = { width: maxW, height: maxH };
+      setCustomSize(maxed);
+      setIsMaximized(true);
+      try {
+        localStorage.setItem('3awdli_chat_widget_size', JSON.stringify(maxed));
+      } catch {}
+    }
+  };
+
+  // Drag-to-resize pointer handler
+  const handleResizePointerDown = (
+    e: ReactPointerEvent<HTMLElement>,
+    handle: 'top-left' | 'bottom-left' | 'bottom-right' | 'top' | 'left'
+  ) => {
+    if (typeof window !== 'undefined' && window.innerWidth < 640) return;
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    const widget = widgetRef.current;
+    if (!widget) return;
+
+    const currentRect = widget.getBoundingClientRect();
+    const currentX = position ? position.x : currentRect.left;
+    const currentY = position ? position.y : currentRect.top;
+
+    resizeStartRef.current = {
+      pointerX: e.clientX,
+      pointerY: e.clientY,
+      startWidth: customSize.width,
+      startHeight: customSize.height,
+      startPosX: currentX,
+      startPosY: currentY,
+      handle,
+    };
+
+    setIsResizing(true);
+
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      const deltaX = moveEvent.clientX - resizeStartRef.current.pointerX;
+      const deltaY = moveEvent.clientY - resizeStartRef.current.pointerY;
+
+      const minW = 340;
+      const maxW = Math.max(minW, window.innerWidth - 24);
+      const minH = 480;
+      const maxH = Math.max(minH, window.innerHeight - 24);
+
+      let newWidth = resizeStartRef.current.startWidth;
+      let newHeight = resizeStartRef.current.startHeight;
+
+      if (handle === 'top-left') {
+        newWidth = Math.min(Math.max(minW, resizeStartRef.current.startWidth - deltaX), maxW);
+        newHeight = Math.min(Math.max(minH, resizeStartRef.current.startHeight - deltaY), maxH);
+        if (position) {
+          const appliedDeltaX = resizeStartRef.current.startWidth - newWidth;
+          const appliedDeltaY = resizeStartRef.current.startHeight - newHeight;
+          setPosition({
+            x: resizeStartRef.current.startPosX + appliedDeltaX,
+            y: resizeStartRef.current.startPosY + appliedDeltaY,
+          });
+        }
+      } else if (handle === 'bottom-left') {
+        newWidth = Math.min(Math.max(minW, resizeStartRef.current.startWidth - deltaX), maxW);
+        newHeight = Math.min(Math.max(minH, resizeStartRef.current.startHeight + deltaY), maxH);
+        if (position) {
+          const appliedDeltaX = resizeStartRef.current.startWidth - newWidth;
+          setPosition((prev) => prev ? { x: resizeStartRef.current.startPosX + appliedDeltaX, y: prev.y } : null);
+        }
+      } else if (handle === 'bottom-right') {
+        newWidth = Math.min(Math.max(minW, resizeStartRef.current.startWidth + deltaX), maxW);
+        newHeight = Math.min(Math.max(minH, resizeStartRef.current.startHeight + deltaY), maxH);
+      } else if (handle === 'left') {
+        newWidth = Math.min(Math.max(minW, resizeStartRef.current.startWidth - deltaX), maxW);
+        if (position) {
+          const appliedDeltaX = resizeStartRef.current.startWidth - newWidth;
+          setPosition((prev) => prev ? { x: resizeStartRef.current.startPosX + appliedDeltaX, y: prev.y } : null);
+        }
+      } else if (handle === 'top') {
+        newHeight = Math.min(Math.max(minH, resizeStartRef.current.startHeight - deltaY), maxH);
+        if (position) {
+          const appliedDeltaY = resizeStartRef.current.startHeight - newHeight;
+          setPosition((prev) => prev ? { x: prev.x, y: resizeStartRef.current.startPosY + appliedDeltaY } : null);
+        }
+      }
+
+      setCustomSize({ width: Math.round(newWidth), height: Math.round(newHeight) });
+    };
+
+    const handlePointerUp = () => {
+      setIsResizing(false);
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerUp);
+
+      setCustomSize((current) => {
+        try {
+          localStorage.setItem('3awdli_chat_widget_size', JSON.stringify(current));
+        } catch {}
+        return current;
+      });
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerUp);
+  };
+
   const handleSendMessage = (textToSend?: string) => {
     const text = (textToSend || inputText).trim();
     if (!text) return;
@@ -739,119 +937,205 @@ export const AnonymousChatWidget = ({
           ? {
               left: `${position.x}px`,
               top: `${position.y}px`,
+              width: `${customSize.width}px`,
+              height: `${customSize.height}px`,
+              maxWidth: 'calc(100vw - 20px)',
+              maxHeight: 'calc(100vh - 20px)',
               bottom: 'auto',
               right: 'auto',
             }
-          : undefined
+          : {
+              width: `${customSize.width}px`,
+              height: `${customSize.height}px`,
+              maxWidth: 'calc(100vw - 20px)',
+              maxHeight: 'calc(100vh - 20px)',
+            }
       }
-      className={`fixed z-50 sm:top-auto sm:bottom-auto sm:inset-x-auto sm:mx-0 sm:w-[365px] sm:max-w-[375px] sm:h-[880px] sm:min-h-[560px] sm:max-h-[min(94vh,890px)] flex flex-col transition-shadow duration-200 ${
-        isDragging ? 'shadow-2xl opacity-95' : 'shadow-2xl'
+      className={`fixed z-50 sm:top-auto sm:bottom-auto sm:inset-x-auto sm:mx-0 flex flex-col transition-shadow duration-200 ${
+        isDragging || isResizing ? 'shadow-2xl opacity-95 select-none' : 'shadow-2xl'
       } ${position ? '' : 'sm:bottom-6 sm:end-6'}`}
     >
+      {/* Desktop Drag-to-Resize Handles */}
+      <div
+        onPointerDown={(e) => handleResizePointerDown(e, 'top-left')}
+        className="hidden sm:flex items-center justify-center absolute -top-1.5 -left-1.5 w-6 h-6 rounded-tl-xl cursor-nwse-resize z-50 group pointer-events-auto"
+        title={language === 'ar' ? 'اسحب من الزاوية لتغيير حجم النافذة' : language === 'fr' ? "Glissez l'angle pour redimensionner la fenêtre" : 'Drag corner to resize window'}
+      >
+        <div className="w-2.5 h-2.5 border-t-2 border-l-2 border-emerald-400/80 group-hover:border-emerald-300 transition-colors" />
+      </div>
+
+      <div
+        onPointerDown={(e) => handleResizePointerDown(e, 'bottom-left')}
+        className="hidden sm:flex items-center justify-center absolute -bottom-1.5 -left-1.5 w-6 h-6 rounded-bl-xl cursor-nesw-resize z-50 group pointer-events-auto"
+        title={language === 'ar' ? 'اسحب من الزاوية لتغيير حجم النافذة' : language === 'fr' ? "Glissez l'angle pour redimensionner la fenêtre" : 'Drag corner to resize window'}
+      >
+        <div className="w-2.5 h-2.5 border-b-2 border-l-2 border-emerald-600/80 group-hover:border-emerald-400 transition-colors" />
+      </div>
+
+      <div
+        onPointerDown={(e) => handleResizePointerDown(e, 'left')}
+        className="hidden sm:block absolute top-10 bottom-10 -left-1 w-2 cursor-ew-resize z-40 hover:bg-emerald-500/30 transition-colors pointer-events-auto"
+        title={language === 'ar' ? 'اسحب لتغيير العرض' : language === 'fr' ? 'Glissez pour modifier la largeur' : 'Drag to adjust width'}
+      />
+
+      <div
+        onPointerDown={(e) => handleResizePointerDown(e, 'top')}
+        className="hidden sm:block absolute -top-1 left-10 right-10 h-2 cursor-ns-resize z-40 hover:bg-emerald-500/30 transition-colors pointer-events-auto"
+        title={language === 'ar' ? 'اسحب لتغيير الارتفاع' : language === 'fr' ? 'Glissez pour modifier la hauteur' : 'Drag to adjust height'}
+      />
+
+      {position && (
+        <div
+          onPointerDown={(e) => handleResizePointerDown(e, 'bottom-right')}
+          className="hidden sm:flex items-center justify-center absolute -bottom-1.5 -right-1.5 w-6 h-6 rounded-br-xl cursor-nwse-resize z-50 group pointer-events-auto"
+          title={language === 'ar' ? 'اسحب من الزاوية لتغيير حجم النافذة' : language === 'fr' ? "Glissez l'angle pour redimensionner" : 'Drag to resize'}
+        >
+          <div className="w-2.5 h-2.5 border-b-2 border-r-2 border-emerald-600/80 group-hover:border-emerald-400 transition-colors" />
+        </div>
+      )}
+
       <div className="bg-[#FAF8F5] border border-[#E0D9CD] rounded-2xl overflow-hidden flex flex-col h-full shadow-xl">
         {/* DRAGGABLE HEADER: User can click & drag anywhere on this bar on desktop to reposition */}
         <header
           id="chat-header-drag-handle"
           onPointerDown={handleHeaderPointerDown}
           style={{ touchAction: 'none' }}
-          className={`bg-[#315243] text-white shrink-0 flex items-center justify-between select-none transition-all ${
-            isKeyboardOpen ? 'px-3 py-1.5' : 'px-3.5 py-2.5 sm:px-4 sm:py-3'
-          } ${
+          className={`bg-[#315243] text-white shrink-0 flex items-center justify-between select-none transition-all px-3 py-2 sm:px-3.5 sm:py-2.5 ${
             isDragging ? 'cursor-grabbing bg-[#294639]' : 'sm:cursor-grab sm:hover:bg-[#2d4b3d]'
           }`}
           title={language === 'ar' ? 'انقر واسحب لتحريك نافذة المحادثة' : language === 'fr' ? 'Cliquez et glissez pour déplacer la fenêtre' : 'Click and drag to move chat window'}
         >
-          <div className="flex items-center gap-2 sm:gap-2.5 pointer-events-none">
-            <div className={`${isKeyboardOpen ? 'w-5 h-5' : 'w-7 h-7 sm:w-8 sm:h-8'} rounded-full bg-white/10 flex items-center justify-center text-emerald-200 shrink-0`}>
-              <HeartHandshake className={`${isKeyboardOpen ? 'w-3 h-3' : 'w-3.5 h-3.5 sm:w-4 sm:h-4'}`} />
+          {/* Left: Icon + Multiline Title + Sizing Quick Buttons */}
+          <div className="flex items-center gap-2 sm:gap-2.5 min-w-0 flex-1 pr-1.5">
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/10 flex items-center justify-center text-emerald-200 shrink-0 pointer-events-none">
+              <HeartHandshake className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </div>
-            <div>
-              <div className="flex items-center gap-1.5">
-                <h3 className={`${isKeyboardOpen ? 'text-xs' : 'text-xs sm:text-sm'} font-semibold tracking-wide`}>
-                  {currentUser 
-                    ? (language === 'ar' ? 'عاودلي - أذن صاغية' : language === 'fr' ? '3awdli Oreille attentive' : '3awdli Open Ear')
-                    : (language === 'ar' ? 'عاودلي - محادثة مجهولة' : language === 'fr' ? '3awdli Écoute anonyme' : '3awdli Anonymous Ear')}
-                </h3>
-                <span className={`inline-flex items-center px-1.5 py-0.2 rounded text-[9.5px] font-medium border ${
-                  isClosed
-                    ? 'bg-amber-500/20 text-amber-200 border-amber-400/30'
-                    : 'bg-emerald-500/20 text-emerald-200 border-emerald-400/30'
-                }`}>
-                  {isClosed 
-                    ? (language === 'ar' ? 'منتهية' : language === 'fr' ? 'Terminée' : 'Concluded')
-                    : (language === 'ar' ? 'نشطة' : language === 'fr' ? 'Active' : 'Active')}
-                </span>
-              </div>
-              {!isKeyboardOpen && (
-                <p className="text-[10px] sm:text-[10.5px] text-emerald-100/80 flex items-center gap-1 leading-tight">
-                  <ShieldCheck className="w-3 h-3 text-emerald-300 shrink-0" />
-                  {language === 'ar' ? 'سرية 100%' : language === 'fr' ? '100% Confidentiel' : '100% Confidential'}
-                </p>
-              )}
+            <div className="min-w-0 flex-1 pointer-events-none">
+              <h3 className="text-xs sm:text-[13px] font-semibold tracking-tight leading-tight text-white break-words min-w-0">
+                {currentUser 
+                  ? (language === 'ar' ? 'عاودلي - أذن صاغية' : language === 'fr' ? '3awdli Oreille attentive' : '3awdli Open Ear')
+                  : (language === 'ar' ? 'عاودلي - محادثة مجهولة' : language === 'fr' ? '3awdli Écoute anonyme' : '3awdli Anonymous Ear')}
+              </h3>
+            </div>
+
+            {/* Desktop Window Sizing Controls */}
+            <div 
+              className="hidden sm:flex items-center gap-0.5 bg-black/20 rounded-lg p-0.5 border border-white/10 shrink-0 pointer-events-auto"
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              <button
+                id="widget-shrink-size-btn"
+                type="button"
+                onClick={(e) => handleStepSize(e, 'decrease')}
+                className="w-5 h-5 rounded flex items-center justify-center text-emerald-100 hover:text-white hover:bg-white/20 transition-all cursor-pointer"
+                title={language === 'ar' ? 'تصغير حجم النافذة' : language === 'fr' ? 'Réduire la taille' : 'Make smaller'}
+                aria-label="Make smaller"
+              >
+                <ZoomOut className="w-3 h-3" />
+              </button>
+              <button
+                id="widget-enlarge-size-btn"
+                type="button"
+                onClick={(e) => handleStepSize(e, 'increase')}
+                className="w-5 h-5 rounded flex items-center justify-center text-emerald-100 hover:text-white hover:bg-white/20 transition-all cursor-pointer"
+                title={language === 'ar' ? 'تكبير حجم النافذة' : language === 'fr' ? 'Agrandir la taille' : 'Make bigger'}
+                aria-label="Make bigger"
+              >
+                <ZoomIn className="w-3 h-3" />
+              </button>
+              <button
+                id="widget-toggle-maximize-btn"
+                type="button"
+                onClick={handleToggleMaximize}
+                className="w-5 h-5 rounded flex items-center justify-center text-emerald-100 hover:text-white hover:bg-white/20 transition-all cursor-pointer"
+                title={
+                  isMaximized
+                    ? (language === 'ar' ? 'استعادة الحجم الطبيعي' : language === 'fr' ? 'Restaurer la taille' : 'Restore normal size')
+                    : (language === 'ar' ? 'تكبير كامل' : language === 'fr' ? 'Maximiser la fenêtre' : 'Maximize window')
+                }
+                aria-label="Toggle window size"
+              >
+                {isMaximized ? <Minimize2 className="w-3 h-3" /> : <Maximize2 className="w-3 h-3" />}
+              </button>
             </div>
           </div>
 
-          {/* Right Header Status & Drag Cue: Users can close when active or dismiss when closed */}
-          <div className="flex items-center gap-1.5 sm:gap-2">
+          {/* Right Header Status & Action Controls: Column with Top Row (Status + Call + Report) and Bottom Row (Close Discussion) */}
+          <div 
+            className="flex flex-col items-end gap-1.5 shrink-0 pointer-events-auto"
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            {/* Top row: [Active/Terminée] status pill + [Call 📞] + [Signaler ⚑] */}
+            <div className="flex items-center gap-1.5">
+              <span className={`inline-flex items-center px-1.5 sm:px-2 py-0.5 rounded-full text-[10px] font-semibold border shrink-0 whitespace-nowrap ${
+                isClosed
+                  ? 'bg-amber-500/20 text-amber-200 border-amber-400/30'
+                  : 'bg-emerald-500/20 text-emerald-200 border-emerald-400/30'
+              }`}>
+                {isClosed 
+                  ? (language === 'ar' ? 'منتهية' : language === 'fr' ? 'Terminée' : 'Concluded')
+                  : (language === 'ar' ? 'نشطة' : language === 'fr' ? 'Active' : 'Active')}
+              </span>
+
+              {!isClosed && (
+                <>
+                  {currentDiscussion && currentUser && (
+                    <CallButton
+                      discussion={currentDiscussion}
+                      currentRole="user"
+                      currentUserId={currentUser.id}
+                      currentUserName={currentUser.name}
+                      iconOnly={true}
+                    />
+                  )}
+
+                  <button
+                    id="anon-report-discussion-btn"
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setReportPreselectedMsgId(null);
+                      setIsReportModalOpen(true);
+                    }}
+                    className="px-2 py-1 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-100 border border-rose-300/30 text-[10.5px] sm:text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer shrink-0 whitespace-nowrap"
+                    title={language === 'ar' ? 'إبلاغ مسؤول المستمعين عن هذه المحادثة' : language === 'fr' ? 'Signaler cette discussion' : 'Report this discussion to Head of Listeners'}
+                  >
+                    <Flag className="w-3 h-3 text-rose-300" />
+                    <span>{language === 'ar' ? 'إبلاغ' : language === 'fr' ? 'Signaler' : 'Report'}</span>
+                  </button>
+                </>
+              )}
+            </div>
+
+            {/* Bottom row: The Close Discussion button placed DIRECTLY UNDER the Call and Report buttons */}
             {isClosed ? (
               <button
                 id="chat-header-close-dismiss-btn"
                 type="button"
                 onClick={handleCloseWidget}
-                className="px-2.5 py-1 rounded-xl bg-white/20 hover:bg-white/30 text-white text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer shadow-xs border border-white/30"
+                className="w-full flex items-center justify-center gap-1 px-2.5 py-1 rounded-lg bg-white/20 hover:bg-white/30 text-white text-[11px] font-semibold transition-all cursor-pointer shadow-xs border border-white/30 shrink-0 whitespace-nowrap active:scale-95"
                 title={language === 'ar' ? 'إغلاق وإخفاء النافذة' : language === 'fr' ? 'Fermer la fenêtre' : 'Close and dismiss chat window'}
                 aria-label="Close and dismiss chat window"
               >
-                <X className="w-3.5 h-3.5" />
-                <span>{language === 'ar' ? 'إغلاق' : language === 'fr' ? 'Fermer' : 'Close'}</span>
+                <X className="w-3 h-3" />
+                <span>{language === 'ar' ? 'إغلاق النافذة' : language === 'fr' ? 'Fermer la fenêtre' : 'Close window'}</span>
               </button>
             ) : (
-              <>
-                {currentDiscussion && currentUser && (
-                  <CallButton
-                    discussion={currentDiscussion}
-                    currentRole="user"
-                    currentUserId={currentUser.id}
-                    currentUserName={currentUser.name}
-                  />
-                )}
-
-                <button
-                  id="anon-report-discussion-btn"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setReportPreselectedMsgId(null);
-                    setIsReportModalOpen(true);
-                  }}
-                  className="px-2 py-1 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-100 border border-rose-300/30 text-[10.5px] sm:text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer"
-                  title={language === 'ar' ? 'إبلاغ مسؤول المستمعين عن هذه المحادثة' : language === 'fr' ? 'Signaler cette discussion' : 'Report this discussion to Head of Listeners'}
-                >
-                  <Flag className="w-3 h-3 text-rose-300" />
-                  <span>{language === 'ar' ? 'إبلاغ' : language === 'fr' ? 'Signaler' : 'Report'}</span>
-                </button>
-
-                <button
-                  id="user-close-chat-btn"
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setIsConfirmCloseModalOpen(true);
-                  }}
-                  className="px-2.5 py-1 rounded-xl bg-white/15 hover:bg-rose-600/80 text-white text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer shadow-xs border border-white/20"
-                  title={language === 'ar' ? 'إغلاق وإنهاء هذه المحادثة' : language === 'fr' ? 'Fermer cette conversation' : 'Close and finish this conversation'}
-                  aria-label="Close and finish this conversation"
-                >
-                  <X className="w-3.5 h-3.5" />
-                  <span>{language === 'ar' ? 'إغلاق' : language === 'fr' ? 'Fermer' : 'Close'}</span>
-                </button>
-              </>
+              <button
+                id="user-close-chat-btn"
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsConfirmCloseModalOpen(true);
+                }}
+                className="w-full flex items-center justify-center gap-1 px-2.5 py-1 rounded-lg bg-rose-600/30 hover:bg-rose-600/90 text-rose-100 hover:text-white text-[11px] font-semibold transition-all cursor-pointer shadow-xs border border-rose-400/40 shrink-0 whitespace-nowrap active:scale-95"
+                title={language === 'ar' ? 'إغلاق وإنهاء هذه المحادثة' : language === 'fr' ? 'Fermer cette discussion' : 'Close and finish this discussion'}
+                aria-label="Close and finish this conversation"
+              >
+                <X className="w-3 h-3 text-rose-200" />
+                <span>{language === 'ar' ? 'إغلاق المحادثة' : language === 'fr' ? 'Fermer la discussion' : 'Close discussion'}</span>
+              </button>
             )}
-            <div 
-              className="hidden sm:flex items-center gap-1 text-emerald-200/70 p-1 rounded hover:text-white"
-              title={language === 'ar' ? 'اسحب الشريط للتحريك' : language === 'fr' ? 'Glissez pour déplacer' : 'Click and drag header to move'}
-            >
-              <GripHorizontal className="w-4 h-4" />
-            </div>
           </div>
         </header>
 

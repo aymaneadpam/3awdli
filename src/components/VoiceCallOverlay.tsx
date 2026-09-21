@@ -321,48 +321,44 @@ export const VoiceCallOverlay: React.FC<VoiceCallOverlayProps> = ({
     return (
       <div 
         id="incoming-call-modal"
-        className="relative z-30 w-full bg-linear-to-r from-[#1D3B2C] via-[#244A37] to-[#1D3B2C] text-white px-4 py-3.5 sm:px-5 sm:py-4 border-b border-emerald-500/30 shadow-md animate-fadeIn shrink-0"
+        className="relative z-30 w-full bg-linear-to-r from-[#1D3B2C] via-[#244A37] to-[#1D3B2C] text-white px-4 py-3 sm:py-3.5 border-b border-emerald-500/30 shadow-md animate-fadeIn shrink-0 box-border"
       >
-        <div className="max-w-xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3.5">
-          <div className="flex items-center gap-3.5 text-center sm:text-left">
+        <div className="max-w-md mx-auto flex flex-col items-center justify-center gap-2.5 sm:gap-3 text-center">
+          {/* Header Row: Pulsing Phone Icon + Caller Name + Status */}
+          <div className="flex items-center gap-3">
             {/* Pulsing Phone Icon */}
-            <div className="relative">
+            <div className="relative shrink-0">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-              <div className="relative w-10 h-10 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-md">
-                <PhoneIncoming className="w-5 h-5 animate-pulse" />
+              <div className="relative w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-md">
+                <PhoneIncoming className="w-4 h-4 sm:w-5 sm:h-5 animate-pulse" />
               </div>
             </div>
 
-            <div>
-              <div className="flex items-center justify-center sm:justify-start gap-2">
-                <h4 className="font-bold text-sm tracking-wide text-white">
-                  {language === 'fr' ? 'Appel vocal entrant...' : language === 'ar' ? 'مكالمة صوتية واردة...' : 'Incoming Voice Call...'}
+            <div className="text-left rtl:text-right">
+              <div className="flex items-center gap-2">
+                <h4 className="font-bold text-sm sm:text-base text-white tracking-wide truncate max-w-[200px] sm:max-w-[260px]">
+                  {activeCall.callerName}
                 </h4>
-                <span className="text-[10.5px] px-2 py-0.5 rounded-full bg-emerald-400/20 text-emerald-200 border border-emerald-300/30 font-medium">
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-400/20 text-emerald-200 border border-emerald-300/30 font-medium shrink-0">
                   {language === 'fr' ? 'En attente' : language === 'ar' ? 'يرن' : 'Ringing'}
                 </span>
               </div>
-              <p className="text-xs text-emerald-100/85 mt-0.5">
-                <strong className="font-semibold text-white">{activeCall.callerName}</strong>{' '}
-                {language === 'fr' 
-                  ? 'souhaite démarrer un échange vocal en direct' 
-                  : language === 'ar'
-                  ? 'يرغب في بدء محادثة صوتية معك'
-                  : 'wishes to start a live voice conversation'}
+              <p className="text-xs text-emerald-200/90 font-medium">
+                {language === 'fr' ? 'Appel vocal entrant...' : language === 'ar' ? 'مكالمة صوتية واردة...' : 'Incoming Voice Call...'}
               </p>
             </div>
           </div>
 
-          {/* Action Buttons: Accept & Decline */}
-          <div className="flex items-center gap-2.5 w-full sm:w-auto justify-center">
+          {/* Action Buttons: Accept & Decline side-by-side with equal, clean proportions */}
+          <div className="flex items-center gap-2.5 w-full max-w-xs sm:max-w-sm justify-center">
             <button
               id="voice-call-decline-btn"
               type="button"
               onClick={handleDecline}
-              className="flex-1 sm:flex-initial px-4 py-2 rounded-xl bg-rose-600/90 hover:bg-rose-700 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95"
+              className="flex-1 px-4 py-2 rounded-xl bg-rose-600/90 hover:bg-rose-700 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95 whitespace-nowrap"
               title={language === 'fr' ? 'Refuser l\'appel' : language === 'ar' ? 'رفض المكالمة' : 'Decline call'}
             >
-              <PhoneOff className="w-3.5 h-3.5" />
+              <PhoneOff className="w-3.5 h-3.5 shrink-0" />
               <span>{language === 'fr' ? 'Refuser' : language === 'ar' ? 'رفض' : 'Decline'}</span>
             </button>
 
@@ -370,10 +366,10 @@ export const VoiceCallOverlay: React.FC<VoiceCallOverlayProps> = ({
               id="voice-call-accept-btn"
               type="button"
               onClick={handleAccept}
-              className="flex-1 sm:flex-initial px-5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-[#0F291C] text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-md cursor-pointer active:scale-95 animate-pulse"
+              className="flex-1 px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-[#0F291C] text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-md cursor-pointer active:scale-95 animate-pulse whitespace-nowrap"
               title={language === 'fr' ? 'Accepter l\'appel et activer le micro' : language === 'ar' ? 'قبول المكالمة وتفعيل الصوت' : 'Accept call & enable audio'}
             >
-              <PhoneCall className="w-3.5 h-3.5" />
+              <PhoneCall className="w-3.5 h-3.5 shrink-0" />
               <span>{language === 'fr' ? 'Accepter' : language === 'ar' ? 'قبول' : 'Accept'}</span>
             </button>
           </div>
@@ -389,10 +385,10 @@ export const VoiceCallOverlay: React.FC<VoiceCallOverlayProps> = ({
     return (
       <div 
         id="outgoing-call-bar"
-        className="w-full bg-[#203D2E] text-white px-4 py-3 sm:px-5 border-b border-emerald-600/30 shadow-xs animate-fadeIn shrink-0"
+        className="w-full bg-[#203D2E] text-white px-3 py-2.5 sm:px-4 border-b border-emerald-600/30 shadow-xs animate-fadeIn shrink-0 box-border overflow-hidden"
       >
-        <div className="max-w-xl mx-auto flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3 min-w-0">
+        <div className="w-full flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 min-w-0 flex-1 basis-auto">
             <div className="relative shrink-0">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60" />
               <div className="relative w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center">
@@ -400,16 +396,16 @@ export const VoiceCallOverlay: React.FC<VoiceCallOverlayProps> = ({
               </div>
             </div>
 
-            <div className="truncate">
-              <div className="flex items-center gap-2">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-xs font-bold text-white truncate">
                   {language === 'fr' ? 'Appel en cours...' : language === 'ar' ? 'جارٍ الاتصال...' : 'Calling...'}
                 </span>
-                <span className="text-[10px] text-emerald-200/80">
+                <span className="text-[10px] text-emerald-200/80 shrink-0">
                   ({language === 'fr' ? 'sonnerie en cours' : language === 'ar' ? 'يرن الآن' : 'ringing'})
                 </span>
                 {webrtcStatus.connectionState === 'mic-ready' && (
-                  <span className="text-[9.5px] px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 font-medium hidden sm:inline-block">
+                  <span className="text-[9.5px] px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 font-medium shrink-0">
                     Mic Ready
                   </span>
                 )}
@@ -425,10 +421,10 @@ export const VoiceCallOverlay: React.FC<VoiceCallOverlayProps> = ({
             id="voice-call-cancel-btn"
             type="button"
             onClick={handleHangUp}
-            className="px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold flex items-center gap-1.5 transition-all shrink-0 cursor-pointer shadow-xs active:scale-95"
+            className="px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold flex items-center gap-1.5 transition-all shrink-0 cursor-pointer shadow-xs active:scale-95 ml-auto"
             title={language === 'fr' ? 'Annuler l\'appel' : language === 'ar' ? 'إلغاء الاتصال' : 'Cancel call'}
           >
-            <PhoneOff className="w-3.5 h-3.5" />
+            <PhoneOff className="w-3.5 h-3.5 shrink-0" />
             <span>{language === 'fr' ? 'Annuler' : language === 'ar' ? 'إلغاء' : 'Cancel'}</span>
           </button>
         </div>
@@ -448,42 +444,42 @@ export const VoiceCallOverlay: React.FC<VoiceCallOverlayProps> = ({
     return (
       <div 
         id="active-voice-call-bar"
-        className="w-full bg-[#1A3326] text-white border-b border-emerald-500/40 px-3.5 py-2.5 sm:px-5 sm:py-3 shadow-md animate-fadeIn shrink-0"
+        className="w-full bg-[#1A3326] text-white border-b border-emerald-500/40 px-3 py-2 sm:px-4 sm:py-2.5 shadow-md animate-fadeIn shrink-0 box-border overflow-hidden"
       >
-        <div className="max-w-3xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2.5">
+        <div className="w-full flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
           {/* Active Call Info: Other person + Pulse + Live Timer + Connection Indicator */}
-          <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-start">
-            <div className="flex items-center gap-2.5">
-              <div className="relative">
+          <div className="flex items-center gap-2 sm:gap-2.5 min-w-0 flex-1 basis-auto">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="relative shrink-0">
                 <span className={`w-2.5 h-2.5 rounded-full inline-block ${isConnected ? 'bg-emerald-400 animate-pulse' : isConnecting ? 'bg-amber-400 animate-pulse' : 'bg-rose-400'}`} />
                 {isConnected && (
                   <span className="absolute -top-0.5 -left-0.5 w-3.5 h-3.5 rounded-full bg-emerald-400/40 animate-ping" />
                 )}
               </div>
 
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-white tracking-wide">
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-xs font-bold text-white tracking-wide truncate max-w-[120px] sm:max-w-[180px]">
                     {otherPartyName}
                   </span>
 
                   {/* WebRTC Audio State Tag */}
                   {isConnected ? (
-                    <span className="text-[9.5px] px-1.5 py-0.2 rounded-full bg-emerald-500/25 text-emerald-200 border border-emerald-400/40 font-medium flex items-center gap-1">
+                    <span className="text-[9.5px] px-1.5 py-0.2 rounded-full bg-emerald-500/25 text-emerald-200 border border-emerald-400/40 font-medium flex items-center gap-1 shrink-0">
                       <Radio className="w-2.5 h-2.5 text-emerald-300 animate-pulse" />
-                      <span>{language === 'fr' ? 'Audio en direct' : language === 'ar' ? 'صوت مباشر' : 'Live Audio'}</span>
+                      <span>{language === 'fr' ? 'En direct' : language === 'ar' ? 'مباشر' : 'Live Audio'}</span>
                     </span>
                   ) : isConnecting ? (
-                    <span className="text-[9.5px] px-1.5 py-0.2 rounded-full bg-amber-500/25 text-amber-200 border border-amber-400/40 font-medium flex items-center gap-1">
+                    <span className="text-[9.5px] px-1.5 py-0.2 rounded-full bg-amber-500/25 text-amber-200 border border-amber-400/40 font-medium flex items-center gap-1 shrink-0">
                       <RefreshCw className="w-2.5 h-2.5 text-amber-300 animate-spin" />
-                      <span>{language === 'fr' ? 'Connexion audio...' : language === 'ar' ? 'ربط الصوت...' : 'Connecting Audio...'}</span>
+                      <span>{language === 'fr' ? 'Connexion...' : language === 'ar' ? 'ربط...' : 'Connecting...'}</span>
                     </span>
                   ) : isReconnecting ? (
-                    <span className="text-[9.5px] px-1.5 py-0.2 rounded-full bg-amber-600/30 text-amber-200 border border-amber-400/40 font-medium">
+                    <span className="text-[9.5px] px-1.5 py-0.2 rounded-full bg-amber-600/30 text-amber-200 border border-amber-400/40 font-medium shrink-0">
                       {language === 'fr' ? 'Reconnexion...' : language === 'ar' ? 'إعادة الاتصال...' : 'Reconnecting...'}
                     </span>
                   ) : isFailed ? (
-                    <span className="text-[9.5px] px-1.5 py-0.2 rounded-full bg-rose-500/30 text-rose-200 border border-rose-400/40 font-medium flex items-center gap-1">
+                    <span className="text-[9.5px] px-1.5 py-0.2 rounded-full bg-rose-500/30 text-rose-200 border border-rose-400/40 font-medium flex items-center gap-1 shrink-0">
                       <AlertCircle className="w-2.5 h-2.5 text-rose-300" />
                       <span>{language === 'fr' ? 'Relais limité' : language === 'ar' ? 'محدود' : 'Relay Limited'}</span>
                     </span>
@@ -491,44 +487,40 @@ export const VoiceCallOverlay: React.FC<VoiceCallOverlayProps> = ({
                 </div>
 
                 <div className="flex items-center gap-1.5 text-[11px] text-emerald-200/90 font-mono">
-                  <Clock className="w-3 h-3 text-emerald-300" />
-                  <span>{formatCallDuration(callDurationSeconds)}</span>
+                  <Clock className="w-3 h-3 text-emerald-300 shrink-0" />
+                  <span className="shrink-0">{formatCallDuration(callDurationSeconds)}</span>
                   {isMutedLocally && (
-                    <span className="ml-1 text-amber-300 font-sans text-[10px] font-semibold">
-                      • {language === 'fr' ? 'Micro coupé' : language === 'ar' ? 'الميكروفون مكتوم' : 'Microphone Muted'}
+                    <span className="ml-1 text-amber-300 font-sans text-[10px] font-semibold shrink-0">
+                      • {language === 'fr' ? 'Micro coupé' : language === 'ar' ? 'مكتوم' : 'Muted'}
                     </span>
                   )}
                 </div>
               </div>
             </div>
 
-            {/* Hint that chat remains accessible below & headphone advice */}
-            <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-800/50 text-[11px] text-emerald-200 border border-emerald-600/40">
-              <Headphones className="w-3.5 h-3.5 text-emerald-300 shrink-0" />
+            {/* Headphone note on wide screens */}
+            <div className="hidden 2xl:flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-emerald-800/50 text-[10.5px] text-emerald-200 border border-emerald-600/40 shrink-0 ml-1">
+              <Headphones className="w-3 h-3 text-emerald-300 shrink-0" />
               <span>
                 {language === 'fr' 
-                  ? 'Écouteurs conseillés pour éliminer l’écho' 
+                  ? 'Écouteurs conseillés' 
                   : language === 'ar' 
-                  ? 'يُفضّل استخدام سماعات الرأس لمنع الصدى' 
-                  : 'Headphones recommended to eliminate echo'}
+                  ? 'يُفضّل استخدام سماعات الرأس' 
+                  : 'Headphones recommended'}
               </span>
             </div>
-
-            <span className="hidden md:inline-block lg:hidden text-[10.5px] text-emerald-300/60 ml-2">
-              {language === 'fr' ? 'Messagerie disponible ci-dessous' : language === 'ar' ? 'المحادثة النصية متاحة بالأسفل' : 'Chat is active below'}
-            </span>
           </div>
 
-          {/* Call Controls: Join Audio (if idle) / Mute / Hang Up */}
-          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+          {/* Call Controls: Join Audio (if idle) / Diagnostics / Mute / Hang Up */}
+          <div className="flex items-center flex-wrap gap-1.5 sm:gap-2 shrink-0 max-w-full justify-end ml-auto">
             {webrtcStatus.connectionState === 'idle' ? (
               <button
                 id="voice-call-join-btn"
                 type="button"
                 onClick={handleJoinActiveCall}
-                className="px-3.5 py-1.5 rounded-xl bg-emerald-400 hover:bg-emerald-300 text-[#12241A] text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-md active:scale-95"
+                className="h-8 px-2.5 sm:px-3 py-1 rounded-xl bg-emerald-400 hover:bg-emerald-300 text-[#12241A] text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-95 shrink-0 whitespace-nowrap"
               >
-                <Phone className="w-3.5 h-3.5 fill-current" />
+                <Phone className="w-3 h-3 fill-current shrink-0" />
                 <span>{language === 'fr' ? 'Rejoindre l\'audio' : language === 'ar' ? 'الانضمام للصوت' : 'Join Audio Call'}</span>
               </button>
             ) : (
@@ -538,11 +530,11 @@ export const VoiceCallOverlay: React.FC<VoiceCallOverlayProps> = ({
                   id="voice-call-diagnostics-btn"
                   type="button"
                   onClick={() => setShowDiagnosticModal(true)}
-                  className="px-2.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-emerald-200 hover:text-white border border-white/20 text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer"
+                  className="h-8 px-2 sm:px-2.5 py-1 rounded-xl bg-white/10 hover:bg-white/20 text-emerald-200 hover:text-white border border-white/20 text-xs font-medium flex items-center gap-1 transition-all cursor-pointer shrink-0 whitespace-nowrap"
                   title="Test microphone, speakers & WebRTC network"
                 >
-                  <Activity className="w-3.5 h-3.5 text-emerald-300" />
-                  <span className="hidden md:inline text-[11px]">
+                  <Activity className="w-3.5 h-3.5 text-emerald-300 shrink-0" />
+                  <span className="hidden xl:inline text-[11px]">
                     {language === 'fr' ? 'Statut audio' : language === 'ar' ? 'فحص الصوت' : 'Audio Status'}
                   </span>
                 </button>
@@ -552,21 +544,21 @@ export const VoiceCallOverlay: React.FC<VoiceCallOverlayProps> = ({
                   id="voice-call-mute-toggle-btn"
                   type="button"
                   onClick={handleToggleMute}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-95 border ${
+                  className={`h-8 px-2.5 sm:px-3 py-1 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-95 border shrink-0 whitespace-nowrap ${
                     isMutedLocally
                       ? 'bg-amber-600/90 hover:bg-amber-600 text-white border-amber-400/50 ring-2 ring-amber-400/30'
-                      : 'bg-white/10 hover:bg-white/20 text-emerald-100 border-white/20'
+                      : 'bg-white/10 hover:bg-white/20 text-emerald-100 hover:text-white border-white/20'
                   }`}
                   title={isMutedLocally ? 'Unmute microphone' : 'Mute microphone'}
                 >
                   {isMutedLocally ? (
                     <>
-                      <MicOff className="w-3.5 h-3.5 text-amber-200" />
-                      <span>{language === 'fr' ? 'Micro désactivé' : language === 'ar' ? 'مكتوم' : 'Muted'}</span>
+                      <MicOff className="w-3.5 h-3.5 text-amber-200 shrink-0" />
+                      <span>{language === 'fr' ? 'Micro coupé' : language === 'ar' ? 'مكتوم' : 'Muted'}</span>
                     </>
                   ) : (
                     <>
-                      <Mic className="w-3.5 h-3.5 text-emerald-300" />
+                      <Mic className="w-3.5 h-3.5 text-emerald-300 shrink-0" />
                       <span>{language === 'fr' ? 'Couper micro' : language === 'ar' ? 'كتم' : 'Mute'}</span>
                     </>
                   )}
@@ -579,25 +571,25 @@ export const VoiceCallOverlay: React.FC<VoiceCallOverlayProps> = ({
               id="voice-call-hang-up-btn"
               type="button"
               onClick={handleHangUp}
-              className="px-4 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-md active:scale-95"
+              className="h-8 px-3 sm:px-3.5 py-1 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-95 shrink-0 whitespace-nowrap"
               title={language === 'fr' ? 'Raccrocher et terminer l\'appel' : language === 'ar' ? 'إنهاء المكالمة' : 'Hang up call'}
             >
-              <PhoneOff className="w-3.5 h-3.5" />
-              <span>{language === 'fr' ? 'Raccrocher' : language === 'ar' ? 'إنهاء المكالمة' : 'Hang Up'}</span>
+              <PhoneOff className="w-3.5 h-3.5 shrink-0" />
+              <span>{language === 'fr' ? 'Raccrocher' : language === 'ar' ? 'إنهاء' : 'Hang Up'}</span>
             </button>
           </div>
         </div>
 
         {/* Real-time error notice if permission denied or relay failed */}
         {webrtcStatus.error && dismissedError !== webrtcStatus.error && (
-          <div className="max-w-3xl mx-auto mt-2 bg-rose-950/80 border border-rose-500/40 rounded-xl px-3 py-1.5 text-xs text-rose-200 flex items-center justify-between gap-2">
+          <div className="w-full mt-2 bg-rose-950/80 border border-rose-500/40 rounded-xl px-3 py-1.5 text-xs text-rose-200 flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <AlertCircle className="w-3.5 h-3.5 text-rose-300 shrink-0" />
               <span>{webrtcStatus.error}</span>
             </div>
             <button 
               onClick={() => setDismissedError(webrtcStatus.error)}
-              className="text-rose-300 hover:text-white p-0.5 rounded cursor-pointer"
+              className="text-rose-300 hover:text-white p-0.5 rounded cursor-pointer shrink-0"
             >
               <X className="w-3.5 h-3.5" />
             </button>
@@ -753,6 +745,8 @@ export interface CallButtonProps {
   currentUserId: string;
   currentUserName: string;
   className?: string;
+  compact?: boolean;
+  iconOnly?: boolean;
 }
 
 export const CallButton: React.FC<CallButtonProps> = ({
@@ -761,6 +755,8 @@ export const CallButton: React.FC<CallButtonProps> = ({
   currentUserId,
   currentUserName,
   className = '',
+  compact = false,
+  iconOnly = false,
 }) => {
   const { language } = useLanguage();
   const isEligible = canStartVoiceCall(discussion);
@@ -798,13 +794,41 @@ export const CallButton: React.FC<CallButtonProps> = ({
     }
   };
 
+  if (iconOnly) {
+    return (
+      <button
+        id="chat-initiate-voice-call-btn"
+        type="button"
+        onClick={handleClick}
+        disabled={isOngoing}
+        className={`h-7 w-7 rounded-lg flex items-center justify-center shrink-0 transition-all cursor-pointer ${
+          isOngoing
+            ? 'bg-emerald-500/30 text-emerald-200 border border-emerald-400/50 cursor-default animate-pulse'
+            : 'bg-emerald-500 hover:bg-emerald-600 text-white border border-emerald-400/40 active:scale-95 shadow-xs'
+        } ${className}`}
+        title={
+          isOngoing
+            ? (language === 'fr' ? 'Appel vocal en cours' : language === 'ar' ? 'مكالمة صوتية جارية' : 'Voice call in progress')
+            : (language === 'fr' ? 'Démarrer un appel vocal' : language === 'ar' ? 'بدء مكالمة صوتية' : 'Start voice call')
+        }
+        aria-label="Start Voice Call"
+      >
+        <Phone className="w-3.5 h-3.5 text-white shrink-0" />
+      </button>
+    );
+  }
+
   return (
     <button
       id="chat-initiate-voice-call-btn"
       type="button"
       onClick={handleClick}
       disabled={isOngoing}
-      className={`h-8 sm:h-9 px-2 sm:px-2.5 md:px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 shrink-0 whitespace-nowrap transition-all cursor-pointer ${
+      className={`${
+        compact
+          ? 'h-7 px-2 py-0.5 rounded-lg text-[11px] gap-1'
+          : 'h-8 px-2 sm:px-2.5 py-1 rounded-xl text-xs gap-1.5'
+      } font-semibold flex items-center shrink-0 whitespace-nowrap transition-all cursor-pointer ${
         isOngoing
           ? 'bg-emerald-500/30 text-emerald-200 border border-emerald-400/50 cursor-default animate-pulse'
           : 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-100 hover:text-white border border-emerald-400/35 active:scale-95'
@@ -816,10 +840,12 @@ export const CallButton: React.FC<CallButtonProps> = ({
       }
       aria-label="Start Voice Call"
     >
-      <Phone className="w-3.5 h-3.5 text-emerald-300 shrink-0" />
-      <span className="hidden md:inline">
+      <Phone className={`${compact ? 'w-3 h-3' : 'w-3.5 h-3.5'} text-emerald-300 shrink-0`} />
+      <span className="hidden sm:inline">
         {isOngoing
           ? (language === 'fr' ? 'En appel' : language === 'ar' ? 'في مكالمة' : 'In Call')
+          : compact
+          ? (language === 'fr' ? 'Appel' : language === 'ar' ? 'اتصال' : 'Call')
           : (language === 'fr' ? 'Appel vocal' : language === 'ar' ? 'اتصال صوتي' : 'Voice Call')}
       </span>
     </button>
