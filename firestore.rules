@@ -28,6 +28,12 @@ service cloud.firestore {
       allow update, delete: if true;
     }
 
+    // Chat Schedules: Publicly viewable listening window availability, editable by administrators
+    match /chat_schedules/{scheduleId} {
+      allow read: if true;
+      allow create, update, delete: if true;
+    }
+
     // Discussions: Safe anonymous and registered live listening sessions
     match /discussions/{discussionId} {
       allow read: if true;

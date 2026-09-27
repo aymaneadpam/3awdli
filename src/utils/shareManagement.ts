@@ -6,6 +6,7 @@ import {
   fetchShareRequestsFromFirestore,
   subscribeToShareRequests
 } from '../lib/firestoreService';
+import { formatSiteTime, formatSiteDateTime } from './timezoneManagement';
 
 const SHARE_REQUESTS_STORAGE_KEY = '3awdli_share_requests';
 const ONLINE_USERS_STORAGE_KEY = '3awdli_online_users';
@@ -215,13 +216,7 @@ export function createShareRequest(data: {
 }): ConversationShareRequest {
   const allRequests = getStoredShareRequests();
   const now = new Date();
-  const formattedTime = now.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
+  const formattedTime = formatSiteDateTime(now);
 
   const newRequest: ConversationShareRequest = {
     id: `share_req_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
@@ -373,7 +368,7 @@ export function denyShareRequest(
     return { success: false, error: 'This request has already been responded to.' };
   }
 
-  const nowFormatted = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const nowFormatted = formatSiteTime();
 
   req.status = 'denied';
   req.responseType = 'denied';
@@ -403,7 +398,7 @@ export function acceptShareRequestJoin(
     return { success: false, error: 'This request has already been responded to.' };
   }
 
-  const nowFormatted = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const nowFormatted = formatSiteTime();
 
   // Update discussion to add recipient as joined listener
   const joinRes = joinDiscussion(req.discussionId, recipientUser);
@@ -438,7 +433,7 @@ export function acceptShareRequestTakeover(
     return { success: false, error: 'This request has already been responded to.' };
   }
 
-  const nowFormatted = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const nowFormatted = formatSiteTime();
 
   // Take over discussion and exclude original listener
   const takeoverRes = takeoverDiscussion(

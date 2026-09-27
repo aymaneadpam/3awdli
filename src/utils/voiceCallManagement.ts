@@ -4,6 +4,7 @@
 import { DiscussionConversation, DiscussionVoiceCall, ChatMessage, UserAccount } from '../types';
 import { getStoredDiscussions, saveStoredDiscussions } from './discussionManagement';
 import { saveDiscussionToFirestore } from '../lib/firestoreService';
+import { formatSiteTime } from './timezoneManagement';
 
 export const CALL_RINGING_TIMEOUT_MS = 30000; // ~30 seconds timeout
 
@@ -112,8 +113,8 @@ export function acceptVoiceCall(
   const systemMsg: ChatMessage = {
     id: `call_msg_start_${now}`,
     sender: 'system',
-    text: `📞 Voice call connected • ${new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
-    timestamp: 'Just now',
+    text: `📞 Voice call connected • ${formatSiteTime(now)}`,
+    timestamp: formatSiteTime(now),
     timestampMs: now,
   };
   discussion.messages = [...(discussion.messages || []), systemMsg];

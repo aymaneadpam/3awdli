@@ -1,4 +1,5 @@
 import { LoungeArticle, UserAccount } from '../types';
+import { formatSiteDateReadable, formatSiteTime } from './timezoneManagement';
 import { 
   fetchLoungeArticlesFromFirestore, 
   saveLoungeArticleToFirestore, 
@@ -151,11 +152,7 @@ export async function createLoungeArticle(
     authorId: author.id,
     authorName: author.name || 'Administrator',
     authorEmail: author.email,
-    createdAt: new Date(now).toLocaleDateString(undefined, {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    }),
+    createdAt: formatSiteDateReadable(now),
     createdAtTimestamp: now,
   };
 
@@ -189,11 +186,7 @@ export async function updateLoungeArticle(
   const updatedItem: LoungeArticle = {
     ...current[index],
     ...updates,
-    updatedAt: new Date().toLocaleDateString(undefined, {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    }),
+    updatedAt: formatSiteDateReadable(Date.now()),
     updatedAtTimestamp: Date.now(),
   };
 
@@ -227,11 +220,7 @@ export async function hideLoungeArticle(
   const hiddenArticle: LoungeArticle = {
     ...current[index],
     is_hidden: true,
-    hiddenAt: new Date(now).toLocaleDateString(undefined, {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    }),
+    hiddenAt: formatSiteDateReadable(now),
     hiddenAtTimestamp: now,
     hiddenBy: hiddenByUserId,
   };
@@ -266,11 +255,7 @@ export async function republishLoungeArticle(id: string): Promise<LoungeArticle 
     hiddenAt: undefined,
     hiddenAtTimestamp: undefined,
     hiddenBy: undefined,
-    updatedAt: new Date(now).toLocaleDateString(undefined, {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    }),
+    updatedAt: formatSiteDateReadable(now),
     updatedAtTimestamp: now,
   };
 
@@ -352,10 +337,7 @@ export function formatScheduledDateTime(timestamp: number): string {
     d.getMonth() === tomorrow.getMonth() &&
     d.getDate() === tomorrow.getDate();
 
-  const timeStr = d.toLocaleTimeString(undefined, {
-    hour: 'numeric',
-    minute: '2-digit',
-  });
+  const timeStr = formatSiteTime(d);
 
   if (isToday) {
     return `Today at ${timeStr}`;
@@ -364,11 +346,7 @@ export function formatScheduledDateTime(timestamp: number): string {
     return `Tomorrow at ${timeStr}`;
   }
 
-  const dateStr = d.toLocaleDateString(undefined, {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-  });
+  const dateStr = formatSiteDateReadable(d);
   return `${dateStr}, ${timeStr}`;
 }
 

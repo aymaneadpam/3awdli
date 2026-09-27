@@ -1,6 +1,7 @@
 import { DiscussionReport, DiscussionReportReply, AdminReportReply, ReportSanction, ChatMessage, DiscussionConversation, UserAccount } from '../types';
 import { getStoredUsers } from './userManagement';
 import { addUserMailboxMessage } from './userMailboxManagement';
+import { formatSiteTime, formatSiteDateReadable } from './timezoneManagement';
 
 const REPORTS_STORAGE_KEY = '3awdli_discussion_reports';
 
@@ -73,12 +74,8 @@ export function createDiscussionReport(params: {
 }): DiscussionReport {
   const { discussion, reportedMessages, reason, reporterUser } = params;
   const now = new Date();
-  const dateStr = now.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
-  const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const dateStr = formatSiteDateReadable(now);
+  const timeStr = formatSiteTime(now);
 
   const isListenerReporter = reporterUser?.role === 'listener' || 
     reporterUser?.role === 'head_of_listeners' || 
@@ -142,12 +139,8 @@ export function replyToDiscussionReport(
 
   const report = reports[index];
   const now = new Date();
-  const dateStr = now.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
-  const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const dateStr = formatSiteDateReadable(now);
+  const timeStr = formatSiteTime(now);
   const formattedTime = `${dateStr} • ${timeStr}`;
 
   const newReply: DiscussionReportReply = {
@@ -240,12 +233,8 @@ export function transferReportToAdministrator(params: {
 
   const report = reports[index];
   const now = new Date();
-  const dateStr = now.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
-  const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const dateStr = formatSiteDateReadable(now);
+  const timeStr = formatSiteTime(now);
   const formattedTime = `${dateStr} • ${timeStr}`;
 
   const updatedReport: DiscussionReport = {
@@ -316,12 +305,8 @@ export function replyToHeadOfListeners(params: {
   }
 
   const now = new Date();
-  const dateStr = now.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
-  const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const dateStr = formatSiteDateReadable(now);
+  const timeStr = formatSiteTime(now);
   const formattedTime = `${dateStr} • ${timeStr}`;
 
   const adminReply: AdminReportReply = {
@@ -401,12 +386,8 @@ export function addReportSanction(
 
   const report = reports[index];
   const now = new Date();
-  const dateStr = now.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
-  const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const dateStr = formatSiteDateReadable(now);
+  const timeStr = formatSiteTime(now);
   const formattedTime = `${dateStr} • ${timeStr}`;
 
   const newSanction: ReportSanction = {

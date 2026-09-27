@@ -6,6 +6,7 @@ import {
   UserAccount,
 } from '../types';
 import { userLeaveLoungeRoom } from './loungeQueueManagement';
+import { formatSiteTime } from './timezoneManagement';
 
 const LOUNGE_ROOM_STORAGE_PREFIX = '3awdli_lounge_room_';
 
@@ -160,10 +161,7 @@ export function getStoredLoungeRoomData(articleId: string): LoungeRoomData {
         colorName: HOST_GOLD_COLOR.name,
         text: 'Welcome to this live circle session! Glad to have you here. Please feel free to share your reflections and join the conversation.',
         timestamp: Date.now() - 60000,
-        formattedTime: new Date(Date.now() - 60000).toLocaleTimeString(undefined, {
-          hour: 'numeric',
-          minute: '2-digit',
-        }),
+        formattedTime: formatSiteTime(Date.now() - 60000),
       },
     ],
   };
@@ -374,10 +372,7 @@ export function sendLoungeChatMessage(
     colorName,
     text: trimmed,
     timestamp: now,
-    formattedTime: new Date(now).toLocaleTimeString(undefined, {
-      hour: 'numeric',
-      minute: '2-digit',
-    }),
+    formattedTime: formatSiteTime(now),
   };
 
   const updated: LoungeRoomData = {

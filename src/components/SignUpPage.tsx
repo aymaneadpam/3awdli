@@ -16,6 +16,7 @@ import { firebaseRegisterUser, firebaseSignInWithGoogle } from '../lib/firestore
 import { getStoredUsers, saveStoredUsers, setCurrentUser } from '../utils/userManagement';
 import { Navbar } from './Navbar';
 import { useLanguage } from '../context/LanguageContext';
+import { formatSiteTime } from '../utils/timezoneManagement';
 
 interface SignUpPageProps {
   onSuccess: (user: UserAccount) => void;
@@ -79,7 +80,7 @@ export const SignUpPage = ({
           sender: 'team',
           senderName: 'Dr. Leila • Clinical Psychologist',
           text: `Welcome to your personal space, ${activeUser.name}. Everything you share here is private and automatically preserved in our real-time database so you can return whenever life feels overwhelming. Whenever you are ready, feel free to tell us what is on your mind.`,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          timestamp: formatSiteTime(),
         };
         localStorage.setItem(initialChatsKey, JSON.stringify([welcomeMessage]));
       }
@@ -174,7 +175,7 @@ export const SignUpPage = ({
           sender: 'team',
           senderName: 'Dr. Leila • Clinical Psychologist',
           text: `Welcome to your personal space, ${trimmedName}. Everything you share here is private and automatically preserved in our real-time database so you can return whenever life feels overwhelming. Whenever you are ready, feel free to tell us what is on your mind.`,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          timestamp: formatSiteTime(),
         };
         localStorage.setItem(initialChatsKey, JSON.stringify([welcomeMessage]));
       }

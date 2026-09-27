@@ -8,7 +8,8 @@ import {
   DiscussionReport
 } from '../types';
 import { Language } from './translations';
-import { verifyListenerKeyCode, getStoredUsers, StoredUser } from './userManagement';
+import { formatSiteTime } from './timezoneManagement';
+import { verifyListenerKeyCode, getStoredUsers, StoredUser, isFakeUser } from './userManagement';
 import { getShareRequestsForDiscussion, getStoredShareRequests } from './shareManagement';
 import {
   saveDiscussionToFirestore,
@@ -276,6 +277,65 @@ export function isListenerFree(listenerId?: string | null): boolean {
   return !hasActiveConversation;
 }
 
+/**
+ * Retrieves all valid registered listeners and heads of listeners from stored users.
+ */
+export function getAllPlatformListeners(): StoredUser[] {
+  const users = getStoredUsers();
+  return users.filter((u) => {
+    if (isFakeUser(u)) return false;
+    if (u.is_banned) return false;
+    return Boolean(u.is_listener || u.isListener || u.role === 'listener' || u.is_head_of_listeners);
+  });
+}
+
+/**
+ * Checks whether there is currently at least one Listener who is free (not in an active 'opened' conversation).
+ * If a genderPreference is specified (male or female), checks if at least one listener
+ * matching that preference is free (if any exist for that gender), otherwise checks all listeners.
+ */
+export function hasAtLeastOneFreeListener(genderPreference?: ListenerGenderPreference): boolean {
+  const listeners = getAllPlatformListeners();
+  if (listeners.length === 0) {
+    return false;
+  }
+
+  // If a specific gender was chosen, prioritize checking matching listeners if any exist
+  if (genderPreference && genderPreference !== 'any') {
+    const targetGender = genderPreference === 'female' ? 'Female' : 'Male';
+    const matchingListeners = listeners.filter((l) => l.gender?.toLowerCase() === targetGender.toLowerCase());
+    if (matchingListeners.length > 0) {
+      return matchingListeners.some((l) => isListenerFree(l.id));
+    }
+  }
+
+  return listeners.some((listener) => isListenerFree(listener.id));
+}
+
+export const ALL_LISTENERS_BUSY_MESSAGE: Record<Language, string> = {
+  en: "All of our listeners are currently in other conversations. Your message has been received, and someone will join you as soon as they're free. Thank you for your patience.",
+  fr: "Tous nos écoutants sont actuellement en conversation. Votre message a bien été reçu et quelqu'un vous rejoindra dès qu'il se libérera. Merci pour votre patience.",
+  ar: "جميع مستمعينا منشغلون حالياً في محادثات أخرى. لقد تم استلام رسالتك، وسينضم إليك أحد مستمعينا بمجرد أن يتفرغ. شكراً جزيلاً لصبرك وتفهمك.",
+};
+
+export function getAllListenersBusyNotice(language: Language = 'en'): string {
+  return ALL_LISTENERS_BUSY_MESSAGE[language] || ALL_LISTENERS_BUSY_MESSAGE.en;
+}
+
+export function getCurrentStoredLanguage(): Language {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      const saved = localStorage.getItem('app_language');
+      if (saved === 'en' || saved === 'fr' || saved === 'ar') {
+        return saved;
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return 'en';
+}
+
 export interface DiscussionCreatorInfo {
   isRegistered: boolean;
   name: string;
@@ -457,7 +517,7 @@ export function sendListenerMessage(
     senderName: listenerName,
     senderId: listenerId,
     text: text.trim(),
-    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    timestamp: formatSiteTime(nowMs),
     timestampMs: nowMs,
   };
 
@@ -529,7 +589,7 @@ export function closeDiscussion(
   }
 
   const disc = all[index];
-  const nowFormatted = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const nowFormatted = formatSiteTime();
 
   disc.status = 'closed';
   disc.closedAt = `Today at ${nowFormatted}`;
@@ -676,7 +736,7 @@ export function reopenDiscussionByUser(
   }
 
   const disc = all[index];
-  const nowFormatted = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const nowFormatted = formatSiteTime();
   const nowMs = Date.now();
 
   const userMsgWithMs: ChatMessage = {
@@ -819,7 +879,7 @@ export function openDiscussionWithKey(
     };
   }
 
-  const nowFormatted = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const nowFormatted = formatSiteTime();
   const nowMs = Date.now();
 
   const isReopenedFromUnavail = Boolean(currentDisc.listenerUnavailable);
@@ -918,7 +978,7 @@ export function recordLiveDiscussionMessage(
   }
 }
 
-// Create a brand new isolated discussion initialized with ONLY the system opening message
+// Create a brand new isolated discussion initialized with system opening message(s)
 export function createNewDiscussion(
   type: 'anonymous' | 'registered',
   params?: {
@@ -926,13 +986,14 @@ export function createNewDiscussion(
     userName?: string;
     userEmail?: string;
     genderPreference?: ListenerGenderPreference;
+    language?: Language;
   }
 ): DiscussionConversation {
   // Clear any existing active references before registering brand new discussion
   clearActiveDiscussionReferences(undefined, params?.userId);
 
   const nowMs = Date.now();
-  const nowFormatted = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const nowFormatted = formatSiteTime(nowMs);
   const uniqueId = type === 'anonymous'
     ? `disc_anon_${nowMs}_${Math.random().toString(36).substring(2, 7)}`
     : `disc_reg_${params?.userId || 'user'}_${nowMs}_${Math.random().toString(36).substring(2, 5)}`;
@@ -945,6 +1006,22 @@ export function createNewDiscussion(
     timestampMs: nowMs,
   };
 
+  const initialMessages: ChatMessage[] = [initialSystemMsg];
+
+  // Check whether there is currently at least one Listener who is free (not in an active conversation)
+  const isAnyListenerAvailable = hasAtLeastOneFreeListener(params?.genderPreference);
+  if (!isAnyListenerAvailable) {
+    const lang = params?.language || getCurrentStoredLanguage();
+    const busyNoticeText = getAllListenersBusyNotice(lang);
+    initialMessages.push({
+      id: `msg_sys_busy_${nowMs + 1}`,
+      sender: 'system',
+      text: busyNoticeText,
+      timestamp: nowFormatted,
+      timestampMs: nowMs + 1,
+    });
+  }
+
   const newDisc: DiscussionConversation = {
     id: uniqueId,
     type,
@@ -955,7 +1032,8 @@ export function createNewDiscussion(
     startedAtTimestamp: nowMs,
     status: 'unopened',
     genderPreference: params?.genderPreference || 'any',
-    messages: [initialSystemMsg],
+    allListenersBusyOnCreate: !isAnyListenerAvailable,
+    messages: initialMessages,
   };
 
   const all = getStoredDiscussions();
@@ -1081,7 +1159,7 @@ export function joinDiscussion(
 
   const disc = all[index];
   const nowMs = Date.now();
-  const nowFormatted = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const nowFormatted = formatSiteTime(nowMs);
 
   disc.joinedListenerId = newListener.id;
   disc.joinedListenerName = newListener.name;
@@ -1124,7 +1202,7 @@ export function takeoverDiscussion(
 
   const disc = all[index];
   const nowMs = Date.now();
-  const nowFormatted = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const nowFormatted = formatSiteTime(nowMs);
 
   // Locate details of original listener if available
   const allUsers = getStoredUsers();

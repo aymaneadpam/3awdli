@@ -20,7 +20,8 @@ import {
   Coffee,
   BookOpen,
   Inbox,
-  Globe
+  Globe,
+  CalendarClock
 } from 'lucide-react';
 import { AuthMode, UserAccount, ViewState } from '../types';
 import { useLanguage } from '../context/LanguageContext';
@@ -33,6 +34,8 @@ import { isSuperAdmin, isAdministrator } from '../utils/userManagement';
 import { getWaitingDiscussionsCount } from '../utils/discussionManagement';
 import { checkAndNotifyWaitingDiscussions } from '../utils/listenerNotificationService';
 import { ConnectedTeamIndicator } from './ConnectedTeamIndicator';
+import { ChatScheduleBanner } from './ChatScheduleBanner';
+import { useChatSchedule } from '../utils/scheduleManagement';
 
 export interface NavbarProps {
   children?: React.ReactNode;
@@ -64,6 +67,8 @@ export interface NavbarProps {
   onOpenLounge?: () => void;
   onNavigateRules?: () => void;
   onOpenRules?: () => void;
+  onNavigateSchedules?: () => void;
+  onOpenSchedules?: () => void;
   onOpenContactSupport?: () => void;
   onOpenEmergencyModal?: () => void;
   onOpenAuth?: (mode: AuthMode) => void;
@@ -117,6 +122,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenLounge,
   onNavigateRules,
   onOpenRules,
+  onNavigateSchedules,
+  onOpenSchedules,
   onOpenContactSupport,
   onOpenEmergencyModal,
   onOpenAuth,
@@ -390,6 +397,12 @@ export const Navbar: React.FC<NavbarProps> = ({
     else if (onOpenRules) onOpenRules();
   };
 
+  const handleSchedules = () => {
+    closeSidebarOnMobile();
+    if (onNavigateSchedules) onNavigateSchedules();
+    else if (onOpenSchedules) onOpenSchedules();
+  };
+
   const handleSupport = () => {
     closeSidebarOnMobile();
     if (onOpenContactSupport) onOpenContactSupport();
@@ -641,6 +654,22 @@ export const Navbar: React.FC<NavbarProps> = ({
     });
   }
 
+  // Schedules (Horaires) - Open chat windows & availability for all users
+  if (onNavigateSchedules || onOpenSchedules) {
+    navItems.push({
+      id: 'sidebar-nav-schedules',
+      label: strings.nav.schedules || (language === 'fr' ? 'Horaires' : language === 'ar' ? 'المواعيد' : 'Schedules'),
+      description: language === 'fr' 
+        ? 'Créneaux d\'ouverture & permanences d\'écoute' 
+        : language === 'ar'
+        ? 'أوقات ومواعيد فتح محادثات الاستماع'
+        : 'Open chat availability & listening shifts',
+      icon: CalendarClock,
+      isActive: currentView === 'schedules',
+      onClick: handleSchedules,
+    });
+  }
+
   // Rules (Règlement) - Positioned directly before "Contact Support", available to all users (including visitors)
   if (onNavigateRules || onOpenRules) {
     navItems.push({
@@ -749,6 +778,8 @@ export const Navbar: React.FC<NavbarProps> = ({
         return strings.nav.reports;
       case 'rules':
         return strings.nav.rules || (language === 'fr' ? 'Réglement' : language === 'ar' ? 'القوانين' : 'Rules');
+      case 'schedules':
+        return strings.nav.schedules || (language === 'fr' ? 'Horaires' : language === 'ar' ? 'المواعيد' : 'Schedules');
       default:
         return null;
     }
@@ -1202,6 +1233,11 @@ export const Navbar: React.FC<NavbarProps> = ({
             )}
           </div>
         </header>
+
+        {/* Chat Schedule Status Message Banner */}
+        {currentView !== 'schedules' && (onNavigateSchedules || onOpenSchedules) && (
+          <ChatScheduleBanner onNavigateSchedules={handleSchedules} />
+        )}
 
         {/* Page Content passed as children */}
         {children ? (

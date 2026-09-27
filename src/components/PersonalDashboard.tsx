@@ -32,6 +32,7 @@ interface PersonalDashboardProps {
   onNavigateTeenSpace?: () => void;
   onNavigateLounge?: () => void;
   onNavigateRules?: () => void;
+  onNavigateSchedules?: () => void;
   onNavigateMailbox?: () => void;
   onNavigateReports?: () => void;
   onNavigateAdminReports?: () => void;
@@ -52,6 +53,7 @@ export const PersonalDashboard: React.FC<PersonalDashboardProps> = ({
   onNavigateTeenSpace,
   onNavigateLounge,
   onNavigateRules,
+  onNavigateSchedules,
   onNavigateMailbox,
   onNavigateReports,
   onNavigateAdminReports,
@@ -154,6 +156,7 @@ export const PersonalDashboard: React.FC<PersonalDashboardProps> = ({
       onNavigateTeenSpace={onNavigateTeenSpace}
       onNavigateLounge={onNavigateLounge}
       onNavigateRules={onNavigateRules}
+      onNavigateSchedules={onNavigateSchedules}
       onNavigateMailbox={onNavigateMailbox}
       onNavigateReports={onNavigateReports}
       onNavigateAdminReports={onNavigateAdminReports}

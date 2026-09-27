@@ -51,6 +51,14 @@ import { initFirestoreLoungeArticlesSync } from './utils/loungeManagement';
 import { initFirestoreTeenSpaceArticlesSync } from './utils/teenSpaceManagement';
 import { initFirestoreRulesSync } from './utils/rulesManagement';
 import { subscribeToAuthState, firebaseSignOut } from './lib/firestoreService';
+import { SchedulesPage } from './components/SchedulesPage';
+import { ChatClosedModal } from './components/ChatClosedModal';
+import { 
+  useChatSchedule, 
+  isChatCurrentlyOpen, 
+  initFirestoreSchedulesSync 
+} from './utils/scheduleManagement';
+import { initFirestoreTimezoneSync } from './utils/timezoneManagement';
 
 const DEFAULT_DEMO_LISTENER: UserAccount = {
   id: 'listener_demo',
@@ -107,6 +115,17 @@ function resolveInitialRouteState(): { view: ViewState; token: string; email: st
     ) {
       return { view: 'rules', token: '', email: '' };
     }
+
+    if (
+      view === 'schedules' || 
+      view === 'horaires' || 
+      pathname.includes('/schedules') || 
+      pathname.includes('/horaires') || 
+      window.location.hash.includes('schedules') || 
+      window.location.hash.includes('horaires')
+    ) {
+      return { view: 'schedules', token: '', email: '' };
+    }
   } catch (err) {
     console.warn('URL parsing error in resolveInitialRouteState:', err);
   }
@@ -133,6 +152,10 @@ export default function App() {
     }
   });
 
+  // Schedules state and closed chat modal
+  const scheduleState = useChatSchedule();
+  const [isChatClosedModalOpen, setIsChatClosedModalOpen] = useState(false);
+
   const [resetPasswordToken, setResetPasswordToken] = useState<string>(initialRoute.token);
   const [resetPasswordEmail, setResetPasswordEmail] = useState<string>(initialRoute.email);
   const [signInPrefillEmail, setSignInPrefillEmail] = useState<string>('');
@@ -149,6 +172,9 @@ export default function App() {
         window.scrollTo({ top: 0, behavior: 'smooth' });
       } else if (route.view === 'rules') {
         setCurrentView('rules');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else if (route.view === 'schedules') {
+        setCurrentView('schedules');
         window.scrollTo({ top: 0, behavior: 'smooth' });
       }
     };
@@ -180,6 +206,8 @@ export default function App() {
     const unsubLounge = initFirestoreLoungeArticlesSync();
     const unsubTeenSpace = initFirestoreTeenSpaceArticlesSync();
     const unsubRules = initFirestoreRulesSync();
+    const unsubSchedules = initFirestoreSchedulesSync();
+    const unsubTimezone = initFirestoreTimezoneSync();
 
     // 2. Subscribe to Firebase Auth state
     const unsubAuth = subscribeToAuthState((fbUser) => {
@@ -208,6 +236,8 @@ export default function App() {
       unsubLounge();
       unsubTeenSpace();
       unsubRules();
+      unsubSchedules();
+      unsubTimezone();
       unsubAuth();
       window.removeEventListener('3awdli_users_updated', handleUserUpdated);
       window.removeEventListener('storage', handleUserUpdated);
@@ -246,6 +276,11 @@ export default function App() {
 
   const handleNavigateRules = () => {
     setCurrentView('rules');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleNavigateSchedules = () => {
+    setCurrentView('schedules');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -315,6 +350,16 @@ export default function App() {
   };
 
   const handleTalkAnonymously = () => {
+    // 5. BLOCKING "TALK OPENLY" / "TALK ANONYMOUSLY" WHEN CLOSED:
+    // If a user clicks "Talk Openly" or "Talk Anonymously" while the chat is currently closed (outside all scheduled windows),
+    // block them from starting a new discussion. Instead, show a gentle message explaining the chat is currently closed,
+    // along with a link/button to the Schedules page so they can see when it will reopen.
+    const availability = isChatCurrentlyOpen();
+    if (!availability.isOpen) {
+      setIsChatClosedModalOpen(true);
+      return;
+    }
+
     if (currentView !== 'home') {
       setCurrentView('home');
     }
@@ -339,8 +384,12 @@ export default function App() {
           userName: currentUser.name,
           userEmail: currentUser.email,
           genderPreference: preference,
+          language,
         })
-      : createNewDiscussion('anonymous', { genderPreference: preference });
+      : createNewDiscussion('anonymous', {
+          genderPreference: preference,
+          language,
+        });
 
     setIsGenderPreferenceModalOpen(false);
     setIsChatOpen(true);
@@ -632,6 +681,7 @@ export default function App() {
           onNavigateTeenSpace={handleNavigateTeenSpace}
           onNavigateLounge={handleNavigateLounge}
           onNavigateRules={handleNavigateRules}
+          onNavigateSchedules={handleNavigateSchedules}
           onNavigateMailbox={handleNavigateUserMailbox}
           onNavigateReports={handleNavigateReports}
           onNavigateAdminReports={isAdministrator(currentUser) ? handleNavigateAdminReports : undefined}
@@ -639,6 +689,19 @@ export default function App() {
           onOpenEmergencyModal={() => setIsEmergencyModalOpen(true)}
           onOpenContactSupport={handleOpenContactSupport}
           onTalkAnonymously={handleTalkAnonymously}
+        />
+        <ChatClosedModal
+          isOpen={isChatClosedModalOpen}
+          onClose={() => setIsChatClosedModalOpen(false)}
+          onNavigateSchedules={handleNavigateSchedules}
+          onOpenEmergencyModal={() => setIsEmergencyModalOpen(true)}
+          onNavigateGames={() => {
+            setGamesInitialTab('companion');
+            setCurrentView('games');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          onNavigateLounge={handleNavigateLounge}
+          nextWindow={scheduleState.nextWindow}
         />
         <ContactSupportModal
           isOpen={isContactSupportOpen}
@@ -881,12 +944,26 @@ export default function App() {
           onNavigateTeenSpace={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
           onNavigateLounge={handleNavigateLounge}
           onNavigateRules={handleNavigateRules}
+          onNavigateSchedules={handleNavigateSchedules}
           onNavigateMailbox={handleNavigateUserMailbox}
           onOpenEmergencyModal={() => setIsEmergencyModalOpen(true)}
           onOpenContactSupport={() => setIsContactSupportOpen(true)}
           onOpenAuth={handleOpenAuth}
           onTalkAnonymously={handleTalkAnonymously}
           onSignOut={handleSignOut}
+        />
+        <ChatClosedModal
+          isOpen={isChatClosedModalOpen}
+          onClose={() => setIsChatClosedModalOpen(false)}
+          onNavigateSchedules={handleNavigateSchedules}
+          onOpenEmergencyModal={() => setIsEmergencyModalOpen(true)}
+          onNavigateGames={() => {
+            setGamesInitialTab('companion');
+            setCurrentView('games');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          onNavigateLounge={handleNavigateLounge}
+          nextWindow={scheduleState.nextWindow}
         />
         <ContactSupportModal
           isOpen={isContactSupportOpen}
@@ -948,12 +1025,65 @@ export default function App() {
           onTalkAnonymously={handleTalkAnonymously}
           onSignOut={handleSignOut}
         />
+        <ChatClosedModal
+          isOpen={isChatClosedModalOpen}
+          onClose={() => setIsChatClosedModalOpen(false)}
+          onNavigateSchedules={handleNavigateSchedules}
+          onOpenEmergencyModal={() => setIsEmergencyModalOpen(true)}
+          onNavigateGames={() => {
+            setGamesInitialTab('companion');
+            setCurrentView('games');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          onNavigateLounge={handleNavigateLounge}
+          nextWindow={scheduleState.nextWindow}
+        />
         <ContactSupportModal
           isOpen={isContactSupportOpen}
           onClose={handleCloseContactSupport}
           currentUser={currentUser}
           initialCategory={contactSupportInitialCategory}
           onRedirectToChat={handleTalkAnonymously}
+        />
+        <EmergencyModal
+          isOpen={isEmergencyModalOpen}
+          onClose={() => setIsEmergencyModalOpen(false)}
+          onTalkAnonymously={handleTalkAnonymously}
+        />
+      </>
+    );
+  }
+
+  if (currentView === 'schedules') {
+    return (
+      <>
+        <SchedulesPage
+          currentUser={currentUser}
+          onNavigateHome={() => {
+            setCurrentView('home');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          onTalkAnonymously={handleTalkAnonymously}
+          onOpenEmergencyModal={() => setIsEmergencyModalOpen(true)}
+          onNavigateGames={() => {
+            setGamesInitialTab('companion');
+            setCurrentView('games');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          onNavigateLounge={handleNavigateLounge}
+        />
+        <ChatClosedModal
+          isOpen={isChatClosedModalOpen}
+          onClose={() => setIsChatClosedModalOpen(false)}
+          onNavigateSchedules={handleNavigateSchedules}
+          onOpenEmergencyModal={() => setIsEmergencyModalOpen(true)}
+          onNavigateGames={() => {
+            setGamesInitialTab('companion');
+            setCurrentView('games');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          onNavigateLounge={handleNavigateLounge}
+          nextWindow={scheduleState.nextWindow}
         />
         <EmergencyModal
           isOpen={isEmergencyModalOpen}
@@ -1010,6 +1140,19 @@ export default function App() {
           onOpenContactSupport={() => setIsContactSupportOpen(true)}
           onTalkAnonymously={handleTalkAnonymously}
           onSignOut={handleSignOut}
+        />
+        <ChatClosedModal
+          isOpen={isChatClosedModalOpen}
+          onClose={() => setIsChatClosedModalOpen(false)}
+          onNavigateSchedules={handleNavigateSchedules}
+          onOpenEmergencyModal={() => setIsEmergencyModalOpen(true)}
+          onNavigateGames={() => {
+            setGamesInitialTab('companion');
+            setCurrentView('games');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          onNavigateLounge={handleNavigateLounge}
+          nextWindow={scheduleState.nextWindow}
         />
         <ContactSupportModal
           isOpen={isContactSupportOpen}
@@ -1074,6 +1217,19 @@ export default function App() {
           onTalkAnonymously={handleTalkAnonymously}
           onSignOut={handleSignOut}
         />
+        <ChatClosedModal
+          isOpen={isChatClosedModalOpen}
+          onClose={() => setIsChatClosedModalOpen(false)}
+          onNavigateSchedules={handleNavigateSchedules}
+          onOpenEmergencyModal={() => setIsEmergencyModalOpen(true)}
+          onNavigateGames={() => {
+            setGamesInitialTab('companion');
+            setCurrentView('games');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          onNavigateLounge={handleNavigateLounge}
+          nextWindow={scheduleState.nextWindow}
+        />
         <ContactSupportModal
           isOpen={isContactSupportOpen}
           onClose={handleCloseContactSupport}
@@ -1120,6 +1276,7 @@ export default function App() {
         onNavigateTeenSpace={handleNavigateTeenSpace}
         onNavigateLounge={handleNavigateLounge}
         onNavigateRules={handleNavigateRules}
+        onNavigateSchedules={handleNavigateSchedules}
         onNavigateMailbox={handleNavigateUserMailbox}
         onNavigateReports={handleNavigateReports}
         onOpenContactSupport={handleOpenContactSupport}
@@ -1452,6 +1609,7 @@ export default function App() {
         onOpenEmergencyModal={() => setIsEmergencyModalOpen(true)}
         onOpenContactSupport={handleOpenContactSupport}
         onNavigateRules={handleNavigateRules}
+        onNavigateSchedules={handleNavigateSchedules}
       />
       </Navbar>
 
@@ -1485,6 +1643,21 @@ export default function App() {
         currentPreference={anonGenderPreference}
         onClose={() => setIsGenderPreferenceModalOpen(false)}
         onConfirm={handleConfirmGenderPreference}
+      />
+
+      {/* Chat Closed Modal (warm, gentle message when outside scheduled windows) */}
+      <ChatClosedModal
+        isOpen={isChatClosedModalOpen}
+        onClose={() => setIsChatClosedModalOpen(false)}
+        onNavigateSchedules={handleNavigateSchedules}
+        onOpenEmergencyModal={() => setIsEmergencyModalOpen(true)}
+        onNavigateGames={() => {
+          setGamesInitialTab('companion');
+          setCurrentView('games');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
+        onNavigateLounge={handleNavigateLounge}
+        nextWindow={scheduleState.nextWindow}
       />
 
       {/* Emergency Helpline Modal */}

@@ -1,4 +1,5 @@
 import { TeenSpaceArticle, UserAccount } from '../types';
+import { formatSiteDateReadable } from './timezoneManagement';
 import { 
   fetchTeenSpaceArticlesFromFirestore, 
   saveTeenSpaceArticleToFirestore, 
@@ -170,11 +171,7 @@ export function createTeenSpaceArticle(
   author: UserAccount
 ): TeenSpaceArticle {
   const now = Date.now();
-  const dateStr = new Date(now).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
+  const dateStr = formatSiteDateReadable(now);
 
   const defaultImage = 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=1200&q=80';
 
@@ -211,11 +208,7 @@ export function updateTeenSpaceArticle(
   const updated: TeenSpaceArticle = {
     ...list[index],
     ...updates,
-    updatedAt: new Date().toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    }),
+    updatedAt: formatSiteDateReadable(Date.now()),
     updatedAtTimestamp: Date.now(),
   };
 
@@ -232,11 +225,7 @@ export function hideTeenSpaceArticle(articleId: string, hiddenBy: string): TeenS
   const now = Date.now();
   return updateTeenSpaceArticle(articleId, {
     is_hidden: true,
-    hiddenAt: new Date(now).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    }),
+    hiddenAt: formatSiteDateReadable(now),
     hiddenAtTimestamp: now,
     hiddenBy,
   });

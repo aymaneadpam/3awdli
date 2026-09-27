@@ -43,6 +43,7 @@
         "closedAt": { "type": "string" },
         "closedBy": { "type": "string" },
         "updatedAtTimestamp": { "type": "number" },
+        "allListenersBusyOnCreate": { "type": "boolean" },
         "activeCall": { "type": "object" }
       },
       "required": ["id", "type", "userName", "status", "messages"]
@@ -163,9 +164,38 @@
         "endedAt": { "type": "number" }
       },
       "required": ["callId", "discussionId", "callerId", "receiverId", "status", "createdAt"]
+    },
+    "ChatSchedule": {
+      "title": "Chat Availability Schedule",
+      "description": "Admin-configured open chat availability windows and scheduled listening hours",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "type": { "type": "string", "enum": ["specific_date", "weekly_recurring"] },
+        "date": { "type": "string" },
+        "dates": { "type": "array" },
+        "daysOfWeek": { "type": "array" },
+        "startTime": { "type": "string" },
+        "endTime": { "type": "string" },
+        "timezone": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "createdAtTimestamp": { "type": "number" },
+        "createdBy": { "type": "string" },
+        "createdByName": { "type": "string" },
+        "updatedAt": { "type": "string" },
+        "updatedAtTimestamp": { "type": "number" }
+      },
+      "required": ["id", "type", "startTime", "endTime", "isActive"]
     }
   },
   "firestore": {
+    "chat_schedules": {
+      "entity": "ChatSchedule",
+      "description": "Availability time windows during which chat and peer support is open"
+    },
     "users": {
       "entity": "UserProfile",
       "description": "Registered users, volunteer listeners, and administrators"

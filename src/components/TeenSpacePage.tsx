@@ -44,6 +44,7 @@ interface TeenSpacePageProps {
   onNavigateTeenSpace?: () => void;
   onNavigateLounge?: () => void;
   onNavigateRules?: () => void;
+  onNavigateSchedules?: () => void;
   onNavigateMailbox?: () => void;
   onNavigateAdmin?: () => void;
   onNavigateMemberManagement?: () => void;
@@ -63,6 +64,7 @@ export const TeenSpacePage: React.FC<TeenSpacePageProps> = ({
   onNavigateTeenSpace,
   onNavigateLounge,
   onNavigateRules,
+  onNavigateSchedules,
   onNavigateMailbox,
   onNavigateAdmin,
   onNavigateMemberManagement,
@@ -371,6 +373,7 @@ export const TeenSpacePage: React.FC<TeenSpacePageProps> = ({
         onNavigateTeenSpace={onNavigateTeenSpace}
         onNavigateLounge={onNavigateLounge}
         onNavigateRules={onNavigateRules}
+        onNavigateSchedules={onNavigateSchedules}
         onNavigateMailbox={onNavigateMailbox}
         onNavigateAdmin={onNavigateAdmin}
         onNavigateMemberManagement={onNavigateMemberManagement}

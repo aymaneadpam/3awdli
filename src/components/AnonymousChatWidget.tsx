@@ -36,6 +36,7 @@ import {
   clearActiveDiscussionReferences
 } from '../utils/discussionManagement';
 import { GenderPreferenceTag } from './GenderPreferenceTag';
+import { formatSiteTime } from '../utils/timezoneManagement';
 import { ConversationParticipantBar } from './ConversationParticipantBar';
 import { ReportDiscussionModal } from './ReportDiscussionModal';
 import { VoiceCallOverlay, CallButton } from './VoiceCallOverlay';
@@ -66,7 +67,7 @@ export const AnonymousChatWidget = ({
   onRequestTalkOpenly,
   onAutoOpenCall,
 }: AnonymousChatWidgetProps) => {
-  const { language } = useLanguage();
+  const { language, strings } = useLanguage();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
   const [position, setPosition] = useState<{ x: number; y: number } | null>(null);
@@ -337,9 +338,10 @@ export const AnonymousChatWidget = ({
           userName: currentUser.name,
           userEmail: currentUser.email,
           genderPreference,
+          language,
         });
       } else {
-        newDisc = createNewDiscussion('anonymous', { genderPreference });
+        newDisc = createNewDiscussion('anonymous', { genderPreference, language });
       }
       currentDiscussionRef.current = newDisc;
       setCurrentDiscussion(newDisc);
@@ -421,9 +423,10 @@ export const AnonymousChatWidget = ({
         userName: currentUser.name,
         userEmail: currentUser.email,
         genderPreference,
+        language,
       });
     } else {
-      newDisc = createNewDiscussion('anonymous', { genderPreference });
+      newDisc = createNewDiscussion('anonymous', { genderPreference, language });
     }
     currentDiscussionRef.current = newDisc;
     setCurrentDiscussion(newDisc);
@@ -842,9 +845,10 @@ export const AnonymousChatWidget = ({
           userName: currentUser.name,
           userEmail: currentUser.email,
           genderPreference,
+          language,
         });
       } else {
-        targetDisc = createNewDiscussion('anonymous', { genderPreference });
+        targetDisc = createNewDiscussion('anonymous', { genderPreference, language });
       }
       setCurrentDiscussion(targetDisc);
       setMessages(targetDisc.messages);
@@ -855,7 +859,7 @@ export const AnonymousChatWidget = ({
       id: `msg-${Date.now()}`,
       sender: 'user',
       text,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      timestamp: formatSiteTime(),
       timestampMs: Date.now(),
     };
 
@@ -1156,10 +1160,20 @@ export const AnonymousChatWidget = ({
 
         {/* Disclaimer & team standby banner - Hidden when keyboard is open on mobile to maximize chat space */}
         {!isKeyboardOpen && (
-          <div className="bg-[#F1EFEA] border-b border-[#E6E1D8] px-3 py-1 sm:px-3.5 sm:py-1.5 text-[10.5px] sm:text-[11px] text-[#556059] flex items-center justify-between shrink-0">
+          <div className={`border-b px-3 py-1 sm:px-3.5 sm:py-1.5 text-[10.5px] sm:text-[11px] flex items-center justify-between shrink-0 transition-colors ${
+            currentDiscussion?.allListenersBusyOnCreate && currentDiscussion?.status === 'unopened'
+              ? 'bg-[#FFF7ED] border-[#FED7AA] text-[#9A3412]'
+              : 'bg-[#F1EFEA] border-[#E6E1D8] text-[#556059]'
+          }`}>
             <span className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-              {language === 'ar' ? 'مستمعون مدربون متأهبون' : language === 'fr' ? 'Écoutants formés en attente' : 'Trained listeners on standby'}
+              <span className={`w-2 h-2 rounded-full ${
+                currentDiscussion?.allListenersBusyOnCreate && currentDiscussion?.status === 'unopened'
+                  ? 'bg-amber-500 animate-pulse'
+                  : 'bg-emerald-500'
+              }`}></span>
+              {currentDiscussion?.allListenersBusyOnCreate && currentDiscussion?.status === 'unopened'
+                ? (strings.discussions.allListenersBusyBanner || 'All listeners in other conversations • Message queued')
+                : (language === 'ar' ? 'مستمعون مدربون متأهبون' : language === 'fr' ? 'Écoutants formés en attente' : 'Trained listeners on standby')}
             </span>
             <span className="text-[10px] text-[#7A867E]">
               {language === 'ar' ? 'الهوية محجوبة' : language === 'fr' ? 'Identité masquée' : 'Identity masked'}

@@ -1,6 +1,7 @@
 import { LoungeQueueMember, LoungeQueueState, UserAccount, LoungeArticle } from '../types';
 import { updateLoungeArticle, getStoredLoungeArticles } from './loungeManagement';
 import { playLoungeBellSound } from './loungeAudio';
+import { formatSiteTime } from './timezoneManagement';
 
 const QUEUE_STORAGE_PREFIX = '3awdli_lounge_queue_';
 export const MAX_QUEUE_ADMISSIONS = 8;
@@ -237,10 +238,7 @@ export function joinLoungeQueue(
     userEmail: user.email,
     avatarUrl: user.avatarUrl,
     queueNumber: nextQueueNumber,
-    joinedAt: new Date().toLocaleTimeString(undefined, {
-      hour: 'numeric',
-      minute: '2-digit',
-    }),
+    joinedAt: formatSiteTime(),
     joinedAtTimestamp: Date.now(),
     status: 'waiting',
   };
@@ -519,10 +517,7 @@ export function seedSampleQueueMembers(articleId: string): LoungeQueueState {
         userEmail: usr.email,
         avatarUrl: usr.avatar,
         queueNumber: nextNumber++,
-        joinedAt: new Date(Date.now() - (10 - idx) * 45 * 1000).toLocaleTimeString(undefined, {
-          hour: 'numeric',
-          minute: '2-digit',
-        }),
+        joinedAt: formatSiteTime(Date.now() - (10 - idx) * 45 * 1000),
         joinedAtTimestamp: Date.now() - (10 - idx) * 45 * 1000,
         status: 'waiting',
       });

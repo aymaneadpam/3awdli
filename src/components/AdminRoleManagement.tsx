@@ -25,9 +25,12 @@ import {
   Coffee,
   PenTool,
   Ban,
-  AlertTriangle
+  AlertTriangle,
+  Globe,
+  Clock
 } from 'lucide-react';
 import { UserAccount, Gender, SupportRequest } from '../types';
+import { useSiteTimezone } from '../utils/timezoneManagement';
 import { 
   getStoredUsers, 
   grantListenerBadge, 
@@ -133,12 +136,14 @@ export const AdminRoleManagement = ({
   // Feedback toast
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Top level workspace tab: 'users' or 'support_requests'
-  const [adminActiveTab, setAdminActiveTab] = useState<'users' | 'support_requests'>(() => {
+  // Top level workspace tab: 'users' | 'support_requests' | 'settings'
+  const [adminActiveTab, setAdminActiveTab] = useState<'users' | 'support_requests' | 'settings'>(() => {
     if (initialTab) return initialTab;
     if (mode === 'admin-support') return 'support_requests';
     return 'users';
   });
+  const { timezone, setTimezone, availableTimezones, currentSiteTime } = useSiteTimezone();
+  const [isUpdatingTz, setIsUpdatingTz] = useState(false);
   const [supportRequestsList, setSupportRequestsList] = useState<SupportRequest[]>(() => getStoredSupportRequests());
 
   // Listen to support requests storage events
@@ -515,10 +520,148 @@ export const AdminRoleManagement = ({
                 </span>
               )}
             </button>
+
+            <button
+              id="admin-tab-settings"
+              onClick={() => setAdminActiveTab('settings')}
+              className={`px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-semibold transition-all cursor-pointer flex items-center gap-2.5 ${
+                adminActiveTab === 'settings'
+                  ? 'bg-[#294B3A] text-white shadow-xs'
+                  : 'bg-white text-[#526359] border border-[#DDD7CD] hover:bg-[#F4EFE7]'
+              }`}
+            >
+              <Globe className="w-4 h-4" />
+              <span>Site Timezone &amp; Settings</span>
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                adminActiveTab === 'settings'
+                  ? 'bg-white/20 text-white'
+                  : 'bg-purple-100 text-purple-900 border border-purple-200'
+              }`}>
+                {timezone.shortLabel}
+              </span>
+            </button>
           </div>
         )}
 
-        {adminActiveTab === 'support_requests' ? (
+        {adminActiveTab === 'settings' ? (
+          <div className="space-y-6">
+            {/* Settings Hero Banner */}
+            <div className="bg-white rounded-3xl border border-[#E8E2D7] p-6 sm:p-8 shadow-xs">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-900 text-xs font-semibold border border-purple-200">
+                      System Settings
+                    </span>
+                    <span className="text-xs text-[#7C8D83]">Platform Operations &amp; Time Baseline</span>
+                  </div>
+                  <h1 className="mt-2 text-2xl sm:text-3xl font-bold text-[#1F362C] font-['Lora',serif]">
+                    Site Timezone &amp; Operational Clock
+                  </h1>
+                  <p className="mt-2 text-sm text-[#617369] max-w-2xl leading-relaxed">
+                    Configure the active global timezone reference for 3awdli. This baseline determines chat availability, schedules open/closed evaluations, and all timestamp displays across the platform.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-3 p-4 rounded-2xl bg-purple-50/80 border border-purple-200 self-start lg:self-auto">
+                  <div className="w-10 h-10 rounded-xl bg-purple-600 text-white flex items-center justify-center shrink-0 shadow-2xs">
+                    <Clock className="w-5 h-5 text-purple-100" />
+                  </div>
+                  <div>
+                    <span className="text-xs text-purple-800/80 font-medium block">Active Site Time</span>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-xl font-bold text-purple-950 font-mono">{currentSiteTime}</span>
+                      <span className="text-xs font-bold text-purple-700 bg-purple-200/80 px-2 py-0.5 rounded-full">
+                        {timezone.shortLabel}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Timezone Configuration Card */}
+            <div className="bg-white rounded-3xl border border-[#E8E2D7] p-6 sm:p-8 shadow-xs space-y-6">
+              <div className="flex items-start gap-4">
+                <div className="w-12 h-12 rounded-2xl bg-purple-100 text-purple-800 flex items-center justify-center shrink-0">
+                  <Globe className="w-6 h-6 text-purple-700" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-[#1F362A]">Timezone Reference Offset</h2>
+                  <p className="text-xs sm:text-sm text-[#5D6F64] mt-1 leading-relaxed">
+                    By default, 3awdli uses <strong>GMT+0 (UTC / Morocco Standard / London)</strong> as its universal baseline. Choosing a different offset will immediately update schedule evaluations and timestamps site-wide.
+                  </p>
+                </div>
+              </div>
+
+              <div className="pt-2 max-w-xl space-y-3">
+                <label htmlFor="admin-timezone-select" className="block text-xs font-bold text-[#2A4B3A] uppercase tracking-wider">
+                  Select Timezone
+                </label>
+                <select
+                  id="admin-timezone-select"
+                  value={timezone.id}
+                  disabled={isUpdatingTz}
+                  onChange={async (e) => {
+                    setIsUpdatingTz(true);
+                    try {
+                      const ok = await setTimezone(e.target.value);
+                      if (ok) {
+                        showToast(`Site timezone successfully updated to ${e.target.value}!`);
+                      }
+                    } finally {
+                      setIsUpdatingTz(false);
+                    }
+                  }}
+                  className="w-full px-4 py-3 rounded-2xl bg-[#FAF8F5] border border-[#DDD6C8] text-sm font-semibold text-[#1F362C] focus:outline-none focus:ring-2 focus:ring-[#2C4E3A] cursor-pointer"
+                >
+                  {availableTimezones.map((tz) => (
+                    <option key={tz.id} value={tz.id}>
+                      {tz.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Quick Presets */}
+              <div className="pt-2">
+                <span className="text-xs font-bold text-[#2A4B3A] uppercase tracking-wider block mb-2">
+                  Quick Presets
+                </span>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {['GMT+0', 'GMT+1', 'GMT+2', 'GMT+3', 'GMT-5'].map((tzId) => {
+                    const isSelected = timezone.id === tzId;
+                    return (
+                      <button
+                        key={tzId}
+                        type="button"
+                        disabled={isUpdatingTz}
+                        onClick={async () => {
+                          setIsUpdatingTz(true);
+                          try {
+                            const ok = await setTimezone(tzId);
+                            if (ok) {
+                              showToast(`Site timezone set to ${tzId}!`);
+                            }
+                          } finally {
+                            setIsUpdatingTz(false);
+                          }
+                        }}
+                        className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-[#284938] text-white shadow-xs'
+                            : 'bg-[#FAF8F5] text-[#334D3F] border border-[#DDD6C8] hover:bg-[#F2ECE2]'
+                        }`}
+                      >
+                        {tzId === 'GMT+0' ? 'GMT+0 (Default Baseline)' : tzId}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : adminActiveTab === 'support_requests' ? (
           <div>
             {/* Dedicated Support Hero Banner */}
             <div className="bg-white rounded-3xl border border-[#E8E2D7] p-6 sm:p-8 shadow-xs mb-8">

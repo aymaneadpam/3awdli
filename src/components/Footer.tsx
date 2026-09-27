@@ -10,6 +10,7 @@ interface FooterProps {
   onOpenEmergencyModal: () => void;
   onOpenContactSupport?: () => void;
   onNavigateRules?: () => void;
+  onNavigateSchedules?: () => void;
 }
 
 export const Footer = ({
@@ -19,6 +20,7 @@ export const Footer = ({
   onOpenEmergencyModal,
   onOpenContactSupport,
   onNavigateRules,
+  onNavigateSchedules,
 }: FooterProps) => {
   const { language, strings } = useLanguage();
 
@@ -121,6 +123,17 @@ export const Footer = ({
                     : 'Sign Up (New Account)'}
                 </button>
               </li>
+              {onNavigateSchedules && (
+                <li>
+                  <button
+                    id="footer-schedules-btn"
+                    onClick={onNavigateSchedules}
+                    className="hover:text-[#1F362C] hover:underline cursor-pointer flex items-center gap-1.5 font-medium text-[#2F5342]"
+                  >
+                    <span>{language === 'ar' ? 'مواعيد الاستماع' : language === 'fr' ? 'Horaires d\'écoute' : 'Chat Schedules'}</span>
+                  </button>
+                </li>
+              )}
               {onNavigateRules && (
                 <li>
                   <button

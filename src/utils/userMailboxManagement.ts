@@ -1,4 +1,5 @@
 import { UserMailboxMessage } from '../types';
+import { formatSiteDateReadable, formatSiteTime } from './timezoneManagement';
 
 const STORAGE_KEY_PREFIX = '3awdli_user_mailbox_';
 
@@ -120,12 +121,8 @@ export function addUserMailboxMessage(
   }
 ): UserMailboxMessage {
   const now = new Date();
-  const dateStr = now.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
-  const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const dateStr = formatSiteDateReadable(now);
+  const timeStr = formatSiteTime(now);
 
   const newMessage: UserMailboxMessage = {
     id: `msg_ubox_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,

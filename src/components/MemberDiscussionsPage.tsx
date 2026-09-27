@@ -46,6 +46,7 @@ import { GenderPreferenceModal } from './GenderPreferenceModal';
 import { ReportDiscussionModal } from './ReportDiscussionModal';
 import { VoiceCallOverlay, CallButton } from './VoiceCallOverlay';
 import { useLanguage } from '../context/LanguageContext';
+import { formatSiteTime } from '../utils/timezoneManagement';
 
 interface MemberDiscussionsPageProps {
   user: UserAccount;
@@ -254,6 +255,7 @@ export const MemberDiscussionsPage: React.FC<MemberDiscussionsPageProps> = ({
       userName: user.name,
       userEmail: user.email,
       genderPreference: preference,
+      language,
     });
     setActiveUserDiscussionId(user.id, newDisc.id);
     setActiveDiscussion(newDisc);
@@ -273,7 +275,7 @@ export const MemberDiscussionsPage: React.FC<MemberDiscussionsPageProps> = ({
     if (!trimmed) return;
 
     const now = new Date();
-    const timeFormatted = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const timeFormatted = formatSiteTime(now);
 
     const userMsg: ChatMessage = {
       id: `msg_usr_${Date.now()}_${Math.random().toString(36).substring(2, 5)}`,
@@ -291,6 +293,7 @@ export const MemberDiscussionsPage: React.FC<MemberDiscussionsPageProps> = ({
         userName: user.name,
         userEmail: user.email,
         genderPreference: 'any',
+        language,
       });
       setActiveUserDiscussionId(user.id, targetDiscussion.id);
       setActiveDiscussion(targetDiscussion);
@@ -586,8 +589,8 @@ export const MemberDiscussionsPage: React.FC<MemberDiscussionsPageProps> = ({
                         if (isSystem) {
                           return (
                             <div key={msg.id || idx} className="flex justify-center my-2">
-                              <div className="bg-[#ECE7DE] border border-[#DDD6CA] text-[#46574D] px-3.5 py-1.5 rounded-full text-xs flex items-center gap-2 max-w-lg text-center shadow-2xs">
-                                <ShieldCheck className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                              <div className="bg-[#ECE7DE] border border-[#DDD6CA] text-[#46574D] px-4 py-2.5 rounded-2xl text-xs flex items-center gap-2.5 max-w-lg text-center shadow-2xs leading-relaxed">
+                                <ShieldCheck className="w-4 h-4 text-emerald-700 shrink-0 self-center" />
                                 <span>{msg.text}</span>
                               </div>
                             </div>
@@ -750,8 +753,8 @@ export const MemberDiscussionsPage: React.FC<MemberDiscussionsPageProps> = ({
                         if (isSystem) {
                           return (
                             <div key={msg.id || idx} className="flex justify-center my-2">
-                              <div className="bg-[#ECE7DE] border border-[#DDD6CA] text-[#46574D] px-3.5 py-1 rounded-full text-[11.5px] flex items-center gap-2 max-w-md text-center">
-                                <ShieldCheck className="w-3 h-3 text-emerald-700 shrink-0" />
+                              <div className="bg-[#ECE7DE] border border-[#DDD6CA] text-[#46574D] px-4 py-2 rounded-2xl text-[11.5px] flex items-center gap-2.5 max-w-md text-center leading-relaxed">
+                                <ShieldCheck className="w-3.5 h-3.5 text-emerald-700 shrink-0 self-center" />
                                 <span>{msg.text}</span>
                               </div>
                             </div>

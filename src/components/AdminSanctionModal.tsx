@@ -26,6 +26,7 @@ import { addReportSanction } from '../utils/reportManagement';
 import { banAnonymousSession } from '../utils/anonymousBanManagement';
 import { getAllDiscussionParticipantsForModeration } from '../utils/discussionManagement';
 import { useLanguage } from '../context/LanguageContext';
+import { formatSiteDateReadable, formatSiteTime } from '../utils/timezoneManagement';
 
 interface AdminSanctionModalProps {
   isOpen: boolean;
@@ -129,12 +130,8 @@ export const AdminSanctionModal: React.FC<AdminSanctionModalProps> = ({
 
     try {
       const now = new Date();
-      const dateStr = now.toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-      });
-      const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const dateStr = formatSiteDateReadable(now);
+      const timeStr = formatSiteTime(now);
       const formattedTimestamp = `${dateStr} • ${timeStr}`;
       const targetUserId = selectedCandidate.userAccount?.id || selectedCandidate.id;
 

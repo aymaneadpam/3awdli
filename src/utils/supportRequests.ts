@@ -5,6 +5,7 @@ import {
   subscribeToSupportRequests
 } from '../lib/firestoreService';
 import { forwardSupportRequestViaSMTP } from './emailService';
+import { formatSiteTime, formatSiteDateReadable } from './timezoneManagement';
 
 const SUPPORT_REQUESTS_KEY = '3awdli_support_requests';
 
@@ -125,8 +126,8 @@ export function createSupportRequest(data: {
 }): SupportRequest {
   const current = getStoredSupportRequests();
   const now = new Date();
-  const timeFormatted = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  const dateFormatted = now.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+  const timeFormatted = formatSiteTime(now);
+  const dateFormatted = formatSiteDateReadable(now);
 
   const category = data.category || 'general';
   const priority = data.priority || (category === 'report_listener' ? 'urgent' : 'normal');
@@ -175,7 +176,7 @@ export function updateSupportRequestStatus(
   if (index === -1) return null;
 
   const now = new Date();
-  const timeFormatted = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const timeFormatted = formatSiteTime(now);
 
   const existing = current[index];
   const updated: SupportRequest = {

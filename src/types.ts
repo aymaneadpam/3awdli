@@ -134,6 +134,7 @@ export interface DiscussionConversation {
   listenerAttentionStatus?: 'reading' | 'typing' | 'idle' | null;
   listenerAttentionTimestamp?: number;
   listenerUnavailable?: boolean;
+  allListenersBusyOnCreate?: boolean;
   messages: ChatMessage[];
   participants?: DiscussionParticipant[];
   joinedListenerId?: string;
@@ -167,8 +168,31 @@ export interface DiscussionVoiceCall {
   };
 }
 
-export type ViewState = 'home' | 'signin' | 'signup' | 'dashboard' | 'admin' | 'member-management' | 'discussions' | 'games' | 'lounge' | 'teen-space' | 'user-mailbox' | 'reports' | 'admin-reports' | 'admin-support' | 'reset-password' | 'rules' | 'valsalva';
+export type ViewState = 'home' | 'signin' | 'signup' | 'dashboard' | 'admin' | 'member-management' | 'discussions' | 'games' | 'lounge' | 'teen-space' | 'user-mailbox' | 'reports' | 'admin-reports' | 'admin-support' | 'reset-password' | 'rules' | 'valsalva' | 'schedules';
 export type AuthMode = 'signin' | 'signup' | null;
+
+export type ScheduleWindowType = 'specific_date' | 'weekly_recurring';
+
+export interface ChatScheduleWindow {
+  id: string;
+  title?: string;
+  type: ScheduleWindowType;
+  date?: string; // YYYY-MM-DD
+  dates?: string[]; // Multiple specific dates
+  dayOfWeek?: number; // 0=Sunday, 1=Monday... 6=Saturday
+  daysOfWeek?: number[]; // [1, 3, 5]
+  startTime: string; // "HH:mm" (24h)
+  endTime: string; // "HH:mm" (24h)
+  timezone?: string;
+  isActive: boolean;
+  notes?: string;
+  createdAt: string;
+  createdAtTimestamp: number;
+  createdBy?: string;
+  createdByName?: string;
+  updatedAt?: string;
+  updatedAtTimestamp?: number;
+}
 
 export interface UserMailboxMessage {
   id: string;

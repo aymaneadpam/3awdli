@@ -27,7 +27,8 @@ import {
   SupportRequest,
   LoungeArticle,
   TeenSpaceArticle,
-  RuleCategory
+  RuleCategory,
+  ChatScheduleWindow
 } from '../types';
 
 // Collection references
@@ -38,6 +39,7 @@ export const SUPPORT_REQUESTS_COLLECTION = 'support_requests';
 export const LOUNGE_ARTICLES_COLLECTION = 'lounge_articles';
 export const TEEN_SPACE_ARTICLES_COLLECTION = 'teen_space_articles';
 export const RULES_CATEGORIES_COLLECTION = 'rules_categories';
+export const CHAT_SCHEDULES_COLLECTION = 'chat_schedules';
 
 // Helper to remove undefined fields before sending to Firestore
 export function sanitizeForFirestore<T extends Record<string, any>>(obj: T): T {
@@ -780,5 +782,70 @@ export async function updateUserPasswordInFirestore(
     console.error('Error updating user password in Firestore:', err);
     return { success: false, updatedCount: 0 };
   }
+}
+
+// -------------------------------------------------------------
+// FIRESTORE CHAT SCHEDULES MANAGEMENT
+// -------------------------------------------------------------
+
+export async function fetchChatSchedulesFromFirestore(): Promise<ChatScheduleWindow[]> {
+  try {
+    const colRef = collection(db, CHAT_SCHEDULES_COLLECTION);
+    const snap = await getDocs(colRef);
+    const schedules: ChatScheduleWindow[] = [];
+    snap.forEach((docSnap) => {
+      if (docSnap.id === 'site_timezone_config') return;
+      schedules.push({ id: docSnap.id, ...docSnap.data() } as ChatScheduleWindow);
+    });
+    return schedules;
+  } catch (err) {
+    console.error('Error fetching chat schedules from Firestore:', err);
+    return [];
+  }
+}
+
+export async function saveChatScheduleToFirestore(schedule: ChatScheduleWindow): Promise<void> {
+  if (!schedule.id) return;
+  try {
+    const docRef = doc(db, CHAT_SCHEDULES_COLLECTION, schedule.id);
+    const cleanData = sanitizeForFirestore(schedule);
+    await setDoc(docRef, cleanData, { merge: true });
+  } catch (err) {
+    console.error(`Error saving chat schedule ${schedule.id} to Firestore:`, err);
+    throw err;
+  }
+}
+
+export async function deleteChatScheduleFromFirestore(id: string): Promise<void> {
+  if (!id) return;
+  try {
+    const docRef = doc(db, CHAT_SCHEDULES_COLLECTION, id);
+    await deleteDoc(docRef);
+  } catch (err) {
+    console.error(`Error deleting chat schedule ${id} from Firestore:`, err);
+    throw err;
+  }
+}
+
+export function subscribeToChatSchedules(
+  onUpdate: (schedules: ChatScheduleWindow[]) => void,
+  onError?: (error: Error) => void
+): () => void {
+  const colRef = collection(db, CHAT_SCHEDULES_COLLECTION);
+  return onSnapshot(
+    colRef,
+    (snap) => {
+      const schedules: ChatScheduleWindow[] = [];
+      snap.forEach((docSnap) => {
+        if (docSnap.id === 'site_timezone_config') return;
+        schedules.push({ id: docSnap.id, ...docSnap.data() } as ChatScheduleWindow);
+      });
+      onUpdate(schedules);
+    },
+    (err) => {
+      console.error('Firestore chat schedules subscription error:', err);
+      if (onError) onError(err);
+    }
+  );
 }
 
