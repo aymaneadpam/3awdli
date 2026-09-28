@@ -293,10 +293,10 @@ export const HeartbeatGame: React.FC = () => {
   return (
     <div
       id="heartbeat-game-container"
-      className="w-full max-w-2xl mx-auto select-none font-['Plus_Jakarta_Sans',sans-serif]"
+      className="w-full max-w-2xl mx-auto select-none font-['Plus_Jakarta_Sans',sans-serif] overflow-x-hidden"
     >
       {/* Container Card */}
-      <div className="bg-white/85 backdrop-blur-sm border border-[#E8E1D5] rounded-3xl p-5 sm:p-8 shadow-xs">
+      <div className="bg-white/85 backdrop-blur-sm border border-[#E8E1D5] rounded-3xl p-3.5 sm:p-6 md:p-8 shadow-xs w-full max-w-full overflow-hidden">
         {/* Top Header Bar: Game Title & Controls */}
         <div className="flex items-center justify-between gap-3 mb-4">
           <div className="flex items-center gap-2">
@@ -317,7 +317,7 @@ export const HeartbeatGame: React.FC = () => {
               type="button"
               id="heartbeat-sound-toggle-btn"
               onClick={() => setSoundEnabled(!soundEnabled)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-white/85 hover:bg-white text-[#4A5D52] hover:text-[#1E3327] border border-[#E0D7C9] text-xs font-medium transition-colors cursor-pointer shadow-2xs"
+              className="inline-flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 rounded-xl bg-white/85 hover:bg-white text-[#4A5D52] hover:text-[#1E3327] border border-[#E0D7C9] text-xs font-medium transition-colors cursor-pointer shadow-2xs"
               title={soundEnabled ? 'Mute soothing sound' : 'Unmute soothing sound'}
               aria-label={soundEnabled ? 'Mute soothing sound' : 'Unmute soothing sound'}
             >
@@ -344,7 +344,7 @@ export const HeartbeatGame: React.FC = () => {
                 type="button"
                 id="heartbeat-clear-btn"
                 onClick={handleClear}
-                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-white/85 hover:bg-white text-[#6D7D74] hover:text-[#2A3C32] border border-[#E0D7C9] text-xs font-medium transition-colors cursor-pointer shadow-2xs"
+                className="inline-flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 rounded-xl bg-white/85 hover:bg-white text-[#6D7D74] hover:text-[#2A3C32] border border-[#E0D7C9] text-xs font-medium transition-colors cursor-pointer shadow-2xs"
                 title="Clear the heart wall to start fresh"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
@@ -365,7 +365,7 @@ export const HeartbeatGame: React.FC = () => {
         <div
           ref={frameContainerRef}
           id="heartbeat-picture-frame"
-          className="relative w-full h-[410px] sm:h-[450px] rounded-3xl border-4 border-[#E2DAD0] bg-gradient-to-b from-[#FAF8F5] via-[#FFFDF9] to-[#F7F2EB] shadow-inner overflow-hidden flex flex-col justify-end items-center"
+          className="relative w-full max-w-full h-[400px] sm:h-[450px] rounded-3xl border-4 border-[#E2DAD0] bg-gradient-to-b from-[#FAF8F5] via-[#FFFDF9] to-[#F7F2EB] shadow-inner overflow-hidden flex flex-col justify-end items-center"
         >
           {/* Subtle inner decorative frame border */}
           <div className="absolute inset-1.5 rounded-[20px] border border-[#ECE5DA]/80 pointer-events-none" />
@@ -377,7 +377,7 @@ export const HeartbeatGame: React.FC = () => {
           */}
           <div
             id="accumulated-heart-wall"
-            className="absolute inset-x-0 top-0 h-[220px] pointer-events-none"
+            className="absolute inset-x-0 top-0 h-[220px] pointer-events-none overflow-hidden max-w-full"
           >
             {settledHearts.map((heart) => (
               <div
@@ -501,7 +501,7 @@ export const HeartbeatGame: React.FC = () => {
                 >
                   <svg
                     viewBox="0 0 200 200"
-                    className="w-36 h-36 sm:w-40 sm:h-40 select-none overflow-visible filter drop-shadow-md"
+                    className="w-32 h-32 sm:w-40 sm:h-40 max-w-full select-none overflow-visible filter drop-shadow-md"
                     aria-hidden="true"
                   >
                     <defs>

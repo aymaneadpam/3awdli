@@ -21,7 +21,7 @@ export const ChatScheduleBanner: React.FC<ChatScheduleBannerProps> = ({
     return (
       <aside
         aria-label={language === 'fr' ? "Disponibilité de l'écoute en direct" : language === 'ar' ? 'حالة خدمة الاستماع' : 'Live chat availability status'}
-        className={`w-full bg-linear-to-r from-[#E8F5EE] via-[#EDF7F1] to-[#E2F0E7] border-b border-[#C8E4D3] text-[#1E4A32] py-2 px-3 sm:px-6 transition-all ${className}`}
+        className={`w-full bg-linear-to-r from-[#E8F5EE] via-[#EDF7F1] to-[#E2F0E7] border-b border-[#C8E4D3] text-[#1E4A32] py-1.5 px-3 sm:px-6 transition-all ${className}`}
       >
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-3 text-xs sm:text-sm">
           <div className="flex items-center gap-2 min-w-0">
@@ -70,7 +70,7 @@ export const ChatScheduleBanner: React.FC<ChatScheduleBannerProps> = ({
   return (
     <aside
       aria-label={language === 'fr' ? "Disponibilité de l'écoute en direct" : language === 'ar' ? 'حالة خدمة الاستماع' : 'Live chat availability status'}
-      className={`w-full bg-[#FAF3EA] border-b border-[#ECD9C5] text-[#5C3F24] py-2 px-3 sm:px-6 transition-all ${className}`}
+      className={`w-full bg-[#FAF3EA] border-b border-[#ECD9C5] text-[#5C3F24] py-1.5 px-3 sm:px-6 transition-all ${className}`}
     >
       <div className="max-w-7xl mx-auto flex items-center justify-between gap-3 text-xs sm:text-sm">
         <div 

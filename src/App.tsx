@@ -1288,15 +1288,15 @@ export default function App() {
         {/* Main Content Area */}
         <main className="flex-1">
         {/* TOP SECTION */}
-        <section className="pt-3 sm:pt-5 pb-8 sm:pb-12 px-3 sm:px-6 max-w-4xl mx-auto">
+        <section className="pt-1.5 sm:pt-2 pb-6 sm:pb-10 px-3 sm:px-6 max-w-4xl mx-auto">
           
           {/* 1. LOGO: Compact, clean, and unboxed plain image */}
-          <div className="flex justify-center mb-2.5 sm:mb-3">
-            <Logo className="w-12 h-12 sm:w-14 sm:h-14" />
+          <div className="flex justify-center mb-1.5 sm:mb-2">
+            <Logo className="w-11 h-11 sm:w-12 sm:h-12" />
           </div>
 
           {/* 2. TAGLINE: Free, Non-profit & Confidential Mental Health Initiative (Noticeably smaller) */}
-          <div className="flex justify-center mb-2 sm:mb-2.5">
+          <div className="flex justify-center mb-1.5 sm:mb-2">
             <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#EBF2EE] border border-[#D5E4DC] text-[#2D4D3D] text-[10px] sm:text-[11px] font-medium tracking-wide">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
               <span>
@@ -1310,7 +1310,7 @@ export default function App() {
           </div>
 
           {/* Calm Main Heading (Noticeably smaller font size and vertical footprint) */}
-          <div className="text-center max-w-xl mx-auto mb-3.5 sm:mb-4">
+          <div className="text-center max-w-xl mx-auto mb-2 sm:mb-2.5">
             <h1 className="text-lg sm:text-xl md:text-2xl font-normal text-[#1B2B22] tracking-tight leading-snug font-['Lora',serif]">
               {language === 'ar'
                 ? 'لست مضطراً لحمل أعبائك وحدك.'
@@ -1318,7 +1318,7 @@ export default function App() {
                 ? 'Vous n\'avez pas à porter vos fardeaux tout seul.'
                 : 'You don\'t have to carry your burdens all by yourself.'}
             </h1>
-            <p className="mt-1 sm:mt-1.5 text-xs sm:text-[13px] text-[#5A6961] leading-relaxed font-light">
+            <p className="mt-0.5 sm:mt-1 text-xs sm:text-[13px] text-[#5A6961] leading-relaxed font-light">
               {language === 'ar' ? (
                 <>مرحباً بكم في <span className="font-medium text-[#274738]">عاودلي</span> — أذن صاغية وملاذ آمن متى ما أردت التحدث.</>
               ) : language === 'fr' ? (
@@ -1330,24 +1330,24 @@ export default function App() {
           </div>
 
           {/* 3. GAME PROMOTIONS: Visible on screen immediately without scrolling */}
-          <div className="max-w-2xl mx-auto mb-7 sm:mb-9">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+          <div className="max-w-2xl mx-auto mb-2 sm:mb-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-2.5">
               {/* Promotion 1: Breathing Game */}
               <div 
                 id="homepage-breathing-promo-card"
-                className="bg-white/85 backdrop-blur-xs border border-[#E0E8E2] rounded-2xl p-3.5 sm:p-4 shadow-2xs hover:shadow-xs transition-all duration-200 flex flex-col justify-between text-start"
+                className="bg-white/85 backdrop-blur-xs border border-[#E0E8E2] rounded-2xl p-2.5 sm:p-3 shadow-2xs hover:shadow-xs transition-all duration-200 flex flex-col justify-between text-start"
               >
                 <div>
-                  <div className="flex items-center justify-between mb-2.5">
-                    <div className="w-7 h-7 rounded-lg bg-[#EAF2ED] text-[#244534] flex items-center justify-center border border-[#D5E3DA]">
-                      <Wind className="w-3.5 h-3.5" />
+                  <div className="flex items-center justify-between mb-1.5 sm:mb-2">
+                    <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg bg-[#EAF2ED] text-[#244534] flex items-center justify-center border border-[#D5E3DA]">
+                      <Wind className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                     </div>
                     <span className="text-[10px] font-medium text-[#355745] bg-[#EDF4F0] px-2 py-0.5 rounded-full border border-[#DBE9DF]">
                       {language === 'ar' ? 'تمرين تنفس' : language === 'fr' ? 'Respiration' : 'Breathing'}
                     </span>
                   </div>
 
-                  <h3 className="text-xs sm:text-sm font-semibold font-['Lora',serif] text-[#1B2D23] mb-1 leading-snug">
+                  <h3 className="text-xs sm:text-sm font-semibold font-['Lora',serif] text-[#1B2D23] mb-0.5 leading-snug">
                     {language === 'ar'
                       ? 'تشعر بالقلق؟ جرّب تمرين التنفس الموجه'
                       : language === 'fr'
@@ -1355,7 +1355,7 @@ export default function App() {
                       : 'Feeling anxious? Try guided breathing'}
                   </h3>
 
-                  <p className="text-[11px] sm:text-xs text-[#5D6F64] leading-relaxed mb-3 font-light line-clamp-2">
+                  <p className="text-[11px] sm:text-xs text-[#5D6F64] leading-relaxed mb-2 sm:mb-2.5 font-light line-clamp-2">
                     {language === 'ar'
                       ? 'إيقاع بصري لطيف يساعدك على إبطاء نبضات قلبك وتهدئة التوتر في لحظات.'
                       : language === 'fr'
@@ -1369,7 +1369,7 @@ export default function App() {
                     type="button"
                     id="homepage-play-breathing-btn"
                     onClick={handlePlayBreathingGame}
-                    className="w-full py-1.5 sm:py-2 px-3 bg-[#2D4D3D] hover:bg-[#20392C] text-white font-medium text-xs rounded-lg shadow-2xs hover:shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                    className="w-full py-1 sm:py-1.5 px-3 bg-[#2D4D3D] hover:bg-[#20392C] text-white font-medium text-xs rounded-lg shadow-2xs hover:shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                   >
                     <Play className="w-3 h-3 text-emerald-200 fill-emerald-200" />
                     <span>{language === 'ar' ? 'ابدأ اللعب' : language === 'fr' ? 'Jouer' : 'Play'}</span>
@@ -1380,19 +1380,19 @@ export default function App() {
               {/* Promotion 2: Valsalva Technique Game */}
               <div 
                 id="homepage-valsalva-promo-card"
-                className="bg-white/85 backdrop-blur-xs border border-[#E7E2D8] rounded-2xl p-3.5 sm:p-4 shadow-2xs hover:shadow-xs transition-all duration-200 flex flex-col justify-between text-start"
+                className="bg-white/85 backdrop-blur-xs border border-[#E7E2D8] rounded-2xl p-2.5 sm:p-3 shadow-2xs hover:shadow-xs transition-all duration-200 flex flex-col justify-between text-start"
               >
                 <div>
-                  <div className="flex items-center justify-between mb-2.5">
-                    <div className="w-7 h-7 rounded-lg bg-[#F2EDE4] text-[#3E4F44] flex items-center justify-center border border-[#E2DDD2]">
-                      <Activity className="w-3.5 h-3.5" />
+                  <div className="flex items-center justify-between mb-1.5 sm:mb-2">
+                    <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg bg-[#F2EDE4] text-[#3E4F44] flex items-center justify-center border border-[#E2DDD2]">
+                      <Activity className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                     </div>
                     <span className="text-[10px] font-medium text-[#46594C] bg-[#F2ECE3] px-2 py-0.5 rounded-full border border-[#E2DAD0]">
                       {language === 'ar' ? 'تهدئة القلب' : language === 'fr' ? 'Apaisement' : 'Vagus Reset'}
                     </span>
                   </div>
 
-                  <h3 className="text-xs sm:text-sm font-semibold font-['Lora',serif] text-[#1B2D23] mb-1 leading-snug">
+                  <h3 className="text-xs sm:text-sm font-semibold font-['Lora',serif] text-[#1B2D23] mb-0.5 leading-snug">
                     {language === 'ar'
                       ? 'تقنية فالسالفا: إعادة ضبط نبضك'
                       : language === 'fr'
@@ -1400,7 +1400,7 @@ export default function App() {
                       : 'Valsalva Technique: Reset heart rate'}
                   </h3>
 
-                  <p className="text-[11px] sm:text-xs text-[#5D6F64] leading-relaxed mb-3 font-light line-clamp-2">
+                  <p className="text-[11px] sm:text-xs text-[#5D6F64] leading-relaxed mb-2 sm:mb-2.5 font-light line-clamp-2">
                     {language === 'ar'
                       ? 'طريقة تفاعلية خطوة بخطوة لتنشيط العصب الحائر وتخفيف خفقان القلب.'
                       : language === 'fr'
@@ -1414,7 +1414,7 @@ export default function App() {
                     type="button"
                     id="homepage-play-valsalva-btn"
                     onClick={handlePlayValsalvaGame}
-                    className="w-full py-1.5 sm:py-2 px-3 bg-[#3E5547] hover:bg-[#2E4135] text-white font-medium text-xs rounded-lg shadow-2xs hover:shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                    className="w-full py-1 sm:py-1.5 px-3 bg-[#3E5547] hover:bg-[#2E4135] text-white font-medium text-xs rounded-lg shadow-2xs hover:shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                   >
                     <Play className="w-3 h-3 text-emerald-200 fill-emerald-200" />
                     <span>{language === 'ar' ? 'ابدأ اللعب' : language === 'fr' ? 'Jouer' : 'Play'}</span>
@@ -1427,7 +1427,7 @@ export default function App() {
           {/* 4. EXACT REQUIRED INTRODUCTION TEXT: Noticeably smaller font size & compact styling */}
           <div 
             id="prominent-introduction-card"
-            className="max-w-xl mx-auto bg-white/60 border border-[#E5E0D6] rounded-2xl p-4 sm:p-5 mb-8 sm:mb-11 text-center"
+            className="max-w-xl mx-auto bg-white/60 border border-[#E5E0D6] rounded-2xl p-3 sm:p-4 mb-6 sm:mb-8 text-center"
           >
             <p className="text-xs sm:text-[13px] text-[#2E3C33] leading-relaxed font-['Lora',serif] font-normal italic">
               {language === 'ar' ? (

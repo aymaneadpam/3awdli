@@ -152,7 +152,7 @@ export const HeadOfListenersReportsView: React.FC<HeadOfListenersReportsViewProp
             </div>
 
             {/* Quick Stats */}
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
               <div className="bg-white border border-[#DDD7CB] rounded-2xl px-3.5 py-2 text-center min-w-[85px]">
                 <span className="block text-xs font-bold text-rose-700">{pendingCount}</span>
                 <span className="text-[10.5px] text-stone-500">Pending</span>

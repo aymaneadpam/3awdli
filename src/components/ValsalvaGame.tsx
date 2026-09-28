@@ -163,7 +163,7 @@ export const ValsalvaGame: React.FC<ValsalvaGameProps> = ({ onSelectOtherGame })
     return (
       <div 
         id="valsalva-safety-framing" 
-        className="max-w-xl mx-auto bg-white/90 backdrop-blur-xs border border-[#E3DDD1] rounded-3xl p-6 sm:p-9 shadow-xs text-center"
+        className="max-w-xl mx-auto bg-white/90 backdrop-blur-xs border border-[#E3DDD1] rounded-3xl p-4 sm:p-8 md:p-9 shadow-xs text-center w-full max-w-full overflow-hidden"
       >
         <div className="w-12 h-12 rounded-2xl bg-[#F5EDE1] text-[#785434] flex items-center justify-center mx-auto mb-4 border border-[#E8DEC9]">
           <ShieldAlert className="w-6 h-6 text-[#8B653E]" />
@@ -212,8 +212,8 @@ export const ValsalvaGame: React.FC<ValsalvaGameProps> = ({ onSelectOtherGame })
 
   // 2. THE EXERCISE STEP-BY-STEP
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
-      <div className="bg-white/90 backdrop-blur-xs border border-[#E2DDD3] rounded-3xl p-6 sm:p-10 shadow-xs text-center relative overflow-hidden">
+    <div className="max-w-2xl mx-auto space-y-6 w-full max-w-full overflow-x-hidden">
+      <div className="bg-white/90 backdrop-blur-xs border border-[#E2DDD3] rounded-3xl p-4 sm:p-8 md:p-10 shadow-xs text-center relative overflow-hidden w-full max-w-full">
         {/* Soft top accent line */}
         <div className="absolute top-0 inset-x-0 h-1 w-full bg-gradient-to-r from-[#8AC5A6] via-[#4A7D63] to-[#A3D9BE]"></div>
 
@@ -253,17 +253,17 @@ export const ValsalvaGame: React.FC<ValsalvaGameProps> = ({ onSelectOtherGame })
             </span>
 
             {/* Flat pastel expanding visual cue */}
-            <div className="relative w-40 h-40 sm:w-48 sm:h-48 flex items-center justify-center mb-6">
+            <div className="relative w-32 h-32 xs:w-36 xs:h-36 sm:w-48 sm:h-48 flex items-center justify-center mb-6 max-w-full overflow-hidden">
               {/* Animated expanding outer ring */}
               <div 
                 className="absolute inset-0 rounded-full bg-[#E3F2E9] border-2 border-[#92CEAA] animate-ping opacity-25"
                 style={{ animationDuration: '3s' }}
               />
               <div 
-                className="w-36 h-36 sm:w-40 sm:h-40 rounded-full bg-[#E8F4EC] border-4 border-[#69B589] flex flex-col items-center justify-center shadow-xs transition-transform duration-1000 scale-105"
+                className="w-28 h-28 xs:w-32 xs:h-32 sm:w-40 sm:h-40 rounded-full bg-[#E8F4EC] border-4 border-[#69B589] flex flex-col items-center justify-center shadow-xs transition-transform duration-1000 scale-105"
               >
-                <Wind className="w-10 h-10 text-[#2D5640] mb-1 animate-pulse" />
-                <span className="text-xs font-semibold text-[#2D5640] uppercase tracking-wider">
+                <Wind className="w-8 h-8 sm:w-10 sm:h-10 text-[#2D5640] mb-1 animate-pulse" />
+                <span className="text-[10px] sm:text-xs font-semibold text-[#2D5640] uppercase tracking-wider">
                   {language === 'ar' ? 'شهيق' : language === 'fr' ? 'Inspirez' : 'Inhale'}
                 </span>
                 <span className="text-xs text-[#527763] font-mono mt-0.5">
@@ -297,20 +297,20 @@ export const ValsalvaGame: React.FC<ValsalvaGameProps> = ({ onSelectOtherGame })
             </span>
 
             {/* Flat pastel balloon visual holding steady with gentle pulse */}
-            <div className="relative w-40 h-40 sm:w-48 sm:h-48 flex items-center justify-center mb-6">
+            <div className="relative w-32 h-32 xs:w-36 xs:h-36 sm:w-48 sm:h-48 flex items-center justify-center mb-6 max-w-full overflow-hidden">
               {/* Soft steady aura */}
               <div className="absolute inset-2 rounded-full bg-[#F5ECE1] border border-[#E2D0BE] opacity-60"></div>
               <div 
-                className="w-36 h-36 sm:w-40 sm:h-40 rounded-full bg-[#FAF3EA] border-4 border-[#D8BEA3] flex flex-col items-center justify-center shadow-xs"
+                className="w-28 h-28 xs:w-32 xs:h-32 sm:w-40 sm:h-40 rounded-full bg-[#FAF3EA] border-4 border-[#D8BEA3] flex flex-col items-center justify-center shadow-xs"
               >
                 {/* Flat balloon silhouette */}
-                <div className="w-10 h-11 rounded-full bg-[#C99C70] flex items-center justify-center mb-1 relative shadow-2xs">
+                <div className="w-8 h-9 sm:w-10 sm:h-11 rounded-full bg-[#C99C70] flex items-center justify-center mb-1 relative shadow-2xs">
                   <div className="w-1.5 h-1.5 rounded-full bg-white/60 absolute top-2 left-2"></div>
                 </div>
-                <span className="text-2xl sm:text-3xl font-semibold font-['Lora',serif] text-[#5C3F24]">
+                <span className="text-xl sm:text-3xl font-semibold font-['Lora',serif] text-[#5C3F24]">
                   {countdown}s
                 </span>
-                <span className="text-[10px] font-semibold text-[#7E5E41] uppercase tracking-wider">
+                <span className="text-[9px] sm:text-[10px] font-semibold text-[#7E5E41] uppercase tracking-wider">
                   {language === 'ar' ? 'ضغط لطيف' : language === 'fr' ? 'Maintien doux' : 'Gentle Hold'}
                 </span>
               </div>
@@ -341,13 +341,13 @@ export const ValsalvaGame: React.FC<ValsalvaGameProps> = ({ onSelectOtherGame })
             </span>
 
             {/* Flat pastel settling waves visual */}
-            <div className="relative w-40 h-40 sm:w-48 sm:h-48 flex items-center justify-center mb-6">
-              <div className="w-36 h-36 sm:w-40 sm:h-40 rounded-full bg-[#EBF5EF] border-4 border-[#86C9A3] flex flex-col items-center justify-center shadow-xs">
-                <Sparkles className="w-9 h-9 text-[#2C593F] mb-1" />
-                <span className="text-xl sm:text-2xl font-semibold font-['Lora',serif] text-[#1E3E2D]">
+            <div className="relative w-32 h-32 xs:w-36 xs:h-36 sm:w-48 sm:h-48 flex items-center justify-center mb-6 max-w-full overflow-hidden">
+              <div className="w-28 h-28 xs:w-32 xs:h-32 sm:w-40 sm:h-40 rounded-full bg-[#EBF5EF] border-4 border-[#86C9A3] flex flex-col items-center justify-center shadow-xs">
+                <Sparkles className="w-7 h-7 sm:w-9 sm:h-9 text-[#2C593F] mb-1" />
+                <span className="text-lg sm:text-2xl font-semibold font-['Lora',serif] text-[#1E3E2D]">
                   {countdown}s
                 </span>
-                <span className="text-[10px] font-semibold text-[#3D6950] uppercase tracking-wider">
+                <span className="text-[9px] sm:text-[10px] font-semibold text-[#3D6950] uppercase tracking-wider">
                   {language === 'ar' ? 'تنفس طبيعي' : language === 'fr' ? 'Détente' : 'Normal Breathing'}
                 </span>
               </div>
@@ -371,7 +371,7 @@ export const ValsalvaGame: React.FC<ValsalvaGameProps> = ({ onSelectOtherGame })
 
         {/* STEP: COMPLETED (Do it again button with no pressure, no score, no fail state) */}
         {step === 'completed' && (
-          <div className="py-6 flex flex-col items-center">
+          <div className="py-6 flex flex-col items-center w-full max-w-full">
             <div className="w-16 h-16 rounded-full bg-[#EAF4EE] border border-[#BCE1CC] text-[#2B543D] flex items-center justify-center mb-4">
               <CheckCircle2 className="w-9 h-9" />
             </div>
@@ -384,12 +384,12 @@ export const ValsalvaGame: React.FC<ValsalvaGameProps> = ({ onSelectOtherGame })
             </p>
 
             {/* Do it again button */}
-            <div className="flex items-center justify-center gap-3">
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-2.5 sm:gap-3 w-full max-w-xs sm:max-w-none mx-auto">
               <button
                 type="button"
                 id="valsalva-do-it-again-btn"
                 onClick={handleRepeat}
-                className="px-6 py-3 bg-[#2D4D3D] hover:bg-[#1D3528] text-white text-xs sm:text-sm font-medium rounded-xl shadow-2xs hover:shadow-xs transition-all flex items-center gap-2 cursor-pointer"
+                className="w-full sm:w-auto px-6 py-3 bg-[#2D4D3D] hover:bg-[#1D3528] text-white text-xs sm:text-sm font-medium rounded-xl shadow-2xs hover:shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
                 <RotateCcw className="w-4 h-4 text-emerald-200" />
                 <span>{text.doAgainBtn}</span>
@@ -399,7 +399,7 @@ export const ValsalvaGame: React.FC<ValsalvaGameProps> = ({ onSelectOtherGame })
                 <button
                   type="button"
                   onClick={onSelectOtherGame}
-                  className="px-5 py-3 bg-[#F2EDE4] hover:bg-[#E6DFD3] text-[#334A3C] text-xs sm:text-sm font-medium rounded-xl border border-[#DCD3C4] transition-all cursor-pointer"
+                  className="w-full sm:w-auto px-5 py-3 bg-[#F2EDE4] hover:bg-[#E6DFD3] text-[#334A3C] text-xs sm:text-sm font-medium rounded-xl border border-[#DCD3C4] transition-all cursor-pointer text-center"
                 >
                   {text.otherExercisesBtn}
                 </button>

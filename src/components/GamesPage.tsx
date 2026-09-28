@@ -103,23 +103,23 @@ export const GamesPage: React.FC<GamesPageProps> = ({
       onTalkAnonymously={onTalkAnonymously}
       onSignOut={onSignOut}
     >
-      <main className="flex-1 py-10 sm:py-14 px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto">
+      <main className="flex-1 py-8 sm:py-14 px-3 sm:px-6 lg:px-8 max-w-5xl mx-auto w-full overflow-x-hidden">
         {/* Header Introduction */}
-        <div className="text-center max-w-2xl mx-auto mb-10">
+        <div className="text-center max-w-2xl mx-auto mb-8 sm:mb-10 w-full max-w-full">
           <div className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-[#EBF2EE] border border-[#D2E2D8] text-[#294838] text-xs font-semibold mb-3.5 shadow-2xs">
             <Gamepad2 className="w-3.5 h-3.5 text-[#315243]" />
             <span>{language === 'ar' ? 'ملاذ لتخفيف الضغط النفسي' : language === 'fr' ? 'Sanctuaire Anti-Stress' : 'Anti-Stress Sanctuary'}</span>
           </div>
-          <h1 className="text-3xl sm:text-4xl font-semibold text-[#182C22] font-['Lora',serif] tracking-tight">
+          <h1 className="text-2xl sm:text-4xl font-semibold text-[#182C22] font-['Lora',serif] tracking-tight">
             {strings.games?.pageTitle || 'Calming Corner'}
           </h1>
-          <p className="mt-3 text-sm sm:text-base text-[#56685F] leading-relaxed">
+          <p className="mt-2.5 text-xs sm:text-base text-[#56685F] leading-relaxed">
             {strings.games?.pageSubtitle || 'Gentle, zero-pressure interactive spaces to help you slow down, breathe, and find comfort whenever things feel overwhelming.'}
           </p>
         </div>
 
         {/* Game Switcher / Catalog Bar */}
-        <div className="flex flex-wrap items-center justify-center gap-2.5 mb-10">
+        <div className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2.5 mb-8 sm:mb-10 w-full max-w-full">
           {gamesList.map((game) => {
             const isSelected = selectedGameId === game.id;
             return (
@@ -131,7 +131,7 @@ export const GamesPage: React.FC<GamesPageProps> = ({
                 onClick={() => {
                   if (game.isAvailable) setSelectedGameId(game.id);
                 }}
-                className={`flex items-center gap-2.5 px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-semibold transition-all border ${
+                className={`flex items-center gap-2 sm:gap-2.5 px-3 sm:px-4 py-2 sm:py-2.5 rounded-2xl text-xs sm:text-sm font-semibold transition-all border max-w-full ${
                   isSelected
                     ? 'bg-[#28493A] text-white border-[#28493A] shadow-xs'
                     : game.isAvailable
@@ -139,9 +139,9 @@ export const GamesPage: React.FC<GamesPageProps> = ({
                     : 'bg-[#F2ECE4]/60 text-[#8C9B92] border-[#E5DFD4] cursor-not-allowed opacity-75'
                 }`}
               >
-                <span>{game.title}</span>
+                <span className="truncate">{game.title}</span>
                 <span
-                  className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                  className={`text-[10px] px-2 py-0.5 rounded-full font-medium shrink-0 ${
                     isSelected
                       ? 'bg-white/20 text-white'
                       : game.isAvailable
@@ -157,7 +157,7 @@ export const GamesPage: React.FC<GamesPageProps> = ({
         </div>
 
         {/* Active Game Display Area */}
-        <div className="mb-14">
+        <div className="mb-10 sm:mb-14 w-full max-w-full overflow-x-hidden">
           {selectedGameId === 'companion' && <CompanionGame />}
           {selectedGameId === 'heartbeat' && <HeartbeatGame />}
           {selectedGameId === 'breathing_pebble' && <BreathingPebbleGame />}
@@ -168,7 +168,7 @@ export const GamesPage: React.FC<GamesPageProps> = ({
         </div>
 
         {/* Peaceful Design Philosophy Section */}
-        <div className="max-w-2xl mx-auto rounded-3xl bg-white/75 border border-[#E5DFD5] p-6 sm:p-8 shadow-2xs text-center">
+        <div className="max-w-2xl mx-auto rounded-3xl bg-white/75 border border-[#E5DFD5] p-4 sm:p-8 shadow-2xs text-center w-full max-w-full overflow-hidden">
           <div className="w-10 h-10 rounded-2xl bg-[#EBF2EE] text-[#284838] flex items-center justify-center mx-auto mb-3.5 border border-[#D2E2D8]">
             <Heart className="w-5 h-5 text-[#315243]" />
           </div>
@@ -187,7 +187,7 @@ export const GamesPage: React.FC<GamesPageProps> = ({
               : 'There are no scores, no clocks, and no ways to make a mistake here. Every interaction is designed solely to give your nervous system a gentle, unhurried breath. Take as much or as little time as you need.'}
           </p>
 
-          <div className="mt-5 pt-5 border-t border-[#EAE4DC] flex flex-wrap items-center justify-center gap-6 text-xs text-[#6F7F77]">
+          <div className="mt-5 pt-5 border-t border-[#EAE4DC] flex flex-wrap items-center justify-center gap-3 sm:gap-6 text-xs text-[#6F7F77]">
             <div className="flex items-center gap-1.5">
               <Shield className="w-3.5 h-3.5 text-[#315243]" />
               <span>

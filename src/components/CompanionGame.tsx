@@ -1716,7 +1716,7 @@ export const CompanionGame: React.FC = () => {
   // Floating particles renderer
   const renderParticles = () => {
     return (
-      <div className="absolute inset-0 pointer-events-none overflow-visible flex items-center justify-center">
+      <div className="absolute inset-0 pointer-events-none overflow-hidden flex items-center justify-center">
         {particles.map((p) => (
           <div
             key={p.id}
@@ -1745,7 +1745,7 @@ export const CompanionGame: React.FC = () => {
   return (
     <div
       id="companion-game-container"
-      className="w-full max-w-2xl mx-auto select-none font-['Plus_Jakarta_Sans',sans-serif]"
+      className="w-full max-w-2xl mx-auto select-none font-['Plus_Jakarta_Sans',sans-serif] overflow-x-hidden"
     >
       {/* 
         ========================================================================
@@ -1754,7 +1754,7 @@ export const CompanionGame: React.FC = () => {
       */}
       {!selectedPet && (
         <div
-          className={`bg-white/85 backdrop-blur-sm border border-[#E8E1D5] rounded-3xl p-6 sm:p-10 shadow-xs transition-opacity duration-500 text-center ${
+          className={`bg-white/85 backdrop-blur-sm border border-[#E8E1D5] rounded-3xl p-4 sm:p-8 md:p-10 shadow-xs transition-opacity duration-500 text-center w-full max-w-full overflow-hidden ${
             screenTransitioning ? 'opacity-0 scale-98' : 'opacity-100 scale-100'
           }`}
         >
@@ -1824,7 +1824,7 @@ export const CompanionGame: React.FC = () => {
       */}
       {selectedPet && (
         <div
-          className={`relative bg-gradient-to-b from-[#FDFCFA] to-[#F5EFEB] border border-[#EAE3D7] rounded-3xl p-6 sm:p-8 shadow-sm transition-all duration-500 min-h-[560px] flex flex-col justify-between overflow-hidden ${
+          className={`relative bg-gradient-to-b from-[#FDFCFA] to-[#F5EFEB] border border-[#EAE3D7] rounded-3xl p-3.5 sm:p-6 md:p-8 shadow-sm transition-all duration-500 min-h-[560px] flex flex-col justify-between w-full max-w-full overflow-hidden ${
             screenTransitioning ? 'opacity-0 scale-98' : 'opacity-100 scale-100'
           }`}
         >
@@ -1834,7 +1834,7 @@ export const CompanionGame: React.FC = () => {
               type="button"
               id="game-change-pet-btn"
               onClick={handleBackToSelect}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-white/85 hover:bg-white text-[#4A5D52] hover:text-[#1E3327] border border-[#E0D7C9] text-xs font-medium transition-colors cursor-pointer shadow-2xs"
+              className="inline-flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 rounded-xl bg-white/85 hover:bg-white text-[#4A5D52] hover:text-[#1E3327] border border-[#E0D7C9] text-xs font-medium transition-colors cursor-pointer shadow-2xs"
               title="Choose a different companion"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
@@ -1865,13 +1865,13 @@ export const CompanionGame: React.FC = () => {
           </div>
 
           {/* Central Vertical Stage: Falling Food -> Catch Zone -> Animated Pet */}
-          <div className="relative flex-1 flex flex-col items-center justify-center my-2 select-none">
+          <div className="relative flex-1 flex flex-col items-center justify-center my-2 select-none w-full max-w-full overflow-hidden">
             {/* Particle Burst on Feeding */}
             {renderParticles()}
 
             {/* Falling Track Container */}
             <div
-              className="relative w-full max-w-[260px] flex items-center justify-center"
+              className="relative w-full max-w-[260px] flex items-center justify-center overflow-hidden"
               style={{ height: TRAVEL_HEIGHT_PX + 150 }}
             >
               {/* 
@@ -1944,7 +1944,7 @@ export const CompanionGame: React.FC = () => {
                 {currentMessage && (
                   <div
                     id="pet-speech-bubble"
-                    className="absolute -top-11 sm:-top-13 z-30 px-4 py-1.5 rounded-2xl bg-white text-[#21382C] text-sm sm:text-base font-semibold shadow-md border border-[#DDD4C5] transition-all duration-300 animate-[fade-in_0.3s_ease-out] flex items-center justify-center text-center whitespace-nowrap select-none"
+                    className="absolute -top-11 sm:-top-13 z-30 px-3.5 sm:px-4 py-1.5 rounded-2xl bg-white text-[#21382C] text-sm sm:text-base font-semibold shadow-md border border-[#DDD4C5] transition-all duration-300 animate-[fade-in_0.3s_ease-out] flex items-center justify-center text-center max-w-[85vw] sm:max-w-xs break-words whitespace-nowrap select-none"
                   >
                     <span>{currentMessage}</span>
                     {/* Speech bubble beak pointing straight down to pet's head */}

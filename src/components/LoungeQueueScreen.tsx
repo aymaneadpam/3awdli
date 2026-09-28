@@ -324,7 +324,7 @@ export const LoungeQueueScreen: React.FC<LoungeQueueScreenProps> = ({
       {/* Top Banner Requirement: "8 people enter from the queue each session." */}
       <div
         id="queue-top-stat-banner"
-        className="relative overflow-hidden rounded-3xl bg-linear-to-r from-[#213F32] via-[#2A4C3D] to-[#1D382B] text-white p-6 sm:p-8 shadow-md mb-6"
+        className="relative overflow-hidden rounded-3xl bg-linear-to-r from-[#213F32] via-[#2A4C3D] to-[#1D382B] text-white p-4 sm:p-8 shadow-md mb-6 w-full max-w-full"
       >
         <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
           <div className="space-y-2 max-w-xl">
@@ -345,20 +345,20 @@ export const LoungeQueueScreen: React.FC<LoungeQueueScreenProps> = ({
           </div>
 
           {/* Quick Capacity Metrics */}
-          <div className="grid grid-cols-2 gap-3 sm:gap-4 shrink-0">
-            <div className="bg-white/10 backdrop-blur-xs border border-white/15 rounded-2xl p-3.5 text-center min-w-[120px]">
-              <span className="text-xs text-emerald-200/80 block mb-1">Queue Admitted</span>
-              <span className="text-2xl font-bold tracking-tight text-white">
+          <div className="grid grid-cols-2 gap-2.5 sm:gap-4 shrink-0 w-full md:w-auto">
+            <div className="bg-white/10 backdrop-blur-xs border border-white/15 rounded-2xl p-2.5 sm:p-3.5 text-center min-w-0">
+              <span className="text-[11px] sm:text-xs text-emerald-200/80 block mb-1">Queue Admitted</span>
+              <span className="text-xl sm:text-2xl font-bold tracking-tight text-white">
                 {queueState.admittedCount}
-                <span className="text-xs font-normal text-emerald-300 ml-1">/ {MAX_QUEUE_ADMISSIONS}</span>
+                <span className="text-[10px] sm:text-xs font-normal text-emerald-300 ml-1">/ {MAX_QUEUE_ADMISSIONS}</span>
               </span>
             </div>
 
-            <div className="bg-white/10 backdrop-blur-xs border border-white/15 rounded-2xl p-3.5 text-center min-w-[120px]">
-              <span className="text-xs text-emerald-200/80 block mb-1">Room Total</span>
-              <span className="text-2xl font-bold tracking-tight text-white">
+            <div className="bg-white/10 backdrop-blur-xs border border-white/15 rounded-2xl p-2.5 sm:p-3.5 text-center min-w-0">
+              <span className="text-[11px] sm:text-xs text-emerald-200/80 block mb-1">Room Total</span>
+              <span className="text-xl sm:text-2xl font-bold tracking-tight text-white">
                 {queueState.roomParticipantsCount}
-                <span className="text-xs font-normal text-emerald-300 ml-1">/ {MAX_ROOM_CAPACITY}</span>
+                <span className="text-[10px] sm:text-xs font-normal text-emerald-300 ml-1">/ {MAX_ROOM_CAPACITY}</span>
               </span>
             </div>
           </div>

@@ -354,10 +354,10 @@ export const RainLightGame: React.FC = () => {
   return (
     <div
       id="rain-light-game-container"
-      className="w-full max-w-2xl mx-auto select-none font-['Plus_Jakarta_Sans',sans-serif]"
+      className="w-full max-w-2xl mx-auto select-none font-['Plus_Jakarta_Sans',sans-serif] overflow-x-hidden"
     >
       {/* Outer Card Container */}
-      <div className="bg-white/85 backdrop-blur-sm border border-[#E8E1D5] rounded-3xl p-5 sm:p-8 shadow-xs">
+      <div className="bg-white/85 backdrop-blur-sm border border-[#E8E1D5] rounded-3xl p-3.5 sm:p-6 md:p-8 shadow-xs w-full max-w-full overflow-hidden">
         {/* Top Header Bar */}
         <div className="flex items-center justify-between gap-3 mb-4">
           <div className="flex items-center gap-2">
@@ -379,7 +379,7 @@ export const RainLightGame: React.FC = () => {
               type="button"
               id="rain-light-pause-btn"
               onClick={() => setIsPlaying(!isPlaying)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/85 hover:bg-white text-[#4A5D52] hover:text-[#1E3327] border border-[#E0D7C9] text-xs font-medium transition-colors cursor-pointer shadow-2xs"
+              className="inline-flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 rounded-xl bg-white/85 hover:bg-white text-[#4A5D52] hover:text-[#1E3327] border border-[#E0D7C9] text-xs font-medium transition-colors cursor-pointer shadow-2xs"
               title={isPlaying ? 'Pause rain animation' : 'Resume rain animation'}
               aria-label={isPlaying ? 'Pause rain animation' : 'Resume rain animation'}
             >
@@ -405,7 +405,7 @@ export const RainLightGame: React.FC = () => {
               type="button"
               id="rain-light-sound-toggle-btn"
               onClick={() => setSoundEnabled(!soundEnabled)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-white/85 hover:bg-white text-[#4A5D52] hover:text-[#1E3327] border border-[#E0D7C9] text-xs font-medium transition-colors cursor-pointer shadow-2xs"
+              className="inline-flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 rounded-xl bg-white/85 hover:bg-white text-[#4A5D52] hover:text-[#1E3327] border border-[#E0D7C9] text-xs font-medium transition-colors cursor-pointer shadow-2xs"
               title={soundEnabled ? 'Mute soothing rain sound' : 'Unmute soothing rain sound'}
               aria-label={soundEnabled ? 'Mute soothing rain sound' : 'Unmute soothing rain sound'}
             >
@@ -433,7 +433,7 @@ export const RainLightGame: React.FC = () => {
           ref={containerRef}
           id="rain-light-window-pane"
           onClick={handlePaneClick}
-          className="relative bg-gradient-to-b from-[#C4D7E5] via-[#AFC8D8] to-[#99B6C7] border-4 border-[#E8E1D5] rounded-3xl min-h-[430px] sm:min-h-[470px] flex flex-col items-center justify-between p-6 sm:p-8 overflow-hidden shadow-inner cursor-pointer"
+          className="relative bg-gradient-to-b from-[#C4D7E5] via-[#AFC8D8] to-[#99B6C7] border-4 border-[#E8E1D5] rounded-3xl min-h-[400px] sm:min-h-[470px] flex flex-col items-center justify-between p-4 sm:p-6 md:p-8 overflow-hidden shadow-inner cursor-pointer w-full max-w-full"
         >
           {/* Warm Amber Hearth Light Glow Spreading Against the Cool Rain */}
           <div
@@ -606,8 +606,8 @@ export const RainLightGame: React.FC = () => {
           </div>
 
           {/* Bottom Atmospheric Footer */}
-          <div className="relative z-10 text-center pb-1">
-            <p className="text-xs sm:text-sm text-[#274435] font-medium tracking-wide bg-white/55 backdrop-blur-xs px-4 py-1.5 rounded-2xl border border-white/50 inline-block shadow-2xs">
+          <div className="relative z-10 text-center pb-1 w-full max-w-full px-2">
+            <p className="text-xs sm:text-sm text-[#274435] font-medium tracking-wide bg-white/55 backdrop-blur-xs px-3 sm:px-4 py-1.5 rounded-2xl border border-white/50 inline-block shadow-2xs max-w-full break-words">
               {interactionCount === 0
                 ? 'Watch the gentle rain, or touch the glass to create ripples.'
                 : 'Each drop brings calm. Take your time.'}

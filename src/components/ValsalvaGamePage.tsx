@@ -59,9 +59,9 @@ export const ValsalvaGamePage: React.FC<ValsalvaGamePageProps> = ({
       onTalkAnonymously={onTalkAnonymously}
       onSignOut={onSignOut}
     >
-      <main className="flex-1 py-10 sm:py-14 px-4 sm:px-6 lg:px-8 max-w-4xl mx-auto">
+      <main className="flex-1 py-8 sm:py-14 px-3 sm:px-6 lg:px-8 max-w-4xl mx-auto w-full max-w-full overflow-x-hidden">
         {/* Navigation Breadcrumb */}
-        <div className="mb-6 flex items-center justify-between">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
           <button
             type="button"
             onClick={onNavigateHome}

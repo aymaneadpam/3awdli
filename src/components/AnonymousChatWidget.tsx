@@ -889,11 +889,11 @@ export const AnonymousChatWidget = ({
       <aside
         id="talk-anonymously-launcher"
         aria-label="Anonymous mental health support chat"
-        className="fixed bottom-6 right-6 z-50 flex items-center gap-3"
+        className="fixed bottom-4 sm:bottom-6 end-4 sm:end-6 z-50 flex items-center gap-3 max-w-[calc(100vw-2rem)]"
       >
         <button
           onClick={onRequestTalkOpenly || onOpen}
-          className="group flex items-center gap-3 px-5 py-3.5 bg-[#315243] hover:bg-[#274236] text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-0.5 focus:outline-none focus:ring-4 focus:ring-[#315243]/20 cursor-pointer"
+          className="group flex items-center gap-2.5 sm:gap-3 px-4 sm:px-5 py-3 sm:py-3.5 bg-[#315243] hover:bg-[#274236] text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-0.5 focus:outline-none focus:ring-4 focus:ring-[#315243]/20 cursor-pointer max-w-full"
           id="floating-chat-trigger"
           title={currentUser ? "Talk Openly with 3awdli" : "Talk Anonymously with 3awdli"}
         >

@@ -428,17 +428,22 @@ export const Navbar: React.FC<NavbarProps> = ({
     if (onTalkAnonymously) onTalkAnonymously();
   };
 
-  // Build the list of menu items in the EXACT fixed order:
+  // Build the list of menu items in the EXACT top-to-bottom fixed order:
   // 1. Home
-  // 2. My Space (if logged in)
-  // 3. Discussions (if listener or admin)
-  // 4. Mailbox (if listener or admin)
-  // 5. Admin Console (if admin)
-  // 6. Contact Support (all users)
-  // 7. Sign In (if guest)
-  // 8. Sign Up (if guest)
-  // 9. Emergency Help (all users)
-  // 10. Log Out (if logged in)
+  // 2. Personal Space
+  // 3. Discussions
+  // 4. Games
+  // 5. The Lounge
+  // 6. Teen Space
+  // 7. Schedules
+  // 8. Rules (Réglement)
+  // 9. Member Management
+  // 10. Reports
+  // 11. Mailbox
+  // 12. Support
+  // 13. Emergency Help
+  // 14. Contact Support
+  // 15. Log Out
   const navItems: NavItem[] = [];
 
   // 1. Home
@@ -495,39 +500,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     });
   }
 
-  // 4. The Lounge (All logged-in users)
-  if (currentUser && (onNavigateLounge || onOpenLounge)) {
-    navItems.push({
-      id: 'sidebar-nav-lounge',
-      label: strings.nav.theLounge,
-      description: language === 'fr' 
-        ? 'Articles, réflexions & salons d\'échange' 
-        : language === 'ar'
-        ? 'مقالات داعمة وحلقات حوار ونقاش'
-        : 'Articles, reflections & scheduled live sessions',
-      icon: Coffee,
-      isActive: currentView === 'lounge',
-      onClick: handleLounge,
-    });
-  }
-
-  // 5. Teen Space (All users: logged in or anonymous)
-  if (onNavigateTeenSpace || onOpenTeenSpace) {
-    navItems.push({
-      id: 'sidebar-nav-teen-space',
-      label: strings.nav.teenSpace,
-      description: language === 'fr' 
-        ? 'Articles de bien-être mental & réflexions pour les ados' 
-        : language === 'ar'
-        ? 'مقالات وخواطر داعمة لليافعين والشباب'
-        : 'Mental wellness articles & reflections for youth',
-      icon: BookOpen,
-      isActive: currentView === 'teen-space',
-      onClick: handleTeenSpace,
-    });
-  }
-
-  // 6. Games (All users: logged in or anonymous)
+  // 4. Games (All users: logged in or anonymous)
   if (onNavigateGames || onOpenGames) {
     navItems.push({
       id: 'sidebar-nav-games',
@@ -543,38 +516,87 @@ export const Navbar: React.FC<NavbarProps> = ({
     });
   }
 
-  // 7. Mailbox (Listeners & Admins OR Regular users)
-  if (currentUser && (isListener || isAdmin) && (onNavigateDiscussions || onOpenDiscussions)) {
+  // 5. The Lounge (All logged-in users)
+  if (currentUser && (onNavigateLounge || onOpenLounge)) {
     navItems.push({
-      id: 'sidebar-nav-mailbox',
-      label: strings.nav.mailbox,
+      id: 'sidebar-nav-lounge',
+      label: strings.nav.theLounge,
       description: language === 'fr' 
-        ? 'Demandes de consultation & partages' 
+        ? 'Articles, réflexions & salons d\'échange' 
         : language === 'ar'
-        ? 'طلبات الاستشارة والملفات المشتركة'
-        : 'Consultation requests & shared files',
-      icon: Mail,
-      isActive: currentView === 'discussions' && activeSubTab === 'mailbox',
-      onClick: () => handleDiscussions('mailbox'),
-      badge: unreadShareCount > 0 ? unreadShareCount : null,
-    });
-  } else if (currentUser && !isListener && !isAdmin && (onNavigateMailbox || onOpenMailbox)) {
-    navItems.push({
-      id: 'sidebar-nav-user-mailbox',
-      label: strings.nav.mailbox,
-      description: language === 'fr' 
-        ? 'Réponses aux signalements & avis de l\'équipe' 
-        : language === 'ar'
-        ? 'الردود على البلاغات وإشعارات الفريق'
-        : 'Replies to reports & team updates',
-      icon: Mail,
-      isActive: currentView === 'user-mailbox',
-      onClick: handleUserMailbox,
-      badge: unreadUserMailboxCount > 0 ? unreadUserMailboxCount : null,
+        ? 'مقالات داعمة وحلقات حوار ونقاش'
+        : 'Articles, reflections & scheduled live sessions',
+      icon: Coffee,
+      isActive: currentView === 'lounge',
+      onClick: handleLounge,
     });
   }
 
-  // 8. Reports (Administrators only - shows transferred reports escalated by Head of Listeners, or Head of Listeners original reports queue)
+  // 6. Teen Space (All users: logged in or anonymous)
+  if (onNavigateTeenSpace || onOpenTeenSpace) {
+    navItems.push({
+      id: 'sidebar-nav-teen-space',
+      label: strings.nav.teenSpace,
+      description: language === 'fr' 
+        ? 'Articles de bien-être mental & réflexions pour les ados' 
+        : language === 'ar'
+        ? 'مقالات وخواطر داعمة لليافعين والشباب'
+        : 'Mental wellness articles & reflections for youth',
+      icon: BookOpen,
+      isActive: currentView === 'teen-space',
+      onClick: handleTeenSpace,
+    });
+  }
+
+  // 7. Schedules (Horaires - Open chat windows & availability for all users)
+  if (onNavigateSchedules || onOpenSchedules) {
+    navItems.push({
+      id: 'sidebar-nav-schedules',
+      label: strings.nav.schedules || (language === 'fr' ? 'Horaires' : language === 'ar' ? 'المواعيد' : 'Schedules'),
+      description: language === 'fr' 
+        ? 'Créneaux d\'ouverture & permanences d\'écoute' 
+        : language === 'ar'
+        ? 'أوقات ومواعيد فتح محادثات الاستماع'
+        : 'Open chat availability & listening shifts',
+      icon: CalendarClock,
+      isActive: currentView === 'schedules',
+      onClick: handleSchedules,
+    });
+  }
+
+  // 8. Rules (Règlement - Available to all users including visitors)
+  if (onNavigateRules || onOpenRules) {
+    navItems.push({
+      id: 'sidebar-nav-rules',
+      label: strings.nav.rules || (language === 'fr' ? 'Réglement' : language === 'ar' ? 'القوانين' : 'Rules'),
+      description: language === 'fr' 
+        ? 'Réglement général & chartes éthiques' 
+        : language === 'ar'
+        ? 'القوانين والمواثيق الأخلاقية للمنصة'
+        : 'General rules & ethical charters',
+      icon: ShieldCheck,
+      isActive: currentView === 'rules',
+      onClick: handleRules,
+    });
+  }
+
+  // 9. Member Management (Visible to Administrators and Admin)
+  if (currentUser && hasAdminAccess && (onNavigateMemberManagement || onOpenMemberManagement || onNavigateAdmin || onOpenAdmin)) {
+    navItems.push({
+      id: 'sidebar-nav-member-management',
+      label: strings.nav.memberManagement,
+      description: language === 'fr' 
+        ? 'Attribuer les rôles Écoutant, Responsable, Animateur & Rédacteur' 
+        : language === 'ar'
+        ? 'تعيين أدوار المستمع، المسؤول، الميسر والمحرر'
+        : 'Assign Listener, Head, Facilitator & Writer roles',
+      icon: Users,
+      isActive: currentView === 'member-management' || currentView === 'admin',
+      onClick: handleMemberManagement,
+    });
+  }
+
+  // 10. Reports (Administrators: transferred reports escalated by Head of Listeners; Head of Listeners: original reports queue)
   if (currentUser && hasAdminAccess && (onNavigateAdminReports || onNavigateReports || onOpenReports)) {
     navItems.push({
       id: 'sidebar-nav-admin-reports',
@@ -605,7 +627,38 @@ export const Navbar: React.FC<NavbarProps> = ({
     });
   }
 
-  // 9. Support (Support Inbox visible to Administrators)
+  // 11. Mailbox (Listeners & Admins OR Regular users)
+  if (currentUser && (isListener || isAdmin) && (onNavigateDiscussions || onOpenDiscussions)) {
+    navItems.push({
+      id: 'sidebar-nav-mailbox',
+      label: strings.nav.mailbox,
+      description: language === 'fr' 
+        ? 'Demandes de consultation & partages' 
+        : language === 'ar'
+        ? 'طلبات الاستشارة والملفات المشتركة'
+        : 'Consultation requests & shared files',
+      icon: Mail,
+      isActive: currentView === 'discussions' && activeSubTab === 'mailbox',
+      onClick: () => handleDiscussions('mailbox'),
+      badge: unreadShareCount > 0 ? unreadShareCount : null,
+    });
+  } else if (currentUser && !isListener && !isAdmin && (onNavigateMailbox || onOpenMailbox)) {
+    navItems.push({
+      id: 'sidebar-nav-user-mailbox',
+      label: strings.nav.mailbox,
+      description: language === 'fr' 
+        ? 'Réponses aux signalements & avis de l\'équipe' 
+        : language === 'ar'
+        ? 'الردود على البلاغات وإشعارات الفريق'
+        : 'Replies to reports & team updates',
+      icon: Mail,
+      isActive: currentView === 'user-mailbox',
+      onClick: handleUserMailbox,
+      badge: unreadUserMailboxCount > 0 ? unreadUserMailboxCount : null,
+    });
+  }
+
+  // 12. Support (Support Inbox visible to Administrators)
   if (currentUser && hasAdminAccess && (onNavigateAdminSupport || onOpenAdminSupport || onNavigateAdmin || onOpenAdmin)) {
     navItems.push({
       id: 'sidebar-nav-admin-support',
@@ -622,23 +675,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     });
   }
 
-  // 10. Member Management (Visible to Administrators and Admin)
-  if (currentUser && hasAdminAccess && (onNavigateMemberManagement || onOpenMemberManagement || onNavigateAdmin || onOpenAdmin)) {
-    navItems.push({
-      id: 'sidebar-nav-member-management',
-      label: strings.nav.memberManagement,
-      description: language === 'fr' 
-        ? 'Attribuer les rôles Écoutant, Responsable, Animateur & Rédacteur' 
-        : language === 'ar'
-        ? 'تعيين أدوار المستمع، المسؤول، الميسر والمحرر'
-        : 'Assign Listener, Head, Facilitator & Writer roles',
-      icon: Users,
-      isActive: currentView === 'member-management' || currentView === 'admin',
-      onClick: handleMemberManagement,
-    });
-  }
-
-  // 11. Emergency Help
+  // 13. Emergency Help (Crisis hotlines & urgent assistance resources)
   if (onOpenEmergencyModal) {
     navItems.push({
       id: 'sidebar-nav-emergency',
@@ -654,39 +691,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     });
   }
 
-  // Schedules (Horaires) - Open chat windows & availability for all users
-  if (onNavigateSchedules || onOpenSchedules) {
-    navItems.push({
-      id: 'sidebar-nav-schedules',
-      label: strings.nav.schedules || (language === 'fr' ? 'Horaires' : language === 'ar' ? 'المواعيد' : 'Schedules'),
-      description: language === 'fr' 
-        ? 'Créneaux d\'ouverture & permanences d\'écoute' 
-        : language === 'ar'
-        ? 'أوقات ومواعيد فتح محادثات الاستماع'
-        : 'Open chat availability & listening shifts',
-      icon: CalendarClock,
-      isActive: currentView === 'schedules',
-      onClick: handleSchedules,
-    });
-  }
-
-  // Rules (Règlement) - Positioned directly before "Contact Support", available to all users (including visitors)
-  if (onNavigateRules || onOpenRules) {
-    navItems.push({
-      id: 'sidebar-nav-rules',
-      label: strings.nav.rules || (language === 'fr' ? 'Réglement' : language === 'ar' ? 'القوانين' : 'Rules'),
-      description: language === 'fr' 
-        ? 'Réglement général & chartes éthiques' 
-        : language === 'ar'
-        ? 'القوانين والمواثيق الأخلاقية للمنصة'
-        : 'General rules & ethical charters',
-      icon: ShieldCheck,
-      isActive: currentView === 'rules',
-      onClick: handleRules,
-    });
-  }
-
-  // 12. Contact Support (All users)
+  // 14. Contact Support (All users)
   if (onOpenContactSupport) {
     navItems.push({
       id: 'sidebar-nav-support',
@@ -702,35 +707,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     });
   }
 
-  // Non-logged-in Auth (Sign In / Sign Up)
-  if (!currentUser && onOpenAuth) {
-    navItems.push({
-      id: 'sidebar-nav-signin',
-      label: strings.nav.signIn,
-      description: language === 'fr' 
-        ? 'Accédez à votre espace sécurisé et vos notes' 
-        : language === 'ar'
-        ? 'الدخول إلى فضائك الآمن وملاحظاتك'
-        : 'Access your saved space and notes',
-      icon: LogIn,
-      isActive: currentView === 'signin',
-      onClick: () => handleAuth('signin'),
-    });
-    navItems.push({
-      id: 'sidebar-nav-signup',
-      label: strings.nav.signUp,
-      description: language === 'fr' 
-        ? 'Créer un compte gratuit et privé' 
-        : language === 'ar'
-        ? 'إنشاء حساب مجاني وخاص'
-        : 'Create a free, private account',
-      icon: UserPlus,
-      isActive: currentView === 'signup',
-      onClick: () => handleAuth('signup'),
-    });
-  }
-
-  // 13. Log Out
+  // 15. Log Out
   if (currentUser && onSignOut) {
     navItems.push({
       id: 'sidebar-nav-signout',
@@ -788,7 +765,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   const currentViewLabel = getCurrentViewLabel();
 
   return (
-    <div className="min-h-screen flex bg-[#FAF8F5] text-[#2C332E] relative selection:bg-[#E5EEE9] selection:text-[#183424]">
+    <div className="min-h-screen flex bg-[#FAF8F5] text-[#2C332E] relative selection:bg-[#E5EEE9] selection:text-[#183424] w-full max-w-full overflow-x-hidden">
       {/* Backdrop for mobile/tablet drawer */}
       {isSidebarOpen && (
         <div
@@ -809,17 +786,19 @@ export const Navbar: React.FC<NavbarProps> = ({
       <aside
         id="app-left-sidebar"
         aria-label="Application Navigation Sidebar"
-        className={`fixed top-0 bottom-0 z-50 h-screen w-72 bg-[#FAF8F5] flex flex-col transition-all duration-300 ease-in-out ${
+        className={`fixed top-0 bottom-0 z-50 h-screen w-72 max-w-[85vw] bg-[#FAF8F5] flex flex-col transition-all duration-300 ease-in-out ${
+          isSidebarOpen ? 'visible' : 'invisible pointer-events-none'
+        } ${
           language === 'ar'
             ? `right-0 border-l border-[#E6E0D6] ${
                 isSidebarOpen
                   ? 'translate-x-0 shadow-2xl lg:shadow-none'
-                  : 'translate-x-full lg:w-0 lg:overflow-hidden pointer-events-none'
+                  : 'translate-x-full lg:w-0 lg:overflow-hidden'
               }`
             : `left-0 border-r border-[#E6E0D6] ${
                 isSidebarOpen
                   ? 'translate-x-0 shadow-2xl lg:shadow-none'
-                  : '-translate-x-full lg:w-0 lg:overflow-hidden pointer-events-none'
+                  : '-translate-x-full lg:w-0 lg:overflow-hidden'
               }`
         }`}
       >
@@ -909,13 +888,29 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </p>
               </div>
               {onOpenAuth && (
-                <button
-                  id="sidebar-quick-signin-btn"
-                  onClick={() => handleAuth('signin')}
-                  className="text-xs font-semibold text-[#294B3A] hover:underline cursor-pointer"
-                >
-                  {strings.nav.signIn}
-                </button>
+                <div className="flex items-center gap-1.5 sm:gap-2">
+                  <button
+                    id="sidebar-quick-signin-btn"
+                    onClick={() => {
+                      closeSidebarOnMobile();
+                      handleAuth('signin');
+                    }}
+                    className="text-xs font-semibold text-[#294B3A] hover:underline cursor-pointer"
+                  >
+                    {strings.nav.signIn}
+                  </button>
+                  <span className="text-[#A5B2AA] text-xs">•</span>
+                  <button
+                    id="sidebar-quick-signup-btn"
+                    onClick={() => {
+                      closeSidebarOnMobile();
+                      handleAuth('signup');
+                    }}
+                    className="text-xs font-semibold text-[#294B3A] hover:underline cursor-pointer"
+                  >
+                    {strings.nav.signUp}
+                  </button>
+                </div>
               )}
             </div>
           )}
@@ -1077,7 +1072,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         ========================================================================
       */}
       <div
-        className={`flex-1 flex flex-col min-w-0 transition-all duration-300 ease-in-out ${
+        className={`flex-1 flex flex-col min-w-0 w-full max-w-full overflow-x-hidden transition-all duration-300 ease-in-out ${
           language === 'ar'
             ? isSidebarOpen ? 'lg:pr-72 lg:pl-0' : 'lg:pr-0 lg:pl-0'
             : isSidebarOpen ? 'lg:pl-72 lg:pr-0' : 'lg:pl-0 lg:pr-0'
@@ -1094,7 +1089,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         */}
         <header
           id="sticky-top-navbar"
-          className="sticky top-0 z-30 bg-[#FAF8F5]/95 backdrop-blur-md border-b border-[#E9E4DC] shadow-2xs h-16 sm:h-20 flex items-center justify-between px-3 sm:px-6 lg:px-8 gap-2 sm:gap-3"
+          className="sticky top-0 z-30 bg-[#FAF8F5]/95 backdrop-blur-md border-b border-[#E9E4DC] shadow-2xs h-14 sm:h-16 flex items-center justify-between px-3 sm:px-6 lg:px-8 gap-2 sm:gap-3"
         >
           {/* Left area: Menu toggle icon button on mobile and desktop */}
           <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
@@ -1211,11 +1206,12 @@ export const Navbar: React.FC<NavbarProps> = ({
               <button
                 id="nav-talk-anonymously-btn"
                 onClick={handleTalk}
-                className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm font-semibold text-white bg-[#264634] hover:bg-[#1E3729] px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl transition-all shadow-xs hover:shadow-sm cursor-pointer shrink-0 whitespace-nowrap"
+                className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm font-semibold text-white bg-[#264634] hover:bg-[#1E3729] px-2 sm:px-4 py-1.5 sm:py-2 rounded-xl transition-all shadow-xs hover:shadow-sm cursor-pointer shrink-0 whitespace-nowrap"
                 title={currentUser ? (language === 'fr' ? 'Démarrer une conversation ouvertement' : 'Start a conversation openly') : (language === 'fr' ? 'Démarrer une conversation anonyme gratuite' : 'Start a free, anonymous conversation')}
               >
                 <MessageCircleHeart className="w-4 h-4 text-emerald-200 shrink-0" />
-                <span>{currentUser ? strings.common.talkOpenly : strings.common.talkAnonymously}</span>
+                <span className="hidden min-[480px]:inline">{currentUser ? strings.common.talkOpenly : strings.common.talkAnonymously}</span>
+                <span className="min-[480px]:hidden">{currentUser ? (language === 'ar' ? 'تحدث' : language === 'fr' ? 'Parler' : 'Talk') : (language === 'ar' ? 'تحدث بسرية' : language === 'fr' ? 'Anonyme' : 'Talk')}</span>
               </button>
             )}
 
@@ -1224,11 +1220,12 @@ export const Navbar: React.FC<NavbarProps> = ({
               <button
                 id="nav-emergency-help-btn"
                 onClick={handleEmergency}
-                className="flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-[#9E3624] bg-[#FFF2EE] hover:bg-[#FDE7E1] border border-[#F5C4B7] px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl transition-all shadow-2xs hover:shadow-xs cursor-pointer shrink-0 ring-1 ring-[#E85D45]/20 hover:ring-[#E85D45]/30 whitespace-nowrap"
+                className="flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-[#9E3624] bg-[#FFF2EE] hover:bg-[#FDE7E1] border border-[#F5C4B7] px-2 sm:px-4 py-1.5 sm:py-2 rounded-xl transition-all shadow-2xs hover:shadow-xs cursor-pointer shrink-0 ring-1 ring-[#E85D45]/20 hover:ring-[#E85D45]/30 whitespace-nowrap"
                 title={language === 'fr' ? 'Numéros d\'urgence & ressources de crise' : 'Emergency Hotline & Crisis Resources'}
               >
                 <LifeBuoy className="w-4 h-4 text-[#C24127] shrink-0" />
-                <span>{strings.nav.emergencyHelp}</span>
+                <span className="hidden min-[480px]:inline">{strings.nav.emergencyHelp}</span>
+                <span className="min-[480px]:hidden">{language === 'ar' ? 'طوارئ' : language === 'fr' ? 'Urgence' : 'Emergency'}</span>
               </button>
             )}
           </div>
@@ -1241,7 +1238,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Page Content passed as children */}
         {children ? (
-          <div className="flex-1 flex flex-col min-w-0">
+          <div className="flex-1 flex flex-col min-w-0 w-full max-w-full overflow-x-hidden">
             {children}
           </div>
         ) : null}

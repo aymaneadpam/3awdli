@@ -258,10 +258,10 @@ export const BreathingPebbleGame: React.FC = () => {
   return (
     <div
       id="breathing-characters-container"
-      className="w-full max-w-2xl mx-auto select-none font-['Plus_Jakarta_Sans',sans-serif]"
+      className="w-full max-w-2xl mx-auto select-none font-['Plus_Jakarta_Sans',sans-serif] overflow-x-hidden"
     >
       {/* Outer Card Container */}
-      <div className="bg-white/85 backdrop-blur-sm border border-[#E8E1D5] rounded-3xl p-5 sm:p-8 shadow-xs">
+      <div className="bg-white/85 backdrop-blur-sm border border-[#E8E1D5] rounded-3xl p-3.5 sm:p-6 md:p-8 shadow-xs w-full max-w-full overflow-hidden">
         {/* Top Header Bar */}
         <div className="flex items-center justify-between gap-3 mb-4">
           <div className="flex items-center gap-2">
@@ -348,14 +348,14 @@ export const BreathingPebbleGame: React.FC = () => {
         {/* Peaceful Center Stage */}
         <div
           id="breathing-stage"
-          className="relative bg-gradient-to-b from-[#FBF9F5] to-[#F5EFEB] border border-[#EAE3D7] rounded-3xl min-h-[430px] sm:min-h-[470px] flex flex-col items-center justify-between p-6 sm:p-8 overflow-hidden shadow-inner"
+          className="relative bg-gradient-to-b from-[#FBF9F5] to-[#F5EFEB] border border-[#EAE3D7] rounded-3xl min-h-[380px] sm:min-h-[470px] flex flex-col items-center justify-between p-3 sm:p-6 md:p-8 overflow-hidden shadow-inner w-full max-w-full"
         >
           {/* Subtle Ambient Radial Aura behind characters */}
           <div
-            className="absolute pointer-events-none rounded-full blur-3xl transition-all"
+            className="absolute pointer-events-none rounded-full blur-3xl transition-all max-w-full"
             style={{
-              width: '360px',
-              height: '360px',
+              width: 'min(300px, 85vw)',
+              height: 'min(300px, 85vw)',
               top: '15%',
               background: !hasStarted ? 'rgba(215, 228, 222, 0.3)' : currentAccent.aura,
               transitionDuration: getTransitionDuration(),
@@ -376,11 +376,11 @@ export const BreathingPebbleGame: React.FC = () => {
                 <span>Start</span>
               </button>
             ) : (
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2.5 sm:gap-3 flex-wrap justify-center">
                 {/* Calm Countdown Number Badge */}
                 <div
                   id="breathing-countdown-badge"
-                  className={`w-11 h-11 sm:w-12 sm:h-12 rounded-2xl border flex items-center justify-center font-['Lora',serif] text-xl sm:text-2xl font-semibold shadow-2xs transition-colors duration-700 ${currentAccent.badge}`}
+                  className={`w-10 h-10 sm:w-12 sm:h-12 rounded-2xl border flex items-center justify-center font-['Lora',serif] text-lg sm:text-2xl font-semibold shadow-2xs transition-colors duration-700 ${currentAccent.badge}`}
                 >
                   {countdown}
                 </div>
@@ -388,7 +388,7 @@ export const BreathingPebbleGame: React.FC = () => {
                 {/* Minimal Phase Text Cue */}
                 <span
                   key={phase}
-                  className="text-lg sm:text-xl font-medium text-[#2C4235] font-['Lora',serif] tracking-wide"
+                  className="text-base sm:text-xl font-medium text-[#2C4235] font-['Lora',serif] tracking-wide"
                   style={{
                     animation: 'fadeInText 0.6s ease-in-out',
                   }}
@@ -400,9 +400,9 @@ export const BreathingPebbleGame: React.FC = () => {
           </div>
 
           {/* Side-by-Side Cartoon Characters Breathing in Sync (Same flat style as cat/dog) */}
-          <div className="relative z-10 flex items-end justify-center gap-6 sm:gap-12 w-full my-auto pt-4">
+          <div className="relative z-10 flex items-end justify-center gap-2 sm:gap-12 w-full my-auto pt-4 max-w-full overflow-hidden">
             {/* BOY CHARACTER */}
-            <div className="flex flex-col items-center">
+            <div className="flex flex-col items-center shrink min-w-0">
               <div
                 className="transition-transform origin-bottom"
                 style={{
@@ -413,7 +413,7 @@ export const BreathingPebbleGame: React.FC = () => {
               >
                 <svg
                   viewBox="0 0 160 180"
-                  className="w-36 h-40 sm:w-44 sm:h-48 select-none overflow-visible drop-shadow-2xs"
+                  className="w-24 h-28 xs:w-28 xs:h-32 sm:w-44 sm:h-48 max-w-full select-none overflow-hidden drop-shadow-2xs"
                   aria-label="Boy character breathing peacefully"
                 >
                   <defs>
@@ -507,7 +507,7 @@ export const BreathingPebbleGame: React.FC = () => {
             </div>
 
             {/* GIRL CHARACTER */}
-            <div className="flex flex-col items-center">
+            <div className="flex flex-col items-center shrink min-w-0">
               <div
                 className="transition-transform origin-bottom"
                 style={{
@@ -518,7 +518,7 @@ export const BreathingPebbleGame: React.FC = () => {
               >
                 <svg
                   viewBox="0 0 160 180"
-                  className="w-36 h-40 sm:w-44 sm:h-48 select-none overflow-visible drop-shadow-2xs"
+                  className="w-24 h-28 xs:w-28 xs:h-32 sm:w-44 sm:h-48 max-w-full select-none overflow-hidden drop-shadow-2xs"
                   aria-label="Girl character breathing peacefully"
                 >
                   <defs>

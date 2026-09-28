@@ -335,18 +335,18 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
               </div>
 
               {/* Statistics Counters */}
-              <div className="flex items-center gap-3 shrink-0 self-start md:self-auto">
-                <div className="bg-[#FAF8F5] border border-[#DDD7CB] rounded-2xl px-4 py-2.5 text-center min-w-[95px]">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3 shrink-0 self-start md:self-auto w-full md:w-auto">
+                <div className="bg-[#FAF8F5] border border-[#DDD7CB] rounded-2xl px-3 sm:px-4 py-2 sm:py-2.5 text-center flex-1 sm:flex-initial min-w-[75px] sm:min-w-[95px]">
                   <span className="block text-sm font-bold text-rose-700">{pendingCount}</span>
-                  <span className="text-[11px] font-medium text-stone-500">Pending Review</span>
+                  <span className="text-[10px] sm:text-[11px] font-medium text-stone-500 whitespace-nowrap">Pending</span>
                 </div>
-                <div className="bg-[#FAF8F5] border border-[#DDD7CB] rounded-2xl px-4 py-2.5 text-center min-w-[95px]">
+                <div className="bg-[#FAF8F5] border border-[#DDD7CB] rounded-2xl px-3 sm:px-4 py-2 sm:py-2.5 text-center flex-1 sm:flex-initial min-w-[75px] sm:min-w-[95px]">
                   <span className="block text-sm font-bold text-emerald-700">{repliedCount}</span>
-                  <span className="text-[11px] font-medium text-stone-500">Replied</span>
+                  <span className="text-[10px] sm:text-[11px] font-medium text-stone-500 whitespace-nowrap">Replied</span>
                 </div>
-                <div className="bg-[#FAF8F5] border border-[#DDD7CB] rounded-2xl px-4 py-2.5 text-center min-w-[95px]">
+                <div className="bg-[#FAF8F5] border border-[#DDD7CB] rounded-2xl px-3 sm:px-4 py-2 sm:py-2.5 text-center flex-1 sm:flex-initial min-w-[75px] sm:min-w-[95px]">
                   <span className="block text-sm font-bold text-[#2A4736]">{reports.length}</span>
-                  <span className="text-[11px] font-medium text-stone-500">Total Reports</span>
+                  <span className="text-[10px] sm:text-[11px] font-medium text-stone-500 whitespace-nowrap">Total Reports</span>
                 </div>
               </div>
             </div>

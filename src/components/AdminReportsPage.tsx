@@ -462,7 +462,7 @@ export const AdminReportsPage: React.FC<AdminReportsPageProps> = ({
                 </button>
               </div>
 
-              <div className="relative min-w-[220px]">
+              <div className="relative w-full sm:w-auto min-w-0 sm:min-w-[220px]">
                 <Search className="w-3.5 h-3.5 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
