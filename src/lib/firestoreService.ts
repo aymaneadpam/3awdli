@@ -16,6 +16,7 @@ import {
   sendPasswordResetEmail,
   onAuthStateChanged,
   signInWithPopup,
+  signInAnonymously,
   GoogleAuthProvider,
   User as FirebaseUser
 } from 'firebase/auth';
@@ -25,6 +26,8 @@ import {
   DiscussionConversation, 
   ConversationShareRequest, 
   SupportRequest,
+  DiscussionReport,
+  UserMailboxMessage,
   LoungeArticle,
   TeenSpaceArticle,
   RuleCategory,
@@ -34,6 +37,8 @@ import {
 // Collection references
 export const USERS_COLLECTION = 'users';
 export const DISCUSSIONS_COLLECTION = 'discussions';
+export const DISCUSSION_REPORTS_COLLECTION = 'discussion_reports';
+export const USER_MAILBOX_MESSAGES_COLLECTION = 'user_mailbox_messages';
 export const SHARE_REQUESTS_COLLECTION = 'share_requests';
 export const SUPPORT_REQUESTS_COLLECTION = 'support_requests';
 export const LOUNGE_ARTICLES_COLLECTION = 'lounge_articles';
@@ -267,6 +272,128 @@ export function subscribeToSupportRequests(
 }
 
 // -------------------------------------------------------------
+// FIRESTORE DISCUSSION REPORTS MANAGEMENT
+// -------------------------------------------------------------
+
+export async function fetchReportsFromFirestore(): Promise<DiscussionReport[]> {
+  try {
+    const colRef = collection(db, DISCUSSION_REPORTS_COLLECTION);
+    const snap = await getDocs(colRef);
+    const list: DiscussionReport[] = [];
+    snap.forEach((docSnap) => {
+      list.push({ id: docSnap.id, ...docSnap.data() } as DiscussionReport);
+    });
+    return list;
+  } catch (err) {
+    console.error('Error fetching discussion reports from Firestore:', err);
+    return [];
+  }
+}
+
+export async function saveReportToFirestore(report: DiscussionReport): Promise<void> {
+  if (!report.id) return;
+  try {
+    const docRef = doc(db, DISCUSSION_REPORTS_COLLECTION, report.id);
+    const cleanData = sanitizeForFirestore(report);
+    await setDoc(docRef, cleanData, { merge: true });
+  } catch (err) {
+    console.error(`Error saving report ${report.id} to Firestore:`, err);
+  }
+}
+
+export async function deleteReportFromFirestore(reportId: string): Promise<void> {
+  if (!reportId) return;
+  try {
+    const docRef = doc(db, DISCUSSION_REPORTS_COLLECTION, reportId);
+    await deleteDoc(docRef);
+  } catch (err) {
+    console.error(`Error deleting report ${reportId} from Firestore:`, err);
+  }
+}
+
+export function subscribeToReports(
+  onUpdate: (reports: DiscussionReport[]) => void,
+  onError?: (error: Error) => void
+): () => void {
+  const colRef = collection(db, DISCUSSION_REPORTS_COLLECTION);
+  return onSnapshot(
+    colRef,
+    (snap) => {
+      const list: DiscussionReport[] = [];
+      snap.forEach((docSnap) => {
+        list.push({ id: docSnap.id, ...docSnap.data() } as DiscussionReport);
+      });
+      onUpdate(list);
+    },
+    (err) => {
+      console.error('Firestore discussion reports subscription error:', err);
+      if (onError) onError(err);
+    }
+  );
+}
+
+// -------------------------------------------------------------
+// FIRESTORE USER MAILBOX MESSAGES MANAGEMENT
+// -------------------------------------------------------------
+
+export async function fetchUserMailboxMessagesFromFirestore(): Promise<UserMailboxMessage[]> {
+  try {
+    const colRef = collection(db, USER_MAILBOX_MESSAGES_COLLECTION);
+    const snap = await getDocs(colRef);
+    const list: UserMailboxMessage[] = [];
+    snap.forEach((docSnap) => {
+      list.push({ id: docSnap.id, ...docSnap.data() } as UserMailboxMessage);
+    });
+    return list;
+  } catch (err) {
+    console.error('Error fetching mailbox messages from Firestore:', err);
+    return [];
+  }
+}
+
+export async function saveUserMailboxMessageToFirestore(msg: UserMailboxMessage): Promise<void> {
+  if (!msg.id) return;
+  try {
+    const docRef = doc(db, USER_MAILBOX_MESSAGES_COLLECTION, msg.id);
+    const cleanData = sanitizeForFirestore(msg);
+    await setDoc(docRef, cleanData, { merge: true });
+  } catch (err) {
+    console.error(`Error saving user mailbox message ${msg.id} to Firestore:`, err);
+  }
+}
+
+export async function deleteUserMailboxMessageFromFirestore(messageId: string): Promise<void> {
+  if (!messageId) return;
+  try {
+    const docRef = doc(db, USER_MAILBOX_MESSAGES_COLLECTION, messageId);
+    await deleteDoc(docRef);
+  } catch (err) {
+    console.error(`Error deleting user mailbox message ${messageId} from Firestore:`, err);
+  }
+}
+
+export function subscribeToUserMailboxMessages(
+  onUpdate: (messages: UserMailboxMessage[]) => void,
+  onError?: (error: Error) => void
+): () => void {
+  const colRef = collection(db, USER_MAILBOX_MESSAGES_COLLECTION);
+  return onSnapshot(
+    colRef,
+    (snap) => {
+      const list: UserMailboxMessage[] = [];
+      snap.forEach((docSnap) => {
+        list.push({ id: docSnap.id, ...docSnap.data() } as UserMailboxMessage);
+      });
+      onUpdate(list);
+    },
+    (err) => {
+      console.error('Firestore user mailbox messages subscription error:', err);
+      if (onError) onError(err);
+    }
+  );
+}
+
+// -------------------------------------------------------------
 // FIREBASE AUTHENTICATION HELPERS
 // -------------------------------------------------------------
 
@@ -482,6 +609,57 @@ export async function firebaseSendPasswordReset(email: string): Promise<void> {
 
 export function subscribeToAuthState(callback: (user: FirebaseUser | null) => void): () => void {
   return onAuthStateChanged(auth, callback);
+}
+
+/**
+ * Signs in the user using Firebase Anonymous Authentication behind the scenes.
+ * Completely invisible to the user: no UI, no prompts, returns the real Firebase user with their UID.
+ * Reuses existing active anonymous user if already signed in.
+ */
+export async function ensureAnonymousFirebaseAuth(): Promise<FirebaseUser | null> {
+  try {
+    if (auth.currentUser) {
+      if (auth.currentUser.isAnonymous) {
+        return auth.currentUser;
+      }
+      // If a non-anonymous user is signed in to Firebase Auth, but caller specifically requested anonymous:
+      await fbSignOut(auth).catch(() => {});
+    }
+
+    const cred = await signInAnonymously(auth);
+    if (cred.user?.uid && typeof localStorage !== 'undefined') {
+      try {
+        localStorage.setItem('3awdli_anon_firebase_uid', cred.user.uid);
+      } catch {
+        // fallback
+      }
+    }
+    return cred.user;
+  } catch (err: any) {
+    if (err?.code === 'auth/admin-restricted-operation' || err?.code === 'auth/operation-not-allowed') {
+      console.warn(
+        '[Firebase Auth] Anonymous sign-in requires enabling the "Anonymous" provider in Firebase Console: ' +
+        'https://console.firebase.google.com/project/awdli-real/authentication/providers'
+      );
+    } else {
+      console.warn('[Firebase Auth] Anonymous sign-in notice:', err?.code || err?.message || err);
+    }
+    return null;
+  }
+}
+
+/**
+ * Returns current Firebase Auth UID if signed in, or null
+ */
+export function getCurrentFirebaseAuthUid(): string | null {
+  return auth.currentUser?.uid || null;
+}
+
+/**
+ * Returns true if current Firebase Auth user is signed in anonymously
+ */
+export function isCurrentFirebaseUserAnonymous(): boolean {
+  return Boolean(auth.currentUser?.isAnonymous);
 }
 
 // -------------------------------------------------------------

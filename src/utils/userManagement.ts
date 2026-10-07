@@ -168,6 +168,7 @@ export function isFakeUser(u: Partial<StoredUser> | null | undefined): boolean {
 
 export function getStoredUsers(): StoredUser[] {
   try {
+    if (typeof localStorage === 'undefined') return DEFAULT_INITIAL_USERS;
     const raw = localStorage.getItem(USERS_STORAGE_KEY);
     if (!raw) {
       localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(DEFAULT_INITIAL_USERS));

@@ -117,6 +117,8 @@ export interface DiscussionConversation {
   userName?: string;
   userEmail?: string;
   userId?: string;
+  creatorId?: string;
+  ownerId?: string;
   startedAt: string;
   startedAtTimestamp: number;
   status: 'unopened' | 'opened' | 'closed';

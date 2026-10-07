@@ -33,8 +33,13 @@ import {
   INITIAL_DISCUSSION_SYSTEM_MESSAGE,
   saveStoredDiscussions,
   closeDiscussion,
-  clearActiveDiscussionReferences
+  clearActiveDiscussionReferences,
+  getOrCreateClientAnonUid
 } from '../utils/discussionManagement';
+import { 
+  ensureAnonymousFirebaseAuth, 
+  getCurrentFirebaseAuthUid 
+} from '../lib/firestoreService';
 import { GenderPreferenceTag } from './GenderPreferenceTag';
 import { formatSiteTime } from '../utils/timezoneManagement';
 import { ConversationParticipantBar } from './ConversationParticipantBar';
@@ -341,7 +346,15 @@ export const AnonymousChatWidget = ({
           language,
         });
       } else {
-        newDisc = createNewDiscussion('anonymous', { genderPreference, language });
+        const anonUid = getCurrentFirebaseAuthUid() || getOrCreateClientAnonUid();
+        newDisc = createNewDiscussion('anonymous', {
+          userId: anonUid,
+          creatorId: anonUid,
+          ownerId: anonUid,
+          genderPreference,
+          language,
+        });
+        ensureAnonymousFirebaseAuth().catch(() => {});
       }
       currentDiscussionRef.current = newDisc;
       setCurrentDiscussion(newDisc);
@@ -426,7 +439,15 @@ export const AnonymousChatWidget = ({
         language,
       });
     } else {
-      newDisc = createNewDiscussion('anonymous', { genderPreference, language });
+      const anonUid = getCurrentFirebaseAuthUid() || getOrCreateClientAnonUid();
+      newDisc = createNewDiscussion('anonymous', {
+        userId: anonUid,
+        creatorId: anonUid,
+        ownerId: anonUid,
+        genderPreference,
+        language,
+      });
+      ensureAnonymousFirebaseAuth().catch(() => {});
     }
     currentDiscussionRef.current = newDisc;
     setCurrentDiscussion(newDisc);
@@ -848,7 +869,15 @@ export const AnonymousChatWidget = ({
           language,
         });
       } else {
-        targetDisc = createNewDiscussion('anonymous', { genderPreference, language });
+        const anonUid = getCurrentFirebaseAuthUid() || getOrCreateClientAnonUid();
+        targetDisc = createNewDiscussion('anonymous', {
+          userId: anonUid,
+          creatorId: anonUid,
+          ownerId: anonUid,
+          genderPreference,
+          language,
+        });
+        ensureAnonymousFirebaseAuth().catch(() => {});
       }
       setCurrentDiscussion(targetDisc);
       setMessages(targetDisc.messages);

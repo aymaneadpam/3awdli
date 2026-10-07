@@ -43,14 +43,20 @@ import {
   getActiveAnonymousDiscussion,
   getActiveUserDiscussion,
   createNewDiscussion,
-  clearActiveDiscussionReferences
+  clearActiveDiscussionReferences,
+  getOrCreateClientAnonUid
 } from './utils/discussionManagement';
 import { initFirestoreShareRequestsSync, setUserOnlineStatus } from './utils/shareManagement';
 import { initFirestoreSupportRequestsSync } from './utils/supportRequests';
 import { initFirestoreLoungeArticlesSync } from './utils/loungeManagement';
 import { initFirestoreTeenSpaceArticlesSync } from './utils/teenSpaceManagement';
 import { initFirestoreRulesSync } from './utils/rulesManagement';
-import { subscribeToAuthState, firebaseSignOut } from './lib/firestoreService';
+import { 
+  subscribeToAuthState, 
+  firebaseSignOut,
+  ensureAnonymousFirebaseAuth,
+  getCurrentFirebaseAuthUid
+} from './lib/firestoreService';
 import { SchedulesPage } from './components/SchedulesPage';
 import { ChatClosedModal } from './components/ChatClosedModal';
 import { 
@@ -59,6 +65,8 @@ import {
   initFirestoreSchedulesSync 
 } from './utils/scheduleManagement';
 import { initFirestoreTimezoneSync } from './utils/timezoneManagement';
+import { initFirestoreReportsSync } from './utils/reportManagement';
+import { initFirestoreUserMailboxSync } from './utils/userMailboxManagement';
 
 const DEFAULT_DEMO_LISTENER: UserAccount = {
   id: 'listener_demo',
@@ -196,11 +204,16 @@ export default function App() {
     const user = getCurrentUser();
     if (user) {
       setCurrentUser(user);
+    } else {
+      // Proactively ensure Firebase Anonymous Auth session for visitors behind the scenes
+      ensureAnonymousFirebaseAuth().catch(() => {});
     }
 
     // 1. Initialize real-time synchronization for all application collections with Firestore
     const unsubUsers = initFirestoreUsersSync();
     const unsubDiscussions = initFirestoreDiscussionsSync();
+    const unsubReports = initFirestoreReportsSync();
+    const unsubMailbox = initFirestoreUserMailboxSync();
     const unsubShares = initFirestoreShareRequestsSync();
     const unsubSupports = initFirestoreSupportRequestsSync();
     const unsubLounge = initFirestoreLoungeArticlesSync();
@@ -231,6 +244,8 @@ export default function App() {
     return () => {
       unsubUsers();
       unsubDiscussions();
+      unsubReports();
+      unsubMailbox();
       unsubShares();
       unsubSupports();
       unsubLounge();
@@ -360,13 +375,18 @@ export default function App() {
       return;
     }
 
+    // In the background, ensure Firebase Anonymous Authentication is initialized immediately
+    if (!currentUser) {
+      ensureAnonymousFirebaseAuth().catch(() => {});
+    }
+
     if (currentView !== 'home') {
       setCurrentView('home');
     }
     setIsGenderPreferenceModalOpen(true);
   };
 
-  const handleConfirmGenderPreference = (preference: ListenerGenderPreference) => {
+  const handleConfirmGenderPreference = async (preference: ListenerGenderPreference) => {
     setAnonGenderPreference(preference);
     try {
       localStorage.setItem('3awdli_anon_gender_preference', preference);
@@ -378,18 +398,28 @@ export default function App() {
     // with a new unique ID every time, with no reference to any previous discussion
     clearActiveDiscussionReferences(undefined, currentUser?.id);
 
-    const targetDisc = currentUser
-      ? createNewDiscussion('registered', {
-          userId: currentUser.id,
-          userName: currentUser.name,
-          userEmail: currentUser.email,
-          genderPreference: preference,
-          language,
-        })
-      : createNewDiscussion('anonymous', {
-          genderPreference: preference,
-          language,
-        });
+    let targetDisc: DiscussionConversation;
+    if (currentUser) {
+      targetDisc = createNewDiscussion('registered', {
+        userId: currentUser.id,
+        userName: currentUser.name,
+        userEmail: currentUser.email,
+        genderPreference: preference,
+        language,
+      });
+    } else {
+      // Automatically sign in via Firebase Anonymous Authentication behind the scenes
+      const anonUser = await ensureAnonymousFirebaseAuth();
+      const anonUid = anonUser?.uid || getCurrentFirebaseAuthUid() || getOrCreateClientAnonUid();
+
+      targetDisc = createNewDiscussion('anonymous', {
+        userId: anonUid,
+        creatorId: anonUid,
+        ownerId: anonUid,
+        genderPreference: preference,
+        language,
+      });
+    }
 
     setIsGenderPreferenceModalOpen(false);
     setIsChatOpen(true);

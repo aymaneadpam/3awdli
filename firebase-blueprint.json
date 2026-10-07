@@ -32,6 +32,8 @@
         "userName": { "type": "string" },
         "userEmail": { "type": "string" },
         "userId": { "type": "string" },
+        "creatorId": { "type": "string" },
+        "ownerId": { "type": "string" },
         "startedAt": { "type": "string" },
         "startedAtTimestamp": { "type": "number" },
         "status": { "type": "string", "enum": ["unopened", "active", "closed"] },
@@ -86,6 +88,57 @@
         "adminNotes": { "type": "string" }
       },
       "required": ["id", "subject", "message", "email", "status"]
+    },
+    "DiscussionReport": {
+      "title": "Discussion Report",
+      "description": "User or listener safety incident reports with moderator replies and admin transfer history",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "discussionId": { "type": "string" },
+        "discussionTitle": { "type": "string" },
+        "discussionType": { "type": "string" },
+        "reporterId": { "type": "string" },
+        "reporterName": { "type": "string" },
+        "reporterEmail": { "type": "string" },
+        "reporterRole": { "type": "string" },
+        "reportedMessageIds": { "type": "array" },
+        "reportedMessages": { "type": "array" },
+        "reason": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "createdAtTimestamp": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "reviewed", "replied"] },
+        "replies": { "type": "array" },
+        "isTransferredToAdmin": { "type": "boolean" },
+        "transferredByHeadId": { "type": "string" },
+        "transferredByHeadName": { "type": "string" },
+        "transferredNote": { "type": "string" },
+        "transferStatus": { "type": "string" },
+        "adminReplies": { "type": "array" },
+        "sanctions": { "type": "array" }
+      },
+      "required": ["id", "discussionId", "reporterId", "reason", "createdAt", "status"]
+    },
+    "UserMailboxMessage": {
+      "title": "User Mailbox Message",
+      "description": "Official responses, moderation notices, and communication delivered to a user's mailbox",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "senderName": { "type": "string" },
+        "senderRole": { "type": "string" },
+        "subject": { "type": "string" },
+        "summary": { "type": "string" },
+        "content": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "createdAtTimestamp": { "type": "number" },
+        "read": { "type": "boolean" },
+        "type": { "type": "string" },
+        "relatedId": { "type": "string" }
+      },
+      "required": ["id", "userId", "senderName", "subject", "content", "createdAt", "read"]
     },
     "LoungeArticle": {
       "title": "Lounge Article",
@@ -203,6 +256,14 @@
     "discussions": {
       "entity": "Discussion",
       "description": "Live listening conversations, chat messages, and participants"
+    },
+    "discussion_reports": {
+      "entity": "DiscussionReport",
+      "description": "Incident reports filed regarding discussions, escalations to admins, and replies"
+    },
+    "user_mailbox_messages": {
+      "entity": "UserMailboxMessage",
+      "description": "Direct administrative and moderation responses delivered to user mailboxes"
     },
     "share_requests": {
       "entity": "ShareRequest",

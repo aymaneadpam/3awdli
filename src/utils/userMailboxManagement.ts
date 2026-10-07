@@ -1,10 +1,22 @@
 import { UserMailboxMessage } from '../types';
 import { formatSiteDateReadable, formatSiteTime } from './timezoneManagement';
+import {
+  saveUserMailboxMessageToFirestore,
+  fetchUserMailboxMessagesFromFirestore,
+  subscribeToUserMailboxMessages,
+  deleteUserMailboxMessageFromFirestore
+} from '../lib/firestoreService';
 
 const STORAGE_KEY_PREFIX = '3awdli_user_mailbox_';
 
 export function getUserMailboxStorageKey(userId: string): string {
   return `${STORAGE_KEY_PREFIX}${userId}`;
+}
+
+export function isFakeMailboxMessage(msg: Partial<UserMailboxMessage> | null | undefined): boolean {
+  if (!msg) return true;
+  if (msg.id?.startsWith('msg_sample_')) return true;
+  return false;
 }
 
 /**
@@ -17,8 +29,9 @@ export function getStoredUserMailboxMessages(userId: string): UserMailboxMessage
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
+    const clean = parsed.filter((m) => !isFakeMailboxMessage(m));
     // Sort descending by timestamp (newest first)
-    return parsed.sort((a, b) => (b.createdAtTimestamp || 0) - (a.createdAtTimestamp || 0));
+    return clean.sort((a, b) => (b.createdAtTimestamp || 0) - (a.createdAtTimestamp || 0));
   } catch (err) {
     console.warn('Failed to load user mailbox messages:', err);
     return [];
@@ -27,12 +40,24 @@ export function getStoredUserMailboxMessages(userId: string): UserMailboxMessage
 
 /**
  * Persist mailbox messages for a user and notify UI listeners.
+ * If changedMessage is supplied, automatically saves it to Firestore.
  */
-export function saveUserMailboxMessages(userId: string, messages: UserMailboxMessage[]): void {
+export function saveUserMailboxMessages(
+  userId: string,
+  messages: UserMailboxMessage[],
+  changedMessage?: UserMailboxMessage
+): void {
   if (!userId) return;
   try {
-    localStorage.setItem(getUserMailboxStorageKey(userId), JSON.stringify(messages));
+    const clean = messages.filter((m) => !isFakeMailboxMessage(m));
+    localStorage.setItem(getUserMailboxStorageKey(userId), JSON.stringify(clean));
     window.dispatchEvent(new CustomEvent('3awdli_user_mailbox_updated', { detail: { userId } }));
+
+    if (changedMessage && !isFakeMailboxMessage(changedMessage)) {
+      saveUserMailboxMessageToFirestore(changedMessage).catch((err) =>
+        console.warn('Firestore mailbox message save notice:', err)
+      );
+    }
   } catch (err) {
     console.warn('Failed to save user mailbox messages:', err);
   }
@@ -53,16 +78,19 @@ export function getUnreadUserMailboxCount(userId: string): number {
 export function markUserMailboxMessageAsRead(userId: string, messageId: string): void {
   const messages = getStoredUserMailboxMessages(userId);
   let changed = false;
+  let updatedMsg: UserMailboxMessage | undefined;
+
   const updated = messages.map((m) => {
     if (m.id === messageId && !m.read) {
       changed = true;
-      return { ...m, read: true };
+      updatedMsg = { ...m, read: true };
+      return updatedMsg;
     }
     return m;
   });
 
-  if (changed) {
-    saveUserMailboxMessages(userId, updated);
+  if (changed && updatedMsg) {
+    saveUserMailboxMessages(userId, updated, updatedMsg);
   }
 }
 
@@ -72,16 +100,19 @@ export function markUserMailboxMessageAsRead(userId: string, messageId: string):
 export function markUserMailboxMessageAsUnread(userId: string, messageId: string): void {
   const messages = getStoredUserMailboxMessages(userId);
   let changed = false;
+  let updatedMsg: UserMailboxMessage | undefined;
+
   const updated = messages.map((m) => {
     if (m.id === messageId && m.read) {
       changed = true;
-      return { ...m, read: false };
+      updatedMsg = { ...m, read: false };
+      return updatedMsg;
     }
     return m;
   });
 
-  if (changed) {
-    saveUserMailboxMessages(userId, updated);
+  if (changed && updatedMsg) {
+    saveUserMailboxMessages(userId, updated, updatedMsg);
   }
 }
 
@@ -91,16 +122,33 @@ export function markUserMailboxMessageAsUnread(userId: string, messageId: string
 export function markAllUserMailboxMessagesAsRead(userId: string): void {
   const messages = getStoredUserMailboxMessages(userId);
   const updated = messages.map((m) => ({ ...m, read: true }));
-  saveUserMailboxMessages(userId, updated);
+  localStorage.setItem(getUserMailboxStorageKey(userId), JSON.stringify(updated));
+  window.dispatchEvent(new CustomEvent('3awdli_user_mailbox_updated', { detail: { userId } }));
+
+  messages.forEach((m) => {
+    if (!m.read) {
+      saveUserMailboxMessageToFirestore({ ...m, read: true }).catch((err) =>
+        console.warn('Firestore mailbox mark all read notice:', err)
+      );
+    }
+  });
 }
 
 /**
- * Delete a message from the mailbox.
+ * Delete a message from the mailbox and remove from Firestore.
  */
 export function deleteUserMailboxMessage(userId: string, messageId: string): void {
   const messages = getStoredUserMailboxMessages(userId);
   const updated = messages.filter((m) => m.id !== messageId);
-  saveUserMailboxMessages(userId, updated);
+  try {
+    localStorage.setItem(getUserMailboxStorageKey(userId), JSON.stringify(updated));
+    deleteUserMailboxMessageFromFirestore(messageId).catch((err) =>
+      console.warn('Firestore delete mailbox message notice:', err)
+    );
+    window.dispatchEvent(new CustomEvent('3awdli_user_mailbox_updated', { detail: { userId } }));
+  } catch (err) {
+    console.warn('Failed to delete mailbox message:', err);
+  }
 }
 
 /**
@@ -141,7 +189,7 @@ export function addUserMailboxMessage(
   };
 
   const existing = getStoredUserMailboxMessages(userId);
-  saveUserMailboxMessages(userId, [newMessage, ...existing]);
+  saveUserMailboxMessages(userId, [newMessage, ...existing], newMessage);
   return newMessage;
 }
 
@@ -166,4 +214,123 @@ Each message is private, confidential, and linked only to your secure account.
 Warmly,
 The 3awdli Care & Community Team`,
   });
+}
+
+let isUserMailboxSyncInitialized = false;
+
+// Helper to merge remote messages into local mailboxes grouped by userId
+function mergeRemoteMailboxMessages(remoteMessages: UserMailboxMessage[]) {
+  if (!remoteMessages || !Array.isArray(remoteMessages)) return;
+  const cleanRemote = remoteMessages.filter((m) => !isFakeMailboxMessage(m));
+
+  // Group messages by userId
+  const byUser = new Map<string, UserMailboxMessage[]>();
+  cleanRemote.forEach((m) => {
+    if (!m.userId) return;
+    const existing = byUser.get(m.userId) || [];
+    existing.push(m);
+    byUser.set(m.userId, existing);
+  });
+
+  byUser.forEach((remoteList, targetUserId) => {
+    const local = getStoredUserMailboxMessages(targetUserId);
+    const mergedMap = new Map<string, UserMailboxMessage>();
+    local.forEach((m) => mergedMap.set(m.id, m));
+    remoteList.forEach((m) => {
+      const existing = mergedMap.get(m.id);
+      mergedMap.set(m.id, { ...existing, ...m });
+    });
+    const merged = Array.from(mergedMap.values()).sort(
+      (a, b) => (b.createdAtTimestamp || 0) - (a.createdAtTimestamp || 0)
+    );
+    try {
+      localStorage.setItem(getUserMailboxStorageKey(targetUserId), JSON.stringify(merged));
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('3awdli_user_mailbox_updated', { detail: { userId: targetUserId } }));
+      }
+    } catch (err) {
+      console.warn('Failed to persist merged mailbox messages for user:', targetUserId, err);
+    }
+  });
+}
+
+/**
+ * Initialize real-time synchronization between Firestore and local storage for user mailbox messages.
+ */
+export function initFirestoreUserMailboxSync(): () => void {
+  if (isUserMailboxSyncInitialized) {
+    return () => {};
+  }
+  isUserMailboxSyncInitialized = true;
+
+  // 1. Initial fetch from Firestore
+  fetchUserMailboxMessagesFromFirestore()
+    .then((remoteMessages) => {
+      if (remoteMessages && remoteMessages.length > 0) {
+        mergeRemoteMailboxMessages(remoteMessages);
+
+        // Check if there are local mailbox messages that don't exist remotely and migrate them
+        const remoteIds = new Set(remoteMessages.map((m) => m.id));
+        try {
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith(STORAGE_KEY_PREFIX)) {
+              const raw = localStorage.getItem(key);
+              if (raw) {
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed)) {
+                  parsed.forEach((localMsg: UserMailboxMessage) => {
+                    if (localMsg.id && !remoteIds.has(localMsg.id) && !isFakeMailboxMessage(localMsg)) {
+                      saveUserMailboxMessageToFirestore(localMsg).catch((e) =>
+                        console.warn('Migrating local mailbox message to Firestore notice:', e)
+                      );
+                    }
+                  });
+                }
+              }
+            }
+          }
+        } catch {
+          // Safe traversal fallback
+        }
+      } else {
+        // If Firestore has no mailbox messages yet, scan localStorage and push any existing ones
+        try {
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith(STORAGE_KEY_PREFIX)) {
+              const raw = localStorage.getItem(key);
+              if (raw) {
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed)) {
+                  parsed.forEach((localMsg: UserMailboxMessage) => {
+                    if (localMsg.id && !isFakeMailboxMessage(localMsg)) {
+                      saveUserMailboxMessageToFirestore(localMsg).catch((e) =>
+                        console.warn('Initial push of local mailbox message to Firestore notice:', e)
+                      );
+                    }
+                  });
+                }
+              }
+            }
+          }
+        } catch {
+          // Safe traversal fallback
+        }
+      }
+    })
+    .catch((err) => {
+      console.warn('Initial Firestore user mailbox messages fetch notice:', err);
+    });
+
+  // 2. Real-time Firestore subscription
+  const unsubscribeFirestore = subscribeToUserMailboxMessages((remoteMessages) => {
+    if (!remoteMessages) return;
+    mergeRemoteMailboxMessages(remoteMessages);
+  });
+
+  return () => {
+    isUserMailboxSyncInitialized = false;
+    unsubscribeFirestore();
+  };
 }

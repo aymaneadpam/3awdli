@@ -14,7 +14,9 @@ import { getShareRequestsForDiscussion, getStoredShareRequests } from './shareMa
 import {
   saveDiscussionToFirestore,
   fetchDiscussionsFromFirestore,
-  subscribeToDiscussions
+  subscribeToDiscussions,
+  ensureAnonymousFirebaseAuth,
+  getCurrentFirebaseAuthUid
 } from '../lib/firestoreService';
 
 export const DISCUSSIONS_STORAGE_KEY = '3awdli_discussions';
@@ -68,6 +70,7 @@ export function isFakeDiscussion(d: Partial<DiscussionConversation> | null | und
 
 export function getStoredDiscussions(): DiscussionConversation[] {
   try {
+    if (typeof localStorage === 'undefined') return [];
     const raw = localStorage.getItem(DISCUSSIONS_STORAGE_KEY);
     if (!raw) {
       localStorage.setItem(DISCUSSIONS_STORAGE_KEY, JSON.stringify([]));
@@ -146,7 +149,9 @@ export function saveStoredDiscussions(
 ): void {
   try {
     const cleanDiscussions = discussions.filter((d) => !isFakeDiscussion(d));
-    localStorage.setItem(DISCUSSIONS_STORAGE_KEY, JSON.stringify(cleanDiscussions));
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(DISCUSSIONS_STORAGE_KEY, JSON.stringify(cleanDiscussions));
+    }
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('3awdli_discussion_sync', { detail: { timestamp: Date.now() } }));
     }
@@ -978,11 +983,26 @@ export function recordLiveDiscussionMessage(
   }
 }
 
+// Persistent client anonymous UID fallback if offline or before initial sign-in resolves
+export function getOrCreateClientAnonUid(): string {
+  try {
+    const existing = localStorage.getItem('3awdli_anon_firebase_uid');
+    if (existing) return existing;
+    const fallback = `anon_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    localStorage.setItem('3awdli_anon_firebase_uid', fallback);
+    return fallback;
+  } catch {
+    return `anon_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+  }
+}
+
 // Create a brand new isolated discussion initialized with system opening message(s)
 export function createNewDiscussion(
   type: 'anonymous' | 'registered',
   params?: {
     userId?: string;
+    creatorId?: string;
+    ownerId?: string;
     userName?: string;
     userEmail?: string;
     genderPreference?: ListenerGenderPreference;
@@ -994,9 +1014,16 @@ export function createNewDiscussion(
 
   const nowMs = Date.now();
   const nowFormatted = formatSiteTime(nowMs);
+
+  // For anonymous conversations, tie to the real Firebase Auth UID (owner/creator ID)
+  let ownerCreatorId = params?.userId || params?.creatorId || params?.ownerId;
+  if (!ownerCreatorId && type === 'anonymous') {
+    ownerCreatorId = getCurrentFirebaseAuthUid() || getOrCreateClientAnonUid();
+  }
+
   const uniqueId = type === 'anonymous'
     ? `disc_anon_${nowMs}_${Math.random().toString(36).substring(2, 7)}`
-    : `disc_reg_${params?.userId || 'user'}_${nowMs}_${Math.random().toString(36).substring(2, 5)}`;
+    : `disc_reg_${ownerCreatorId || 'user'}_${nowMs}_${Math.random().toString(36).substring(2, 5)}`;
 
   const initialSystemMsg: ChatMessage = {
     id: `msg_sys_${nowMs}`,
@@ -1025,7 +1052,9 @@ export function createNewDiscussion(
   const newDisc: DiscussionConversation = {
     id: uniqueId,
     type,
-    userId: params?.userId,
+    userId: ownerCreatorId,
+    creatorId: ownerCreatorId,
+    ownerId: ownerCreatorId,
     userName: params?.userName || (type === 'anonymous' ? 'Anonymous Visitor' : 'Registered Member'),
     userEmail: params?.userEmail,
     startedAt: 'Just now',
@@ -1039,13 +1068,30 @@ export function createNewDiscussion(
   const all = getStoredDiscussions();
   all.unshift(newDisc);
   saveStoredDiscussions(all, newDisc);
-  // Ensure discussion is immediately saved to Firestore
+  // Ensure discussion is immediately saved to Firestore with real Firebase UID
   saveDiscussionToFirestore(newDisc).catch((err) => {
     console.warn('Firestore new discussion initial save notice:', err);
   });
 
   if (type === 'anonymous') {
     setActiveAnonymousDiscussionId(uniqueId);
+    // Automatically ensure Firebase Anonymous Authentication behind the scenes.
+    // If the real Firebase Auth UID resolves and differs from initial holder, update owner/creator ID!
+    ensureAnonymousFirebaseAuth().then((fbUser) => {
+      if (fbUser?.uid && newDisc.userId !== fbUser.uid) {
+        newDisc.userId = fbUser.uid;
+        newDisc.creatorId = fbUser.uid;
+        newDisc.ownerId = fbUser.uid;
+        const currentList = getStoredDiscussions().map((d) =>
+          d.id === newDisc.id ? { ...d, userId: fbUser.uid, creatorId: fbUser.uid, ownerId: fbUser.uid } : d
+        );
+        saveStoredDiscussions(currentList, newDisc);
+        saveDiscussionToFirestore(newDisc).catch(() => {});
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('3awdli_discussion_sync', { detail: { discussionId: newDisc.id } }));
+        }
+      }
+    }).catch(() => {});
   } else if (params?.userId) {
     setActiveUserDiscussionId(params.userId, uniqueId);
   }

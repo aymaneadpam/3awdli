@@ -2,6 +2,12 @@ import { DiscussionReport, DiscussionReportReply, AdminReportReply, ReportSancti
 import { getStoredUsers } from './userManagement';
 import { addUserMailboxMessage } from './userMailboxManagement';
 import { formatSiteTime, formatSiteDateReadable } from './timezoneManagement';
+import {
+  saveReportToFirestore,
+  fetchReportsFromFirestore,
+  subscribeToReports,
+  deleteReportFromFirestore
+} from '../lib/firestoreService';
 
 const REPORTS_STORAGE_KEY = '3awdli_discussion_reports';
 
@@ -49,13 +55,21 @@ export function getStoredReports(): DiscussionReport[] {
 }
 
 /**
- * Persist reports and broadcast update event
+ * Persist reports and broadcast update event.
+ * If a changedReport is passed, automatically saves it to Firestore.
  */
-export function saveStoredReports(reports: DiscussionReport[]): void {
+export function saveStoredReports(reports: DiscussionReport[], changedReport?: DiscussionReport): void {
   try {
-    localStorage.setItem(REPORTS_STORAGE_KEY, JSON.stringify(reports));
-    window.dispatchEvent(new CustomEvent('3awdli_report_updated', { detail: { reports } }));
+    const clean = reports.filter((r) => !isFakeReport(r));
+    localStorage.setItem(REPORTS_STORAGE_KEY, JSON.stringify(clean));
+    window.dispatchEvent(new CustomEvent('3awdli_report_updated', { detail: { reports: clean } }));
     window.dispatchEvent(new CustomEvent('3awdli_discussion_sync', {}));
+
+    if (changedReport && !isFakeReport(changedReport)) {
+      saveReportToFirestore(changedReport).catch((err) =>
+        console.warn('Firestore report save notice:', err)
+      );
+    }
   } catch (err) {
     console.warn('Failed to save discussion reports:', err);
   }
@@ -110,7 +124,7 @@ export function createDiscussionReport(params: {
 
   const existingReports = getStoredReports();
   const updatedReports = [newReport, ...existingReports];
-  saveStoredReports(updatedReports);
+  saveStoredReports(updatedReports, newReport);
 
   // Broadcast creation so Reports count badges and lists update immediately
   window.dispatchEvent(new CustomEvent('3awdli_report_created', { detail: { report: newReport } }));
@@ -170,7 +184,7 @@ export function replyToDiscussionReport(
   };
 
   reports[index] = updatedReport;
-  saveStoredReports(reports);
+  saveStoredReports(reports, updatedReport);
 
   // Deliver reply to the reporting user's Mailbox
   addUserMailboxMessage(report.reporterId, {
@@ -251,7 +265,7 @@ export function transferReportToAdministrator(params: {
   };
 
   reports[index] = updatedReport;
-  saveStoredReports(reports);
+  saveStoredReports(reports, updatedReport);
 
   // Notify UI
   window.dispatchEvent(new CustomEvent('3awdli_report_transferred', { detail: { report: updatedReport } }));
@@ -332,7 +346,7 @@ export function replyToHeadOfListeners(params: {
   };
 
   reports[index] = updatedReport;
-  saveStoredReports(reports);
+  saveStoredReports(reports, updatedReport);
 
   // Deliver response to Head of Listeners' Mailbox
   addUserMailboxMessage(report.transferredByHeadId, {
@@ -404,11 +418,112 @@ export function addReportSanction(
   };
 
   reports[index] = updatedReport;
-  saveStoredReports(reports);
+  saveStoredReports(reports, updatedReport);
 
   window.dispatchEvent(new CustomEvent('3awdli_admin_reports_updated', { detail: { report: updatedReport } }));
   window.dispatchEvent(new CustomEvent('3awdli_report_updated', { detail: { report: updatedReport } }));
 
   return { success: true, report: updatedReport, sanction: newSanction };
+}
+
+/**
+ * Delete a report from local storage and Firestore
+ */
+export function deleteDiscussionReport(reportId: string): void {
+  const reports = getStoredReports().filter((r) => r.id !== reportId);
+  try {
+    localStorage.setItem(REPORTS_STORAGE_KEY, JSON.stringify(reports));
+    deleteReportFromFirestore(reportId).catch((err) => console.warn('Firestore report delete notice:', err));
+    window.dispatchEvent(new CustomEvent('3awdli_report_updated', { detail: { reports } }));
+    window.dispatchEvent(new CustomEvent('3awdli_discussion_sync', {}));
+  } catch (err) {
+    console.warn('Failed to delete report:', err);
+  }
+}
+
+let isReportsSyncInitialized = false;
+
+/**
+ * Initialize real-time synchronization between Firestore and local storage for discussion reports.
+ */
+export function initFirestoreReportsSync(): () => void {
+  if (isReportsSyncInitialized) {
+    return () => {};
+  }
+  isReportsSyncInitialized = true;
+
+  // 1. Initial fetch from Firestore
+  fetchReportsFromFirestore()
+    .then((remoteReports) => {
+      if (remoteReports && remoteReports.length > 0) {
+        const cleanRemote = remoteReports.filter((r) => !isFakeReport(r));
+        const local = getStoredReports();
+        const mergedMap = new Map<string, DiscussionReport>();
+        // First set local
+        local.forEach((r) => mergedMap.set(r.id, r));
+        // Then merge remote
+        cleanRemote.forEach((r) => {
+          const existing = mergedMap.get(r.id);
+          mergedMap.set(r.id, { ...existing, ...r });
+        });
+        const merged = Array.from(mergedMap.values()).sort(
+          (a, b) => (b.createdAtTimestamp || 0) - (a.createdAtTimestamp || 0)
+        );
+        localStorage.setItem(REPORTS_STORAGE_KEY, JSON.stringify(merged));
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('3awdli_report_updated', { detail: { reports: merged } }));
+          window.dispatchEvent(new CustomEvent('3awdli_discussion_sync', {}));
+        }
+
+        // Migrate any pre-existing local reports to Firestore if missing remotely
+        const remoteIds = new Set(cleanRemote.map((r) => r.id));
+        local.forEach((localReport) => {
+          if (!remoteIds.has(localReport.id) && !isFakeReport(localReport)) {
+            saveReportToFirestore(localReport).catch((e) =>
+              console.warn('Syncing local report to Firestore notice:', e)
+            );
+          }
+        });
+      } else {
+        // If Firestore had no reports yet, push any local non-sample reports to Firestore
+        const local = getStoredReports();
+        local.forEach((localReport) => {
+          if (!isFakeReport(localReport)) {
+            saveReportToFirestore(localReport).catch((e) =>
+              console.warn('Migrating local report to Firestore notice:', e)
+            );
+          }
+        });
+      }
+    })
+    .catch((err) => {
+      console.warn('Initial Firestore reports fetch notice:', err);
+    });
+
+  // 2. Real-time Firestore subscription
+  const unsubscribeFirestore = subscribeToReports((remoteReports) => {
+    if (!remoteReports) return;
+    const cleanRemote = remoteReports.filter((r) => !isFakeReport(r));
+    const local = getStoredReports();
+    const mergedMap = new Map<string, DiscussionReport>();
+    local.forEach((r) => mergedMap.set(r.id, r));
+    cleanRemote.forEach((r) => {
+      const existing = mergedMap.get(r.id);
+      mergedMap.set(r.id, { ...existing, ...r });
+    });
+    const merged = Array.from(mergedMap.values()).sort(
+      (a, b) => (b.createdAtTimestamp || 0) - (a.createdAtTimestamp || 0)
+    );
+    localStorage.setItem(REPORTS_STORAGE_KEY, JSON.stringify(merged));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('3awdli_report_updated', { detail: { reports: merged } }));
+      window.dispatchEvent(new CustomEvent('3awdli_discussion_sync', {}));
+    }
+  });
+
+  return () => {
+    isReportsSyncInitialized = false;
+    unsubscribeFirestore();
+  };
 }
 
