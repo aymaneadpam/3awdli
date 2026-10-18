@@ -189,7 +189,7 @@ export function hangUpVoiceCall(
       id: `call_msg_end_${now}`,
       sender: 'system',
       text: `📞 Voice call ended • Duration: ${durationFormatted}`,
-      timestamp: 'Just now',
+      timestamp: formatSiteTime(now),
       timestampMs: now,
     };
     discussion.messages = [...(discussion.messages || []), systemMsg];

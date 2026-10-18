@@ -13,6 +13,31 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Lora:ital,wght@0,400;0,500;0,600;1,400&family=Cairo:wght@400;500;600;700;800&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+    <script>
+      // Suppress Vite HMR WebSocket transport errors in preview environments without WebSocket proxying
+      window.addEventListener('error', function(event) {
+        if (event && event.message && (
+          event.message.includes('WebSocket') ||
+          event.message.includes('@vite/client') ||
+          event.message.includes('createWebSocketModuleRunnerTransport')
+        )) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+        }
+      }, true);
+      window.addEventListener('unhandledrejection', function(event) {
+        var reason = event && event.reason;
+        var msg = (reason && typeof reason.message === 'string') ? reason.message : (typeof reason === 'string' ? reason : '');
+        if (msg && (
+          msg.includes('WebSocket') ||
+          msg.includes('@vite/client') ||
+          msg.includes('createWebSocketModuleRunnerTransport')
+        )) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+        }
+      }, true);
+    </script>
   </head>
   <body class="bg-[#FAF8F5] text-[#2D312E] antialiased selection:bg-emerald-100 selection:text-emerald-900 font-['Plus_Jakarta_Sans',sans-serif] overflow-x-hidden w-full max-w-full">
     <div id="root"></div>

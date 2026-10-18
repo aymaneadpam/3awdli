@@ -598,7 +598,7 @@ Sent from ${sender} (3awdli Platform).
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
-    const isHmrDisabled = process.env.DISABLE_HMR === 'true';
+    const isHmrDisabled = process.env.DISABLE_HMR !== 'false';
     const vite = await createViteServer({
       server: {
         middlewareMode: true,

@@ -28,7 +28,8 @@ import {
   HelpCircle,
   Bell,
   BellRing,
-  BellOff
+  BellOff,
+  Trash2
 } from 'lucide-react';
 import { UserAccount, DiscussionConversation } from '../types';
 import { 
@@ -42,6 +43,8 @@ import {
   isFakeDiscussion,
   getDiscussionCreatorInfo,
   reconcileDiscussionsWithLocal,
+  clearAllDiscussionData,
+  getHandledDiscussionsSet,
   DISCUSSIONS_STORAGE_KEY
 } from '../utils/discussionManagement';
 import { 
@@ -51,7 +54,13 @@ import {
   getIncomingShareRequests, 
   getUnreadShareNotificationsCount 
 } from '../utils/shareManagement';
-import { getListenerKeyCode } from '../utils/userManagement';
+import { 
+  getListenerKeyCode,
+  isAdministrator,
+  isSuperAdmin,
+  ADMIN_EMAIL,
+  LEGACY_ADMIN_EMAIL
+} from '../utils/userManagement';
 import { ListenerChatInterface } from './ListenerChatInterface';
 import { ListenerGenderIcon } from './ListenerGenderDisplay';
 import { GenderPreferenceTag } from './GenderPreferenceTag';
@@ -61,12 +70,12 @@ import { getPendingReportsCount, getStoredReports } from '../utils/reportManagem
 import { useLanguage } from '../context/LanguageContext';
 import { Navbar } from './Navbar';
 import { MemberDiscussionsPage } from './MemberDiscussionsPage';
-import { 
-  getNotificationPermission, 
+import { getNotificationPermission, 
   autoPromptNotificationOnFirstVisit,
   NotificationPermissionStatus 
 } from '../utils/listenerNotificationService';
 import { NotificationSettingsModal } from './NotificationSettingsModal';
+import { formatDiscussionDateTime, extractTimestampMs } from '../utils/timezoneManagement';
 
 interface DiscussionsPageProps {
   user: UserAccount;
@@ -109,10 +118,36 @@ export const DiscussionsPage = ({
 }: DiscussionsPageProps) => {
   const { strings, language } = useLanguage();
   const isListener = Boolean(user.is_listener || user.isListener || user.role === 'listener');
-  const isHead = Boolean(user.is_head_of_listeners);
-  const isAdmin = user.role === 'admin';
+  const roleLower = (user.role || '').toLowerCase();
+  const emailLower = (user.email || '').toLowerCase();
+  const canSupervise = Boolean(
+    roleLower === 'head_of_listeners' ||
+    roleLower === 'admin' ||
+    roleLower === 'administrator' ||
+    user.is_head_of_listeners ||
+    user.is_administrator ||
+    user.is_founder ||
+    isAdministrator(user) ||
+    isSuperAdmin(user) ||
+    emailLower === 'amina.mansouri@3awdli.org' ||
+    emailLower === 'dr.amina@example.com' ||
+    emailLower === ADMIN_EMAIL.toLowerCase() ||
+    emailLower === LEGACY_ADMIN_EMAIL.toLowerCase() ||
+    emailLower === 'admin@3awdli.org' ||
+    user.id === 'team_listener_amina' ||
+    user.id === 'user_admin_01'
+  );
+  const isHead = Boolean(
+    roleLower === 'head_of_listeners' ||
+    user.is_head_of_listeners ||
+    emailLower === 'amina.mansouri@3awdli.org' ||
+    emailLower === 'dr.amina@example.com' ||
+    user.id === 'team_listener_amina' ||
+    canSupervise
+  );
+  const isAdmin = canSupervise;
 
-  if (!isListener && !isAdmin) {
+  if (!isListener && !isAdmin && !isHead) {
     return (
       <MemberDiscussionsPage
         user={user}
@@ -205,6 +240,8 @@ export const DiscussionsPage = ({
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [hasCopiedUserKey, setHasCopiedUserKey] = useState(false);
   const [accessDeniedMessage, setAccessDeniedMessage] = useState<string | null>(null);
+  const [isClearConfirmModalOpen, setIsClearConfirmModalOpen] = useState(false);
+  const [isClearingDiscussions, setIsClearingDiscussions] = useState(false);
 
   // Retrieve this listener's personal key code
   const listenerKeyCode = useMemo(() => {
@@ -302,36 +339,70 @@ export const DiscussionsPage = ({
   }, [discussions]);
 
   const myList = useMemo(() => {
-    return discussions.filter((d) => {
-      if (d.status !== 'opened') return false;
-      // If listener is excluded from this conversation, it has been handed over!
-      if (d.excludedListeners?.some((e) => e.listenerId === user.id)) return false;
-      return d.openedByListenerId === user.id || d.joinedListenerId === user.id;
-    });
+    return discussions
+      .filter((d) => {
+        if (d.status !== 'opened') return false;
+        // If listener is excluded from this conversation, it has been handed over!
+        if (d.excludedListeners?.some((e) => e.listenerId === user.id)) return false;
+        return d.openedByListenerId === user.id || d.joinedListenerId === user.id;
+      })
+      .sort((a, b) => {
+        const timeA = a.startedAtTimestamp || 0;
+        const timeB = b.startedAtTimestamp || 0;
+        return timeB - timeA;
+      });
   }, [discussions, user.id]);
 
   // Closed discussions handled by this listener OR conversations handed over where this listener was excluded
   const historyList = useMemo(() => {
-    return discussions.filter((d) => {
-      // 1. Concluded conversation where listener was opener, closer, joined, or excluded
-      if (d.status === 'closed') {
-        return (
-          d.openedByListenerId === user.id ||
-          d.closedByListenerId === user.id ||
-          d.joinedListenerId === user.id ||
-          d.excludedListeners?.some((e) => e.listenerId === user.id)
-        );
-      }
-      // 2. Active conversation from which this listener was excluded (takeover handover)
-      if (d.excludedListeners?.some((e) => e.listenerId === user.id)) {
-        return true;
-      }
-      return false;
-    });
-  }, [discussions, user.id]);
+    const locallyHandled = getHandledDiscussionsSet();
+    return discussions
+      .filter((d) => {
+        // 1. Concluded conversation where listener was opener, closer, joined, participant, excluded, or handled in this session
+        if (d.status === 'closed') {
+          const isOpener = Boolean(d.openedByListenerId) && (
+            d.openedByListenerId === user.id ||
+            d.openedByListenerId.toLowerCase() === user.id.toLowerCase()
+          );
+          const isCloser = Boolean(d.closedByListenerId) && (
+            d.closedByListenerId === user.id ||
+            d.closedByListenerId.toLowerCase() === user.id.toLowerCase()
+          );
+          const isJoined = Boolean(d.joinedListenerId) && (
+            d.joinedListenerId === user.id ||
+            d.joinedListenerId.toLowerCase() === user.id.toLowerCase()
+          );
+          const isNameMatch = Boolean(user.name) && (
+            (Boolean(d.openedByListenerName) && d.openedByListenerName.trim().toLowerCase() === user.name.trim().toLowerCase()) ||
+            (Boolean(d.closedByListenerName) && d.closedByListenerName.trim().toLowerCase() === user.name.trim().toLowerCase())
+          );
+          const isMsgParticipant = d.messages?.some(
+            (m) => m.senderId === user.id || (m.sender === 'team' && Boolean(user.name) && m.senderName?.trim().toLowerCase() === user.name.trim().toLowerCase())
+          );
+          const isExcluded = d.excludedListeners?.some((e) => e.listenerId === user.id);
+          const wasLocallyHandled = locallyHandled.has(d.id);
+          return Boolean(isOpener || isCloser || isJoined || isNameMatch || isMsgParticipant || isExcluded || wasLocallyHandled);
+        }
+        // 2. Active conversation from which this listener was excluded (takeover handover)
+        if (d.excludedListeners?.some((e) => e.listenerId === user.id)) {
+          return true;
+        }
+        return false;
+      })
+      .sort((a, b) => {
+        // Sort newest first: prioritize closedAtTimestamp, then startedAtTimestamp
+        const timeA = extractTimestampMs(a.closedAtTimestamp) || extractTimestampMs(a.startedAtTimestamp) || extractTimestampMs(a.closedAt) || 0;
+        const timeB = extractTimestampMs(b.closedAtTimestamp) || extractTimestampMs(b.startedAtTimestamp) || extractTimestampMs(b.closedAt) || 0;
+        return timeB - timeA;
+      });
+  }, [discussions, user.id, user.name]);
 
   const allList = useMemo(() => {
-    return discussions;
+    return [...discussions].sort((a, b) => {
+      const timeA = extractTimestampMs(a.closedAtTimestamp) || extractTimestampMs(a.openedAtTimestamp) || extractTimestampMs(a.startedAtTimestamp) || extractTimestampMs(a.startedAt) || 0;
+      const timeB = extractTimestampMs(b.closedAtTimestamp) || extractTimestampMs(b.openedAtTimestamp) || extractTimestampMs(b.startedAtTimestamp) || extractTimestampMs(b.startedAt) || 0;
+      return timeB - timeA;
+    });
   }, [discussions]);
 
   // Handle toast notifications
@@ -340,6 +411,31 @@ export const DiscussionsPage = ({
     setTimeout(() => {
       setToastMessage((prev) => (prev === msg ? null : prev));
     }, 4000);
+  };
+
+  // Permanently delete all discussions from Firestore and localStorage (Fresh Start)
+  const handleConfirmClearAllDiscussions = async () => {
+    setIsClearingDiscussions(true);
+    try {
+      const res = await clearAllDiscussionData();
+      if (res.success) {
+        showToast(
+          language === 'fr'
+            ? `Nouveau départ réussi : ${res.deletedCount} discussions définitivement supprimées.`
+            : `Fresh start complete: permanently removed ${res.deletedCount} discussions. Ledger is now empty.`
+        );
+        refreshDiscussions();
+        setSelectedDiscussion(null);
+      } else {
+        showToast('Storage cleared locally.');
+      }
+    } catch (err) {
+      console.error('Error clearing discussions:', err);
+      showToast('Error clearing discussions.');
+    } finally {
+      setIsClearingDiscussions(false);
+      setIsClearConfirmModalOpen(false);
+    }
   };
 
   // Chat Interface Handlers
@@ -356,12 +452,11 @@ export const DiscussionsPage = ({
   };
 
   const handleCloseDiscussion = (discussionId: string) => {
-    const res = closeDiscussion(discussionId, user.id, user.name);
+    const res = closeDiscussion(discussionId, user.id, user.name, 'listener');
     if (res.success) {
       showToast('Conversation ended. Moved to Closed / History.');
-      const updatedList = refreshDiscussions();
-      const updated = updatedList.find((d) => d.id === discussionId);
-      if (updated) setSelectedDiscussion(updated);
+      refreshDiscussions();
+      setSelectedDiscussion(null);
       setActiveTab('history');
     } else if (res.error) {
       showToast(res.error);
@@ -916,7 +1011,7 @@ export const DiscussionsPage = ({
                           <div className="space-y-2">
                             <div className="flex items-center gap-2 text-xs text-[#5D6F64]">
                               <Clock className="w-3.5 h-3.5 text-[#798E82]" />
-                              <span>{language === 'fr' ? 'Session démarrée :' : 'Session Started:'} <strong>{disc.startedAt}</strong></span>
+                              <span>{language === 'fr' ? 'Session démarrée :' : 'Session Started:'} <strong>{formatDiscussionDateTime(disc.startedAtTimestamp || disc.startedAt)}</strong></span>
                             </div>
 
                             <div className="p-3 rounded-2xl bg-[#FAF8F5] border border-[#ECE5DB] flex items-start gap-2 text-xs text-[#6B7C72]">
@@ -1016,12 +1111,14 @@ export const DiscussionsPage = ({
                             <div className="space-y-1.5 text-xs text-[#5D6F64] mb-4">
                               <div className="flex items-center gap-1.5">
                                 <Clock className="w-3.5 h-3.5 text-[#798E82]" />
-                                <span>Started: {disc.startedAt}</span>
+                                <span>Started: <strong>{formatDiscussionDateTime(disc.startedAtTimestamp || disc.startedAt)}</strong></span>
                               </div>
-                              <div className="flex items-center gap-1.5 text-[#244333] font-medium">
-                                <Unlock className="w-3.5 h-3.5 text-emerald-600" />
-                                <span>{disc.openedAt || 'Claimed with your key'}</span>
-                              </div>
+                              {(disc.openedAtTimestamp || disc.openedAt) ? (
+                                <div className="flex items-center gap-1.5 text-[#244333] font-medium">
+                                  <Unlock className="w-3.5 h-3.5 text-emerald-600" />
+                                  <span>Claimed: <strong>{formatDiscussionDateTime(disc.openedAtTimestamp || disc.openedAt)}</strong></span>
+                                </div>
+                              ) : null}
                               <div className="text-[11px] text-[#7A8C81] pt-1">
                                 Total message exchanges: <strong>{disc.messages.length}</strong>
                               </div>
@@ -1066,7 +1163,7 @@ export const DiscussionsPage = ({
                     <div className="w-12 h-12 rounded-2xl bg-[#F7F4EE] text-[#786C5A] flex items-center justify-center mx-auto mb-3">
                       <Archive className="w-6 h-6" />
                     </div>
-                    <h3 className="text-sm font-bold text-[#23382D]">No Closed Discussions in History</h3>
+                    <h3 className="text-sm font-bold text-[#23382D]">No conversations yet</h3>
                     <p className="text-xs text-[#6C7D73] mt-1 max-w-sm mx-auto">
                       Conversations you end with the &quot;X&quot; icon will be preserved safely here for reference and audit history.
                     </p>
@@ -1108,10 +1205,11 @@ export const DiscussionsPage = ({
                             <div className="space-y-1.5 text-xs text-[#5D6F64] mb-4">
                               <div className="flex items-center gap-1.5">
                                 <Clock className="w-3.5 h-3.5 text-[#798E82]" />
-                                <span>Started: {disc.startedAt}</span>
+                                <span>Started: <strong>{formatDiscussionDateTime(disc.startedAtTimestamp || disc.startedAt)}</strong></span>
                               </div>
-                              <div className="flex items-center gap-1.5 text-stone-600">
-                                <span>Concluded: <strong>{disc.closedAt || 'Recorded'}</strong></span>
+                              <div className="flex items-center gap-1.5 text-stone-700">
+                                <Archive className="w-3.5 h-3.5 text-stone-500" />
+                                <span>Closed: <strong>{formatDiscussionDateTime(disc.closedAtTimestamp || disc.closedAt)}</strong></span>
                               </div>
                               <div className="text-[11px] text-[#7A8C81] pt-1">
                                 Total message exchanges: <strong>{disc.messages.length}</strong>
@@ -1152,74 +1250,101 @@ export const DiscussionsPage = ({
                 </div>
 
                 <div className="bg-white rounded-3xl border border-[#E8E2D7] overflow-hidden shadow-xs">
-                  <div className="p-4 sm:p-5 bg-[#FAF7F2] border-b border-[#E8E2D7] flex items-center justify-between">
+                  <div className="p-4 sm:p-5 bg-[#FAF7F2] border-b border-[#E8E2D7] flex items-center justify-between flex-wrap gap-2">
                     <h3 className="text-sm font-bold text-[#1C3227] font-['Lora',serif]">
                       Complete System Discussion Ledger ({allList.length} total)
                     </h3>
-                    <span className="text-xs text-[#7B8B82]">
-                      Supervisory Access Enabled
-                    </span>
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                      <button
+                        id="btn-fresh-start-discussions"
+                        onClick={() => setIsClearConfirmModalOpen(true)}
+                        className="px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                        title="Permanently delete all discussions and messages from Firestore and local storage"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                        <span>{language === 'fr' ? 'Nouveau départ (Effacer tout)' : 'Delete All Conversations (Fresh Start)'}</span>
+                      </button>
+                      <span className="text-xs text-[#7B8B82]">
+                        Supervisory Access Enabled
+                      </span>
+                    </div>
                   </div>
 
-                  <div className="divide-y divide-[#EFEBE4]">
-                    {allList.map((disc) => {
-                      const creator = getDiscussionCreatorInfo(disc, language);
-                      return (
-                        <div 
-                          key={disc.id}
-                          className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-[#FAF8F5] transition-colors"
-                        >
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="font-mono text-xs font-bold text-[#233A2E]">
-                                #{disc.id}
-                              </span>
-
-                              {creator.isRegistered ? (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-[#E0F2FE] text-[#0369A1]">
-                                  <User className="w-3 h-3" />
-                                  <span>{creator.name}</span>
-                                  <span className="text-[9px] px-1 py-0.2 rounded bg-white/70 text-[#0284C7] font-medium">
-                                    {language === 'fr' ? 'Inscrit' : 'Registered'}
-                                  </span>
+                  {allList.length === 0 ? (
+                    <div className="p-12 text-center bg-white">
+                      <div className="w-12 h-12 rounded-2xl bg-[#F7F4EE] text-[#786C5A] flex items-center justify-center mx-auto mb-3">
+                        <Inbox className="w-6 h-6" />
+                      </div>
+                      <h3 className="text-sm font-bold text-[#23382D]">No conversations yet</h3>
+                      <p className="text-xs text-[#6C7D73] mt-1 max-w-sm mx-auto">
+                        There are currently no discussions on the platform. Any conversations started by anonymous visitors or registered members will appear here in real time.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-[#EFEBE4]">
+                      {allList.map((disc) => {
+                        const creator = getDiscussionCreatorInfo(disc, language);
+                        return (
+                          <div 
+                            key={disc.id}
+                            className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-[#FAF8F5] transition-colors"
+                          >
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-mono text-xs font-bold text-[#233A2E]">
+                                  #{disc.id}
                                 </span>
-                              ) : (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-[#EEF2FF] text-[#4338CA]">
-                                  <UserX className="w-3 h-3" />
-                                  {language === 'fr' ? 'Utilisateur Anonyme' : 'Anonymous User'}
+
+                                {creator.isRegistered ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-[#E0F2FE] text-[#0369A1]">
+                                    <User className="w-3 h-3" />
+                                    <span>{creator.name}</span>
+                                    <span className="text-[9px] px-1 py-0.2 rounded bg-white/70 text-[#0284C7] font-medium">
+                                      {language === 'fr' ? 'Inscrit' : 'Registered'}
+                                    </span>
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-[#EEF2FF] text-[#4338CA]">
+                                    <UserX className="w-3 h-3" />
+                                    {language === 'fr' ? 'Utilisateur Anonyme' : 'Anonymous User'}
+                                  </span>
+                                )}
+
+                                <GenderPreferenceTag preference={disc.genderPreference} />
+
+                              {disc.status === 'unopened' && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-[#FEF3C7] text-[#92400E]">
+                                  <Clock className="w-3 h-3" />
+                                  Unclaimed / In Queue
                                 </span>
                               )}
 
-                              <GenderPreferenceTag preference={disc.genderPreference} />
+                              {disc.status === 'opened' && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-[#E4EFE8] text-[#204030]">
+                                  <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                  Opened by {disc.openedByListenerName || 'Listener'}
+                                </span>
+                              )}
 
-                            {disc.status === 'unopened' && (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-[#FEF3C7] text-[#92400E]">
-                                <Clock className="w-3 h-3" />
-                                Unclaimed / In Queue
-                              </span>
-                            )}
+                              {disc.status === 'closed' && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-stone-100 text-stone-700 border border-stone-300">
+                                  <Archive className="w-3 h-3 text-stone-500" />
+                                  Concluded (Closed: {formatDiscussionDateTime(disc.closedAtTimestamp || disc.closedAt)})
+                                </span>
+                              )}
+                            </div>
 
-                            {disc.status === 'opened' && (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-[#E4EFE8] text-[#204030]">
-                                <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                                Opened by {disc.openedByListenerName || 'Listener'}
-                              </span>
-                            )}
-
-                            {disc.status === 'closed' && (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-stone-100 text-stone-700 border border-stone-300">
-                                <Archive className="w-3 h-3 text-stone-500" />
-                                Concluded ({disc.closedAt || 'Closed'})
-                              </span>
-                            )}
+                            <div className="text-xs text-[#6B7D72] flex items-center gap-3 flex-wrap">
+                              <span>Started: <strong>{formatDiscussionDateTime(disc.startedAtTimestamp || disc.startedAt)}</strong></span>
+                              {disc.status === 'closed' && (
+                                <span>Closed: <strong>{formatDiscussionDateTime(disc.closedAtTimestamp || disc.closedAt)}</strong></span>
+                              )}
+                              {disc.openedAt && disc.status !== 'closed' && (
+                                <span>Claimed: <strong>{formatDiscussionDateTime(disc.openedAtTimestamp || disc.openedAt)}</strong></span>
+                              )}
+                              <span>Messages: <strong>{disc.messages.length}</strong></span>
+                            </div>
                           </div>
-
-                          <div className="text-xs text-[#6B7D72] flex items-center gap-3 flex-wrap">
-                            <span>Started: {disc.startedAt}</span>
-                            {disc.openedAt && <span>Claimed: {disc.openedAt}</span>}
-                            <span>Messages: {disc.messages.length}</span>
-                          </div>
-                        </div>
 
                         <div className="flex items-center gap-2 shrink-0">
                           {disc.status === 'unopened' ? (
@@ -1244,9 +1369,10 @@ export const DiscussionsPage = ({
                     );
                   })}
                 </div>
-                </div>
-              </div>
-            )}
+              )}
+            </div>
+          </div>
+        )}
 
             {/* TAB 5: MAILBOX (CONSULTATIONS & SHARE REQUESTS) */}
             {activeTab === 'mailbox' && (
@@ -1371,7 +1497,7 @@ export const DiscussionsPage = ({
                 </div>
                 <div className="text-xs text-[#5D6F64] flex items-center justify-between">
                   <span>{language === 'fr' ? 'Démarrée :' : 'Started:'}</span>
-                  <span>{verifyingDiscussion.startedAt}</span>
+                  <span>{formatDiscussionDateTime(verifyingDiscussion.startedAtTimestamp || verifyingDiscussion.startedAt)}</span>
                 </div>
               </div>
 
@@ -1442,6 +1568,79 @@ export const DiscussionsPage = ({
               >
                 <Unlock className="w-4 h-4" />
                 <span>{language === 'fr' ? 'Vérifier la clé & Ouvrir' : 'Verify Key & Open Discussion'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* MODAL: FRESH START - PERMANENTLY CLEAR ALL DISCUSSIONS         */}
+      {/* ------------------------------------------------------------- */}
+      {isClearConfirmModalOpen && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 bg-black/50 backdrop-blur-xs overflow-hidden animate-in fade-in"
+          onClick={() => !isClearingDiscussions && setIsClearConfirmModalOpen(false)}
+        >
+          <div 
+            className="bg-[#FAF8F5] border border-[#E5DFD5] rounded-3xl max-w-md w-full shadow-2xl relative overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-5 sm:p-6 pb-4 border-b border-[#EBE6DD] flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-rose-100 text-rose-700 flex items-center justify-center border border-rose-200 shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-[#1C3227] font-['Lora',serif]">
+                  {language === 'fr' ? 'Supprimer toutes les conversations ?' : 'Permanently Delete All Discussions?'}
+                </h3>
+                <p className="text-xs text-[#7B8B82]">
+                  {language === 'fr' ? 'Nouveau départ pour toute la plateforme' : 'Fresh Start for discussions across the entire site'}
+                </p>
+              </div>
+            </div>
+
+            <div className="p-5 sm:p-6 space-y-3 text-xs text-[#5D6F64] leading-relaxed">
+              <p>
+                {language === 'fr' 
+                  ? 'Cette action supprimera définitivement toutes les conversations existantes et leurs messages de Firestore et des mémoires locales.'
+                  : 'This action will permanently delete ALL discussions and their messages from Firestore and clear browser local caches.'}
+              </p>
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl text-amber-900 font-medium">
+                &bull; {language === 'fr' 
+                  ? 'Vos comptes utilisateurs, rôles, articles, plannings et règles ne seront pas supprimés.' 
+                  : 'User accounts, listener roles, schedules, rules, and articles will NOT be deleted.'}
+              </div>
+              <p className="text-[#3B4C41]">
+                {language === 'fr'
+                  ? 'Après suppression, les listes de conversations afficheront un état vide ("No conversations yet").'
+                  : 'After deletion, all lists and supervisor views will display "No conversations yet".'}
+              </p>
+            </div>
+
+            <div className="p-4 sm:p-5 border-t border-[#EBE6DD] bg-[#FAF7F2] flex items-center justify-end gap-3">
+              <button
+                type="button"
+                disabled={isClearingDiscussions}
+                onClick={() => setIsClearConfirmModalOpen(false)}
+                className="py-2.5 px-4 rounded-xl bg-[#EFECE5] hover:bg-[#E4DFD4] text-[#3B4C41] text-xs sm:text-sm font-semibold transition-colors cursor-pointer"
+              >
+                {strings.common.cancel}
+              </button>
+
+              <button
+                type="button"
+                disabled={isClearingDiscussions}
+                id="confirm-fresh-start-btn"
+                onClick={handleConfirmClearAllDiscussions}
+                className="py-2.5 px-5 rounded-xl bg-rose-700 hover:bg-rose-800 text-white text-xs sm:text-sm font-semibold transition-colors cursor-pointer flex items-center justify-center gap-2 shadow-xs disabled:opacity-50"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>
+                  {isClearingDiscussions
+                    ? (language === 'fr' ? 'Suppression en cours...' : 'Deleting all...')
+                    : (language === 'fr' ? 'Confirmer la suppression' : 'Delete All (Fresh Start)')}
+                </span>
               </button>
             </div>
           </div>

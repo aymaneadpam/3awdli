@@ -148,6 +148,36 @@ export async function saveDiscussionToFirestore(discussion: DiscussionConversati
   }
 }
 
+export async function deleteDiscussionFromFirestore(discussionId: string): Promise<boolean> {
+  if (!discussionId) return false;
+  try {
+    const docRef = doc(db, DISCUSSIONS_COLLECTION, discussionId);
+    await deleteDoc(docRef);
+    return true;
+  } catch (err) {
+    console.error(`Error deleting discussion ${discussionId} from Firestore:`, err);
+    return false;
+  }
+}
+
+export async function deleteAllDiscussionsFromFirestore(): Promise<number> {
+  try {
+    const colRef = collection(db, DISCUSSIONS_COLLECTION);
+    const snap = await getDocs(colRef);
+    let count = 0;
+    const promises: Promise<void>[] = [];
+    snap.forEach((docSnap) => {
+      promises.push(deleteDoc(doc(db, DISCUSSIONS_COLLECTION, docSnap.id)));
+      count++;
+    });
+    await Promise.all(promises);
+    return count;
+  } catch (err) {
+    console.error('Error deleting all discussions from Firestore:', err);
+    return 0;
+  }
+}
+
 export function subscribeToDiscussions(
   onDiscussionsUpdate: (discussions: DiscussionConversation[]) => void,
   onError?: (error: Error) => void

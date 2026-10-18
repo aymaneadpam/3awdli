@@ -11,8 +11,6 @@ import {
 
 const REPORTS_STORAGE_KEY = '3awdli_discussion_reports';
 
-const SEED_REPORTS: DiscussionReport[] = [];
-
 const SAMPLE_USER_EMAILS = new Set([
   'salma.benali@example.com',
   'dr.youssef@example.com',

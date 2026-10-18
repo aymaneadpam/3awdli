@@ -19,12 +19,16 @@ interface ConversationParticipantBarProps {
   discussion?: DiscussionConversation | null;
   className?: string;
   isCompact?: boolean;
+  viewerId?: string | null;
+  currentUserId?: string | null;
 }
 
 export const ConversationParticipantBar: React.FC<ConversationParticipantBarProps> = ({
   discussion,
   className = '',
   isCompact = false,
+  viewerId,
+  currentUserId,
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -32,7 +36,8 @@ export const ConversationParticipantBar: React.FC<ConversationParticipantBarProp
     return null;
   }
 
-  const participants: DiscussionParticipant[] = getDiscussionParticipants(discussion);
+  const effectiveViewerId = viewerId || currentUserId;
+  const participants: DiscussionParticipant[] = getDiscussionParticipants(discussion, effectiveViewerId);
   const activeListeners = participants.filter((p) => p.role === 'listener' && p.status === 'active');
   const excludedListeners = participants.filter((p) => p.role === 'listener' && p.status === 'excluded');
   const userParticipant = participants.find((p) => p.role === 'user');
@@ -51,12 +56,12 @@ export const ConversationParticipantBar: React.FC<ConversationParticipantBarProp
           {/* User Profile Pill */}
           <div 
             className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#EBF2EE] text-[#224131] border border-[#D2E3D9] text-[11px] shrink-0 font-medium"
-            title="You are in this private room"
+            title={userParticipant?.isYou ? "You are in this private room" : "Participant in this private room"}
           >
             <div className="w-4 h-4 rounded-full bg-[#315243] text-white flex items-center justify-center text-[9px]">
               <User className="w-2.5 h-2.5" />
             </div>
-            <span>{userParticipant?.name || 'You'}</span>
+            <span>{userParticipant?.name || (discussion.type === 'anonymous' ? 'Anonymous User' : 'Member')}</span>
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
           </div>
 
@@ -141,8 +146,12 @@ export const ConversationParticipantBar: React.FC<ConversationParticipantBarProp
               </p>
               <ul className="space-y-1 pt-1">
                 <li className="flex items-center justify-between text-[10.5px]">
-                  <span className="font-medium text-[#1E362A]">{userParticipant?.name || 'You'}</span>
-                  <span className="text-[9.5px] px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-800">You (Owner)</span>
+                  <span className="font-medium text-[#1E362A]">{userParticipant?.name}</span>
+                  <span className="text-[9.5px] px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-800">
+                    {userParticipant?.isYou
+                      ? (discussion.type === 'anonymous' ? 'You (Visitor)' : 'You (Member)')
+                      : (discussion.type === 'anonymous' ? 'Anonymous User' : 'Member')}
+                  </span>
                 </li>
                 {activeListeners.map((l) => (
                   <li key={l.id} className="flex items-center justify-between text-[10.5px]">
@@ -153,7 +162,7 @@ export const ConversationParticipantBar: React.FC<ConversationParticipantBarProp
                       )}
                     </div>
                     <span className="text-[9.5px] px-1.5 py-0.2 rounded bg-[#E3EFE8] text-[#224734] font-medium">
-                      Active Listener
+                      {l.isYou ? 'Active Listener (You)' : 'Active Listener'}
                     </span>
                   </li>
                 ))}

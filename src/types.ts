@@ -98,6 +98,7 @@ export interface DiscussionParticipant {
   excludedAt?: string;
   excludedAtTimestamp?: number;
   isOriginalListener?: boolean;
+  isYou?: boolean;
 }
 
 export interface DiscussionExcludedListener {
@@ -126,13 +127,16 @@ export interface DiscussionConversation {
   openedByListenerId?: string;
   openedByListenerName?: string;
   openedAt?: string;
+  openedAtTimestamp?: number;
   closedAt?: string;
+  closedAtTimestamp?: number;
   closedByRole?: 'listener' | 'user';
   closedByUserId?: string;
   closedByUserName?: string;
   closedByListenerId?: string;
   closedByListenerName?: string;
   reopenedAt?: string;
+  reopenedAtTimestamp?: number;
   listenerAttentionStatus?: 'reading' | 'typing' | 'idle' | null;
   listenerAttentionTimestamp?: number;
   listenerUnavailable?: boolean;

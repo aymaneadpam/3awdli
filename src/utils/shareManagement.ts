@@ -6,14 +6,12 @@ import {
   fetchShareRequestsFromFirestore,
   subscribeToShareRequests
 } from '../lib/firestoreService';
-import { formatSiteTime, formatSiteDateTime } from './timezoneManagement';
+import { formatSiteTime, formatSiteDateTime, formatDiscussionDateTime } from './timezoneManagement';
 
 const SHARE_REQUESTS_STORAGE_KEY = '3awdli_share_requests';
 const ONLINE_USERS_STORAGE_KEY = '3awdli_online_users';
 
 const DEFAULT_ONLINE_USERS: string[] = ['team_listener_amina'];
-
-const DEFAULT_INITIAL_SHARE_REQUESTS: ConversationShareRequest[] = [];
 
 export function isFakeShareRequest(r: Partial<ConversationShareRequest> | null | undefined): boolean {
   if (!r) return true;
@@ -368,13 +366,14 @@ export function denyShareRequest(
     return { success: false, error: 'This request has already been responded to.' };
   }
 
-  const nowFormatted = formatSiteTime();
+  const nowMs = Date.now();
+  const exactTime = formatDiscussionDateTime(nowMs);
 
   req.status = 'denied';
   req.responseType = 'denied';
   req.denialReason = denialReason.trim() || 'Unavailable at this time';
-  req.respondedAt = `Today at ${nowFormatted}`;
-  req.respondedAtTimestamp = Date.now();
+  req.respondedAt = exactTime;
+  req.respondedAtTimestamp = nowMs;
 
   all[index] = req;
   saveStoredShareRequests(all, req);
@@ -398,7 +397,8 @@ export function acceptShareRequestJoin(
     return { success: false, error: 'This request has already been responded to.' };
   }
 
-  const nowFormatted = formatSiteTime();
+  const nowMs = Date.now();
+  const exactTime = formatDiscussionDateTime(nowMs);
 
   // Update discussion to add recipient as joined listener
   const joinRes = joinDiscussion(req.discussionId, recipientUser);
@@ -408,8 +408,8 @@ export function acceptShareRequestJoin(
 
   req.status = 'accepted';
   req.responseType = 'joined';
-  req.respondedAt = `Today at ${nowFormatted}`;
-  req.respondedAtTimestamp = Date.now();
+  req.respondedAt = exactTime;
+  req.respondedAtTimestamp = nowMs;
 
   all[index] = req;
   saveStoredShareRequests(all, req);
@@ -433,7 +433,8 @@ export function acceptShareRequestTakeover(
     return { success: false, error: 'This request has already been responded to.' };
   }
 
-  const nowFormatted = formatSiteTime();
+  const nowMs = Date.now();
+  const exactTime = formatDiscussionDateTime(nowMs);
 
   // Take over discussion and exclude original listener
   const takeoverRes = takeoverDiscussion(
@@ -448,8 +449,8 @@ export function acceptShareRequestTakeover(
 
   req.status = 'accepted';
   req.responseType = 'takeover';
-  req.respondedAt = `Today at ${nowFormatted}`;
-  req.respondedAtTimestamp = Date.now();
+  req.respondedAt = exactTime;
+  req.respondedAtTimestamp = nowMs;
 
   all[index] = req;
   saveStoredShareRequests(all, req);

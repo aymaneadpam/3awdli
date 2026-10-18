@@ -33,6 +33,7 @@ import {
   getVisibleMessagesForListener, 
   isListenerExcludedFromDiscussion 
 } from '../utils/discussionManagement';
+import { formatDiscussionDateTime } from '../utils/timezoneManagement';
 import { useLanguage } from '../context/LanguageContext';
 
 interface ListenerChatInterfaceProps {
@@ -276,11 +277,16 @@ export const ListenerChatInterface = ({
               )}
             </div>
 
-            <div className="flex items-center gap-2 text-[10px] text-emerald-100/75 mt-0.5 truncate">
+            <div className="flex items-center gap-2 text-[10px] text-emerald-100/75 mt-0.5 truncate flex-wrap">
               <span className="flex items-center gap-1 shrink-0">
                 <Clock className="w-2.5 h-2.5 text-emerald-300" />
-                {language === 'ar' ? 'بدأت:' : language === 'fr' ? 'Début :' : 'Started:'} {discussion.startedAt}
+                <span>{language === 'ar' ? 'بدأت:' : language === 'fr' ? 'Début :' : 'Started:'} <strong>{formatDiscussionDateTime(discussion.startedAtTimestamp || discussion.startedAt)}</strong></span>
               </span>
+              {isClosed && (
+                <span className="text-emerald-200/90 shrink-0">
+                  &bull; {language === 'fr' ? 'Clôturée :' : 'Closed:'} <strong>{formatDiscussionDateTime(discussion.closedAtTimestamp || discussion.closedAt)}</strong>
+                </span>
+              )}
               {discussion.userEmail && (
                 <span className="hidden sm:inline text-emerald-200/90 truncate">&bull; {discussion.userEmail}</span>
               )}
@@ -433,7 +439,7 @@ export const ListenerChatInterface = ({
       />
 
       {/* Participant transparency bar */}
-      <ConversationParticipantBar discussion={discussion} />
+      <ConversationParticipantBar discussion={discussion} viewerId={currentListener.id} />
 
       {/* Sub-header Banner: Listener Identity, Profession, Gender & Visitor Preference */}
       <div className="bg-[#FAF7F2] border-b border-[#EAE3D6] px-4 py-2 flex items-center justify-between text-xs text-[#526359] shrink-0 flex-wrap gap-2">

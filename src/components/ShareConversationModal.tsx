@@ -19,6 +19,7 @@ import { getStoredUsers, StoredUser, isAdministrator } from '../utils/userManage
 import { isUserOnline, createShareRequest, getShareRequestsForDiscussion } from '../utils/shareManagement';
 import { ListenerGenderIcon } from './ListenerGenderDisplay';
 import { useLanguage } from '../context/LanguageContext';
+import { formatDiscussionDateTime } from '../utils/timezoneManagement';
 
 interface ShareConversationModalProps {
   isOpen: boolean;
@@ -227,7 +228,7 @@ export const ShareConversationModal = ({
             </span>
           </div>
           <span className="text-[11px] text-[#7A8C82] shrink-0 hidden sm:inline">
-            Started: {discussion.startedAt}
+            Started: {formatDiscussionDateTime(discussion.startedAtTimestamp || discussion.startedAt)}
           </span>
         </div>
 

@@ -301,6 +301,141 @@ export function formatSiteDateTime(
 }
 
 /**
+ * Safely extracts a numeric millisecond timestamp from any input format:
+ * - number (ms or unix seconds)
+ * - Date instance
+ * - Firestore Timestamp instance / object ({ seconds, nanoseconds } or { _seconds, _nanoseconds } or .toMillis())
+ * - ISO date string ("2026-10-18T15:30:00.000Z")
+ * - Formatted date string with or without timezone ("17 Oct 2026, 14:35 (GMT+0)", "17 Oct 2026, 14:35")
+ * Returns null if input is missing, placeholder, or unparseable. Never returns NaN or invalid numbers.
+ */
+export function extractTimestampMs(inputTime?: any): number | null {
+  if (inputTime === undefined || inputTime === null || inputTime === '') {
+    return null;
+  }
+
+  if (typeof inputTime === 'number') {
+    if (isNaN(inputTime) || inputTime <= 0) return null;
+    return inputTime < 1e11 ? inputTime * 1000 : inputTime;
+  }
+
+  if (inputTime instanceof Date) {
+    const ms = inputTime.getTime();
+    return isNaN(ms) || ms <= 0 ? null : ms;
+  }
+
+  // Firestore Timestamp object: { toMillis() } or { seconds, nanoseconds } or { _seconds, _nanoseconds }
+  if (typeof inputTime === 'object') {
+    if (typeof inputTime.toMillis === 'function') {
+      try {
+        const ms = inputTime.toMillis();
+        if (typeof ms === 'number' && !isNaN(ms) && ms > 0) return ms;
+      } catch {}
+    }
+    if (typeof inputTime.seconds === 'number' && !isNaN(inputTime.seconds) && inputTime.seconds > 0) {
+      return inputTime.seconds * 1000 + Math.floor((inputTime.nanoseconds || 0) / 1e6);
+    }
+    if (typeof inputTime._seconds === 'number' && !isNaN(inputTime._seconds) && inputTime._seconds > 0) {
+      return inputTime._seconds * 1000 + Math.floor((inputTime._nanoseconds || 0) / 1e6);
+    }
+  }
+
+  if (typeof inputTime === 'string') {
+    const trimmed = inputTime.trim();
+    if (!trimmed) return null;
+    const lower = trimmed.toLowerCase();
+    if (
+      lower === 'date unknown' ||
+      lower.includes('just now') ||
+      lower.includes('today') ||
+      lower.includes('yesterday') ||
+      lower === 'recorded' ||
+      lower === 'invalid date'
+    ) {
+      return null;
+    }
+
+    // Direct numeric string check
+    const num = Number(trimmed);
+    if (!isNaN(num) && num > 0) {
+      return num < 1e11 ? num * 1000 : num;
+    }
+
+    // Strip trailing timezone parenthesis like "(GMT+0)", "(UTC)", "(GMT+1)"
+    const cleanStr = trimmed.replace(/\s*\([A-Za-z0-9+-:]+\)\s*$/, '').trim();
+
+    // Check if cleanStr matches format: "DD Mon YYYY, HH:mm" or "DD Mon YYYY HH:mm"
+    const parsedCleanUtc = Date.parse(cleanStr.replace(',', '') + ' UTC');
+    if (!isNaN(parsedCleanUtc) && parsedCleanUtc > 0) {
+      return parsedCleanUtc;
+    }
+
+    const parsedDirect = Date.parse(trimmed);
+    if (!isNaN(parsedDirect) && parsedDirect > 0) {
+      return parsedDirect;
+    }
+
+    const parsedClean = Date.parse(cleanStr);
+    if (!isNaN(parsedClean) && parsedClean > 0) {
+      return parsedClean;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Formats a discussion timestamp into an exact date and time in the site timezone (GMT+0 by default).
+ * Example: "17 Oct 2026, 14:35 (GMT+0)"
+ * Returns "Date unknown" if timestamp is missing or invalid. Never invents the current time.
+ */
+export function formatDiscussionDateTime(
+  inputTime?: any,
+  customTimezone?: SiteTimezoneConfig
+): string {
+  const ms = extractTimestampMs(inputTime);
+  if (!ms) {
+    return 'Date unknown';
+  }
+
+  const parts = getSiteTimeParts(ms, customTimezone);
+  const monthsEn = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const monthName = monthsEn[parts.month];
+  return `${parts.date} ${monthName} ${parts.year}, ${parts.timeStr} (${parts.timezone.shortLabel})`;
+}
+
+/**
+ * Formats both start and closed exact timestamps into a combined string.
+ * When closed, shows both start and end time (e.g. "Started: 17 Oct 2026, 14:35 • Closed: 17 Oct 2026, 14:42").
+ */
+export function formatDiscussionFullRange(
+  startedInput?: number | Date | string | null,
+  closedInput?: number | Date | string | null,
+  isClosed?: boolean,
+  customTimezone?: SiteTimezoneConfig
+): {
+  startedText: string;
+  closedText: string | null;
+  combinedText: string;
+} {
+  const startedText = formatDiscussionDateTime(startedInput, customTimezone);
+  const shouldShowClosed = Boolean(isClosed || closedInput);
+  const closedText = shouldShowClosed ? formatDiscussionDateTime(closedInput, customTimezone) : null;
+
+  let combinedText = `Started: ${startedText}`;
+  if (shouldShowClosed) {
+    combinedText += ` • Closed: ${closedText || 'Date unknown'}`;
+  }
+
+  return {
+    startedText,
+    closedText,
+    combinedText,
+  };
+}
+
+
+/**
  * React hook to listen for site timezone changes and re-render components reactively.
  */
 export function useSiteTimezone(): {

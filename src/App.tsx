@@ -44,7 +44,9 @@ import {
   getActiveUserDiscussion,
   createNewDiscussion,
   clearActiveDiscussionReferences,
-  getOrCreateClientAnonUid
+  getOrCreateClientAnonUid,
+  closeDiscussion,
+  getStoredDiscussions
 } from './utils/discussionManagement';
 import { initFirestoreShareRequestsSync, setUserOnlineStatus } from './utils/shareManagement';
 import { initFirestoreSupportRequestsSync } from './utils/supportRequests';
@@ -75,7 +77,7 @@ const DEFAULT_DEMO_LISTENER: UserAccount = {
   role: 'listener',
   is_listener: true,
   profession: 'Psychology Resident',
-  createdAt: 'Today',
+  createdAt: '17 Oct 2026, 12:00',
 };
 
 function resolveInitialRouteState(): { view: ViewState; token: string; email: string } {
@@ -356,6 +358,19 @@ export default function App() {
   const handleSignOut = () => {
     if (currentUser?.id) {
       setUserOnlineStatus(currentUser.id, false);
+      try {
+        const all = getStoredDiscussions();
+        const activeUserDiscs = all.filter(
+          (d) =>
+            (d.userId === currentUser.id || d.ownerId === currentUser.id || d.creatorId === currentUser.id) &&
+            d.status !== 'closed'
+        );
+        for (const d of activeUserDiscs) {
+          closeDiscussion(d.id, currentUser.id, currentUser.name, 'user');
+        }
+      } catch (e) {
+        console.warn('Notice while closing user discussions on logout:', e);
+      }
     }
     firebaseSignOut().catch(() => {});
     localStorage.removeItem('3awdli_current_user');

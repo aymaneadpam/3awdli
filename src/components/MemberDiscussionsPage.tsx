@@ -43,6 +43,7 @@ import { Navbar } from './Navbar';
 import { ConversationParticipantBar } from './ConversationParticipantBar';
 import { GenderPreferenceTag } from './GenderPreferenceTag';
 import { GenderPreferenceModal } from './GenderPreferenceModal';
+import { formatDiscussionDateTime, extractTimestampMs } from '../utils/timezoneManagement';
 import { ReportDiscussionModal } from './ReportDiscussionModal';
 import { VoiceCallOverlay, CallButton } from './VoiceCallOverlay';
 import { useLanguage } from '../context/LanguageContext';
@@ -232,8 +233,8 @@ export const MemberDiscussionsPage: React.FC<MemberDiscussionsPageProps> = ({
         return false;
       })
       .sort((a, b) => {
-        const timeA = a.startedAtTimestamp || (a.startedAt ? new Date(a.startedAt).getTime() : 0);
-        const timeB = b.startedAtTimestamp || (b.startedAt ? new Date(b.startedAt).getTime() : 0);
+        const timeA = extractTimestampMs(a.closedAtTimestamp) || extractTimestampMs(a.startedAtTimestamp) || extractTimestampMs(a.startedAt) || 0;
+        const timeB = extractTimestampMs(b.closedAtTimestamp) || extractTimestampMs(b.startedAtTimestamp) || extractTimestampMs(b.startedAt) || 0;
         return timeB - timeA;
       });
   }, [allDiscussions, user.id, user.email]);
@@ -320,7 +321,7 @@ export const MemberDiscussionsPage: React.FC<MemberDiscussionsPageProps> = ({
         ? 'Êtes-vous sûr de vouloir terminer cette conversation ? Elle sera conservée dans votre historique.'
         : 'Are you sure you want to end this conversation? It will be safely saved in your history.';
     if (window.confirm(confirmMsg)) {
-      closeDiscussion(activeDiscussion.id, user.id, user.name);
+      closeDiscussion(activeDiscussion.id, user.id, user.name, 'user');
       setActiveUserDiscussionId(user.id, null);
       setActiveDiscussion(null);
       syncDiscussions();
@@ -577,7 +578,7 @@ export const MemberDiscussionsPage: React.FC<MemberDiscussionsPageProps> = ({
                   </div>
 
                   {/* Compact Participant Transparency */}
-                  <ConversationParticipantBar discussion={activeDiscussion} isCompact={true} />
+                  <ConversationParticipantBar discussion={activeDiscussion} isCompact={true} viewerId={user.id} />
 
                   {/* Message History Feed */}
                   <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3.5 bg-[#FAF8F5]">
@@ -729,9 +730,14 @@ export const MemberDiscussionsPage: React.FC<MemberDiscussionsPageProps> = ({
                   <div className="bg-[#FAF7F2] border border-[#EBE3D5] rounded-2xl p-4 mb-5 text-xs text-[#526359] flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <div>
                       <span className="font-semibold text-[#1C3227]">
-                        {language === 'fr' ? 'Date de la session :' : 'Session started:'}
+                        {language === 'fr' ? 'Session démarrée :' : 'Session started:'}
                       </span>{' '}
-                      {selectedHistoryDiscussion.startedAt}
+                      {formatDiscussionDateTime(selectedHistoryDiscussion.startedAtTimestamp || selectedHistoryDiscussion.startedAt)}
+                      {selectedHistoryDiscussion.status === 'closed' && (
+                        <span className="ml-2 text-stone-700">
+                          • {language === 'fr' ? 'Clôturée :' : 'Closed:'} {formatDiscussionDateTime(selectedHistoryDiscussion.closedAtTimestamp || selectedHistoryDiscussion.closedAt)}
+                        </span>
+                      )}
                       {selectedHistoryDiscussion.openedByListenerName && (
                         <span className="ml-2 text-[#315243]">
                           • {language === 'fr' ? 'Écoutant :' : 'Listener:'} {selectedHistoryDiscussion.openedByListenerName}
@@ -808,7 +814,7 @@ export const MemberDiscussionsPage: React.FC<MemberDiscussionsPageProps> = ({
                     <div className="p-8 text-center border border-dashed border-[#DCD5C8] rounded-2xl bg-[#FAF8F5]">
                       <History className="w-8 h-8 text-[#A6B5AC] mx-auto mb-2" />
                       <p className="text-xs sm:text-sm font-semibold text-[#2C4437] mb-1">
-                        {language === 'fr' ? 'Aucun historique pour l\'instant' : 'No Past Discussions Yet'}
+                        {language === 'fr' ? 'Aucune conversation pour l\'instant' : 'No conversations yet'}
                       </p>
                       <p className="text-xs text-[#6D7D73] max-w-sm mx-auto">
                         {language === 'fr'
@@ -831,8 +837,13 @@ export const MemberDiscussionsPage: React.FC<MemberDiscussionsPageProps> = ({
                             <div className="flex-1">
                               <div className="flex items-center gap-2 mb-1 flex-wrap">
                                 <span className="text-xs font-semibold text-[#1F362A]">
-                                  {disc.startedAt}
+                                  Started: {formatDiscussionDateTime(disc.startedAtTimestamp || disc.startedAt)}
                                 </span>
+                                {disc.status === 'closed' && (
+                                  <span className="text-xs text-stone-600">
+                                    • Closed: {formatDiscussionDateTime(disc.closedAtTimestamp || disc.closedAt)}
+                                  </span>
+                                )}
                                 <span className="text-[10.5px] px-2 py-0.5 rounded-full bg-[#EAE5DB] text-[#4D5E53] font-medium">
                                   {disc.status === 'closed'
                                     ? language === 'fr' ? 'Terminée' : 'Concluded'

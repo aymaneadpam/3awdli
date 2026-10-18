@@ -298,10 +298,12 @@ export const AnonymousChatWidget = ({
     setIsConfirmCloseModalOpen(false);
     if (!currentDiscussion) return;
 
+    const userOrAnonId = currentUser?.id || currentDiscussion.userId || getCurrentFirebaseAuthUid() || getOrCreateClientAnonUid();
+    const userOrAnonName = currentUser?.name || (currentDiscussion.type === 'anonymous' ? 'Anonymous User' : 'Member');
     const res = closeDiscussion(
       currentDiscussion.id,
-      currentUser?.id || 'anon_visitor',
-      currentUser?.name || (currentUser ? 'User' : 'Anonymous Visitor'),
+      userOrAnonId,
+      userOrAnonName,
       'user'
     );
 
@@ -363,7 +365,7 @@ export const AnonymousChatWidget = ({
           id: `msg_sys_welcome_${Date.now()}`,
           sender: 'system',
           text: INITIAL_DISCUSSION_SYSTEM_MESSAGE,
-          timestamp: 'Just now',
+          timestamp: formatSiteTime(Date.now()),
           timestampMs: Date.now(),
         },
       ]);
@@ -375,6 +377,11 @@ export const AnonymousChatWidget = ({
 
   // Dismiss / close chat widget from user side (only available once conversation is concluded)
   const handleCloseWidget = () => {
+    if (currentDiscussion && currentDiscussion.status !== 'closed') {
+      const userOrAnonId = currentUser?.id || currentDiscussion.userId || getCurrentFirebaseAuthUid() || getOrCreateClientAnonUid();
+      const userOrAnonName = currentUser?.name || (currentDiscussion.type === 'anonymous' ? 'Anonymous User' : 'Member');
+      closeDiscussion(currentDiscussion.id, userOrAnonId, userOrAnonName, 'user');
+    }
     if (onClose) {
       onClose();
     }
@@ -389,7 +396,7 @@ export const AnonymousChatWidget = ({
         id: `msg_sys_init_${Date.now()}`,
         sender: 'system',
         text: INITIAL_DISCUSSION_SYSTEM_MESSAGE,
-        timestamp: 'Just now',
+        timestamp: formatSiteTime(Date.now()),
         timestampMs: Date.now(),
       },
     ]);
@@ -456,7 +463,7 @@ export const AnonymousChatWidget = ({
         id: `msg_sys_welcome_${Date.now()}`,
         sender: 'system',
         text: INITIAL_DISCUSSION_SYSTEM_MESSAGE,
-        timestamp: 'Just now',
+        timestamp: formatSiteTime(Date.now()),
         timestampMs: Date.now(),
       },
     ]);
@@ -1184,7 +1191,10 @@ export const AnonymousChatWidget = ({
 
         {/* Dynamic Participants Bar (User, Active Listener, Co-Listener, Excluded Profile) - Hidden when keyboard is open on mobile */}
         {currentDiscussion && !isKeyboardOpen && (
-          <ConversationParticipantBar discussion={currentDiscussion} />
+          <ConversationParticipantBar
+            discussion={currentDiscussion}
+            viewerId={currentUser?.id || currentDiscussion.userId || getCurrentFirebaseAuthUid() || getOrCreateClientAnonUid()}
+          />
         )}
 
         {/* Disclaimer & team standby banner - Hidden when keyboard is open on mobile to maximize chat space */}

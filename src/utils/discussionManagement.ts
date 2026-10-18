@@ -8,22 +8,69 @@ import {
   DiscussionReport
 } from '../types';
 import { Language } from './translations';
-import { formatSiteTime } from './timezoneManagement';
-import { verifyListenerKeyCode, getStoredUsers, StoredUser, isFakeUser } from './userManagement';
+import { formatSiteTime, formatDiscussionDateTime, formatDiscussionFullRange, extractTimestampMs } from './timezoneManagement';
+import { verifyListenerKeyCode, getStoredUsers, StoredUser, isFakeUser, getCurrentUser } from './userManagement';
 import { getShareRequestsForDiscussion, getStoredShareRequests } from './shareManagement';
 import {
   saveDiscussionToFirestore,
   fetchDiscussionsFromFirestore,
   subscribeToDiscussions,
+  deleteDiscussionFromFirestore,
+  deleteAllDiscussionsFromFirestore,
   ensureAnonymousFirebaseAuth,
   getCurrentFirebaseAuthUid
 } from '../lib/firestoreService';
 
 export const DISCUSSIONS_STORAGE_KEY = '3awdli_discussions';
+const DISCUSSIONS_FRESH_START_KEY = '3awdli_discussions_fresh_start_v5_oct17_clean';
+export const HANDLED_DISCUSSIONS_STORAGE_KEY = '3awdli_handled_discussions';
+
+export function markDiscussionAsHandledLocally(discussionId: string): void {
+  try {
+    if (typeof localStorage === 'undefined' || !discussionId) return;
+    const raw = localStorage.getItem(HANDLED_DISCUSSIONS_STORAGE_KEY);
+    const list: string[] = raw ? JSON.parse(raw) : [];
+    if (!list.includes(discussionId)) {
+      list.push(discussionId);
+      localStorage.setItem(HANDLED_DISCUSSIONS_STORAGE_KEY, JSON.stringify(list));
+    }
+  } catch {
+    // Ignore storage errors
+  }
+}
+
+export function getHandledDiscussionsSet(): Set<string> {
+  try {
+    if (typeof localStorage === 'undefined') return new Set();
+    const raw = localStorage.getItem(HANDLED_DISCUSSIONS_STORAGE_KEY);
+    return new Set<string>(raw ? JSON.parse(raw) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+// One-time fresh start: permanently clear legacy cached discussions in local storage
+if (typeof localStorage !== 'undefined') {
+  try {
+    if (localStorage.getItem(DISCUSSIONS_FRESH_START_KEY) !== 'true') {
+      localStorage.removeItem(DISCUSSIONS_STORAGE_KEY);
+      localStorage.removeItem('3awdli_active_anon_disc_id');
+      localStorage.removeItem(HANDLED_DISCUSSIONS_STORAGE_KEY);
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const key = localStorage.key(i);
+        if (key && (key.startsWith('3awdli_active_user_disc_') || key.startsWith('3awdli_disc_'))) {
+          localStorage.removeItem(key);
+        }
+      }
+      localStorage.setItem(DISCUSSIONS_STORAGE_KEY, JSON.stringify([]));
+      localStorage.setItem(DISCUSSIONS_FRESH_START_KEY, 'true');
+    }
+  } catch {
+    // Ignore storage errors
+  }
+}
 
 export const INITIAL_DISCUSSION_SYSTEM_MESSAGE = "Salam, l'message dialk tsift l team. Chwia w yjawbk chi wa7d";
-
-const SEED_DISCUSSIONS: DiscussionConversation[] = [];
 
 export const FAKE_DISCUSSION_IDS = new Set([
   'disc_anon_101',
@@ -60,10 +107,7 @@ export function isFakeDiscussion(d: Partial<DiscussionConversation> | null | und
     d.userName === 'Anonymous Visitor #101' ||
     d.userName === 'Anonymous Visitor #102' ||
     d.userName === 'Anonymous Visitor #103' ||
-    d.userName === 'Anonymous Visitor #105' ||
-    d.userName === 'Salma Benali' ||
-    d.userName === 'Karim Tazi' ||
-    d.userName === 'Nadia Cherkaoui'
+    d.userName === 'Anonymous Visitor #105'
   )) return true;
   return false;
 }
@@ -84,7 +128,7 @@ export function getStoredDiscussions(): DiscussionConversation[] {
 
     let hasChanges = discussions.length !== rawDiscussions.length;
 
-    // Ensure all discussions have a valid genderPreference and correct registration status
+    // Ensure all discussions have valid genderPreference, proper real names, and exact date formatting
     const registeredUsers = getStoredUsers();
     discussions.forEach((d) => {
       if (!d.genderPreference) {
@@ -121,6 +165,7 @@ export function getStoredDiscussions(): DiscussionConversation[] {
           d.userName === 'Anonymous Visitor' ||
           d.userName === 'Anonymous User' ||
           d.userName === 'Visiteur Anonyme' ||
+          d.userName === 'Utilisateur Anonyme' ||
           d.userName === 'Registered Member'
         ) {
           d.userName = matchedUser.name;
@@ -128,6 +173,30 @@ export function getStoredDiscussions(): DiscussionConversation[] {
         }
         if (!d.userEmail) {
           d.userEmail = matchedUser.email;
+          hasChanges = true;
+        }
+      }
+
+      // Sanitize dates: preserve exact timestamps; never corrupt with Date unknown if real timestamp is present
+      const startMs = extractTimestampMs(d.startedAtTimestamp) || extractTimestampMs(d.startedAt);
+      if (startMs && (!d.startedAtTimestamp || d.startedAt?.toLowerCase().includes('today') || d.startedAt?.toLowerCase().includes('just now'))) {
+        d.startedAtTimestamp = startMs;
+        d.startedAt = formatDiscussionDateTime(startMs);
+        hasChanges = true;
+      }
+      if (d.status === 'closed') {
+        const closedMs = extractTimestampMs(d.closedAtTimestamp) || extractTimestampMs(d.closedAt) || extractTimestampMs((d as any).endedAtTimestamp) || extractTimestampMs((d as any).endedAt);
+        if (closedMs && (!d.closedAtTimestamp || d.closedAt?.toLowerCase().includes('today') || d.closedAt === 'Date unknown')) {
+          d.closedAtTimestamp = closedMs;
+          d.closedAt = formatDiscussionDateTime(closedMs);
+          hasChanges = true;
+        }
+      }
+      if (d.openedAt || d.openedAtTimestamp) {
+        const openedMs = extractTimestampMs(d.openedAtTimestamp) || extractTimestampMs(d.openedAt);
+        if (openedMs && (!d.openedAtTimestamp || d.openedAt?.toLowerCase().includes('today') || d.openedAt === 'Date unknown')) {
+          d.openedAtTimestamp = openedMs;
+          d.openedAt = formatDiscussionDateTime(openedMs);
           hasChanges = true;
         }
       }
@@ -171,31 +240,111 @@ export function reconcileDiscussionsWithLocal(
   remoteDiscussions: DiscussionConversation[],
   localDiscussions: DiscussionConversation[]
 ): DiscussionConversation[] {
-  const cleanRemote = remoteDiscussions.filter((d) => !isFakeDiscussion(d));
+  const cleanRemote = (remoteDiscussions || []).filter((d) => !isFakeDiscussion(d));
   const mergedMap = new Map<string, DiscussionConversation>();
 
   for (const r of cleanRemote) {
-    mergedMap.set(r.id, { ...r });
+    // Preserve exact timestamps; never overwrite with current time
+    const startMs = extractTimestampMs(r.startedAtTimestamp) || extractTimestampMs(r.startedAt);
+    const exactStartedAt = startMs ? formatDiscussionDateTime(startMs) : (r.startedAt && r.startedAt !== 'Date unknown' ? r.startedAt : 'Date unknown');
+
+    let closedMs = extractTimestampMs(r.closedAtTimestamp) || extractTimestampMs(r.closedAt) || extractTimestampMs((r as any).endedAtTimestamp) || extractTimestampMs((r as any).endedAt);
+
+    // If discussion is closed but has no closedAt timestamp on remote, look for close message or last message timestamp
+    if (!closedMs && r.status === 'closed' && Array.isArray(r.messages) && r.messages.length > 0) {
+      const closeMsg = [...r.messages].reverse().find((m) => m.id?.includes('close') || m.text?.toLowerCase().includes('ended') || m.text?.toLowerCase().includes('closed'));
+      if (closeMsg) {
+        closedMs = extractTimestampMs(closeMsg.timestampMs) || extractTimestampMs(closeMsg.timestamp);
+      }
+      if (!closedMs) {
+        const lastMsg = r.messages[r.messages.length - 1];
+        if (lastMsg) {
+          closedMs = extractTimestampMs(lastMsg.timestampMs) || extractTimestampMs(lastMsg.timestamp);
+        }
+      }
+    }
+
+    const exactClosedAt = closedMs ? formatDiscussionDateTime(closedMs) : (r.closedAt && r.closedAt !== 'Date unknown' ? r.closedAt : (r.status === 'closed' ? 'Date unknown' : undefined));
+
+    const openedMs = extractTimestampMs(r.openedAtTimestamp) || extractTimestampMs(r.openedAt);
+    const exactOpenedAt = openedMs ? formatDiscussionDateTime(openedMs) : (r.openedAt && r.openedAt !== 'Date unknown' ? r.openedAt : undefined);
+
+    mergedMap.set(r.id, {
+      ...r,
+      startedAt: exactStartedAt,
+      startedAtTimestamp: startMs || (r.startedAtTimestamp || 0),
+      closedAt: exactClosedAt,
+      closedAtTimestamp: closedMs || r.closedAtTimestamp,
+      openedAt: exactOpenedAt,
+      openedAtTimestamp: openedMs || r.openedAtTimestamp,
+    });
   }
 
+  // Preserve every valid local discussion that is pending or in-progress
   for (const l of localDiscussions) {
     if (isFakeDiscussion(l)) continue;
     const remote = mergedMap.get(l.id);
     if (!remote) {
-      // Local discussion not yet in remote snapshot - preserve it!
       mergedMap.set(l.id, l);
+      // Ensure local discussion is also persisted to Firestore
+      saveDiscussionToFirestore(l).catch(() => {});
     } else {
-      // If locally closed, prevent remote from un-closing it unless explicitly reopened
+      // Merge all timestamp fields from whichever side has real values
+      const lClosedMs = extractTimestampMs(l.closedAtTimestamp) || extractTimestampMs(l.closedAt) || extractTimestampMs((l as any).endedAtTimestamp) || extractTimestampMs((l as any).endedAt);
+      const rClosedMs = extractTimestampMs(remote.closedAtTimestamp) || extractTimestampMs(remote.closedAt) || extractTimestampMs((remote as any).endedAtTimestamp) || extractTimestampMs((remote as any).endedAt);
+      const bestClosedMs = rClosedMs || lClosedMs;
+      if (bestClosedMs) {
+        remote.closedAtTimestamp = bestClosedMs;
+        remote.closedAt = formatDiscussionDateTime(bestClosedMs);
+      }
+
+      const lOpenedMs = extractTimestampMs(l.openedAtTimestamp) || extractTimestampMs(l.openedAt);
+      const rOpenedMs = extractTimestampMs(remote.openedAtTimestamp) || extractTimestampMs(remote.openedAt);
+      const bestOpenedMs = rOpenedMs || lOpenedMs;
+      if (bestOpenedMs) {
+        remote.openedAtTimestamp = bestOpenedMs;
+        remote.openedAt = formatDiscussionDateTime(bestOpenedMs);
+      }
+
+      // Merge all listener attribution fields from whichever side has them
+      if (l.openedByListenerId && !remote.openedByListenerId) {
+        remote.openedByListenerId = l.openedByListenerId;
+        remote.openedByListenerName = l.openedByListenerName || remote.openedByListenerName;
+      }
+      if (l.closedByListenerId && !remote.closedByListenerId) {
+        remote.closedByListenerId = l.closedByListenerId;
+        remote.closedByListenerName = l.closedByListenerName || remote.closedByListenerName;
+      }
+      if (l.closedByRole && !remote.closedByRole) {
+        remote.closedByRole = l.closedByRole;
+      }
+      if (l.closedByUserId && !remote.closedByUserId) {
+        remote.closedByUserId = l.closedByUserId;
+        remote.closedByUserName = l.closedByUserName || remote.closedByUserName;
+      }
+
+      // If locally closed, ensure remote discussion is marked closed permanently
       if (l.status === 'closed') {
         if (!remote.reopenedAt || remote.status !== 'opened') {
           remote.status = 'closed';
-          remote.closedAt = l.closedAt || remote.closedAt;
+          remote.closedAt = remote.closedAt || l.closedAt || (bestClosedMs ? formatDiscussionDateTime(bestClosedMs) : undefined);
+          remote.closedAtTimestamp = remote.closedAtTimestamp || l.closedAtTimestamp || bestClosedMs || undefined;
           remote.closedByRole = l.closedByRole || remote.closedByRole;
           remote.closedByListenerId = l.closedByListenerId || remote.closedByListenerId;
           remote.closedByListenerName = l.closedByListenerName || remote.closedByListenerName;
           remote.closedByUserId = l.closedByUserId || remote.closedByUserId;
           remote.closedByUserName = l.closedByUserName || remote.closedByUserName;
+          saveDiscussionToFirestore(remote).catch(() => {});
         }
+      }
+      // If locally opened, preserve listener info
+      if (l.status === 'opened' && remote.status === 'unopened') {
+        remote.status = 'opened';
+        remote.openedByListenerId = l.openedByListenerId || remote.openedByListenerId;
+        remote.openedByListenerName = l.openedByListenerName || remote.openedByListenerName;
+        remote.openedAt = l.openedAt || remote.openedAt;
+        remote.openedAtTimestamp = l.openedAtTimestamp || remote.openedAtTimestamp;
+        saveDiscussionToFirestore(remote).catch(() => {});
       }
       // Safely merge messages by ID so messages from either side are never dropped
       const messageMap = new Map<string, ChatMessage>();
@@ -221,6 +370,42 @@ export function reconcileDiscussionsWithLocal(
   }
 
   return Array.from(mergedMap.values());
+}
+
+/**
+ * Permanently deletes ALL existing discussions and their messages from Firestore
+ * and clears discussion-related local storage caches (fresh start).
+ * Does NOT delete user accounts, schedules, rules, articles, or other system data.
+ */
+export async function clearAllDiscussionData(): Promise<{ success: boolean; deletedCount: number }> {
+  try {
+    // 1. Delete all discussions in Firestore
+    const deletedCount = await deleteAllDiscussionsFromFirestore();
+
+    // 2. Clear discussions in localStorage
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(DISCUSSIONS_STORAGE_KEY, JSON.stringify([]));
+      localStorage.removeItem('3awdli_active_anon_disc_id');
+      localStorage.removeItem(HANDLED_DISCUSSIONS_STORAGE_KEY);
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const key = localStorage.key(i);
+        if (key && (key.startsWith('3awdli_active_user_disc_') || key.startsWith('3awdli_disc_'))) {
+          localStorage.removeItem(key);
+        }
+      }
+    }
+
+    // 3. Dispatch real-time cross-tab events
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('3awdli_discussion_sync', { detail: { timestamp: Date.now(), cleared: true } }));
+      window.dispatchEvent(new CustomEvent('3awdli_active_discussion_cleared', { detail: { timestamp: Date.now() } }));
+    }
+
+    return { success: true, deletedCount };
+  } catch (err) {
+    console.error('Failed to clear discussion data:', err);
+    return { success: false, deletedCount: 0 };
+  }
 }
 
 let isDiscussionsSyncInitialized = false;
@@ -531,6 +716,7 @@ export function sendListenerMessage(
   disc.listenerAttentionStatus = 'reading';
   disc.listenerAttentionTimestamp = nowMs;
 
+  markDiscussionAsHandledLocally(discussionId);
   saveStoredDiscussions(all, disc);
   return { success: true, message: listenerMsg };
 }
@@ -594,10 +780,15 @@ export function closeDiscussion(
   }
 
   const disc = all[index];
-  const nowFormatted = formatSiteTime();
+  const nowMs = Date.now();
+  const nowFormatted = formatSiteTime(nowMs);
+  const exactClosedAt = formatDiscussionDateTime(nowMs);
 
   disc.status = 'closed';
-  disc.closedAt = `Today at ${nowFormatted}`;
+  disc.closedAt = exactClosedAt;
+  disc.closedAtTimestamp = nowMs;
+  (disc as any).endedAt = exactClosedAt;
+  (disc as any).endedAtTimestamp = nowMs;
   disc.closedByRole = closedByRole;
   if (closedByRole === 'user') {
     disc.closedByUserId = closedById;
@@ -605,6 +796,10 @@ export function closeDiscussion(
   } else {
     disc.closedByListenerId = closedById;
     disc.closedByListenerName = closedByName;
+    if (!disc.openedByListenerId) {
+      disc.openedByListenerId = closedById;
+      disc.openedByListenerName = closedByName;
+    }
   }
   disc.listenerAttentionStatus = null;
 
@@ -613,16 +808,21 @@ export function closeDiscussion(
 
   // Add an audit notice message to the conversation
   const closeNotice: ChatMessage = {
-    id: `msg_close_${Date.now()}`,
+    id: `msg_close_${nowMs}`,
     sender: 'system',
     text: closedByRole === 'user'
       ? 'This conversation was ended by the user.'
       : 'This conversation was ended by the listener.',
     timestamp: nowFormatted,
+    timestampMs: nowMs,
   };
   disc.messages.push(closeNotice);
 
+  markDiscussionAsHandledLocally(discussionId);
   saveStoredDiscussions(all, disc);
+  saveDiscussionToFirestore(disc).catch((err) => {
+    console.warn('Firestore closeDiscussion immediate save notice:', err);
+  });
   return { success: true, discussion: disc };
 }
 
@@ -767,7 +967,8 @@ export function reopenDiscussionByUser(
     disc.joinedAt = undefined;
     disc.listenerAttentionStatus = null;
     disc.listenerUnavailable = true;
-    disc.reopenedAt = `Today at ${nowFormatted}`;
+    disc.reopenedAt = formatDiscussionDateTime(nowMs);
+    disc.reopenedAtTimestamp = nowMs;
 
     disc.messages.push(userMsgWithMs);
     disc.messages.push({
@@ -792,7 +993,8 @@ export function reopenDiscussionByUser(
     disc.joinedListenerName = activeJoinedListener.name;
     disc.joinedListenerProfession = activeJoinedListener.profession || 'Support Specialist';
     disc.joinedListenerGender = activeJoinedListener.gender;
-    disc.reopenedAt = `Today at ${nowFormatted}`;
+    disc.reopenedAt = formatDiscussionDateTime(nowMs);
+    disc.reopenedAtTimestamp = nowMs;
     disc.listenerUnavailable = false;
 
     disc.messages.push(userMsgWithMs);
@@ -826,7 +1028,8 @@ export function reopenDiscussionByUser(
   disc.joinedListenerRole = undefined;
   disc.joinedAt = undefined;
 
-  disc.reopenedAt = `Today at ${nowFormatted}`;
+  disc.reopenedAt = formatDiscussionDateTime(nowMs);
+  disc.reopenedAtTimestamp = nowMs;
   disc.listenerUnavailable = false;
 
   disc.messages.push(userMsgWithMs);
@@ -884,8 +1087,9 @@ export function openDiscussionWithKey(
     };
   }
 
-  const nowFormatted = formatSiteTime();
   const nowMs = Date.now();
+  const nowFormatted = formatSiteTime(nowMs);
+  const exactOpenedAt = formatDiscussionDateTime(nowMs);
 
   const isReopenedFromUnavail = Boolean(currentDisc.listenerUnavailable);
 
@@ -905,7 +1109,8 @@ export function openDiscussionWithKey(
     status: 'opened',
     openedByListenerId: listenerId,
     openedByListenerName: listenerName,
-    openedAt: `Today at ${nowFormatted}`,
+    openedAt: exactOpenedAt,
+    openedAtTimestamp: nowMs,
     listenerAttentionStatus: 'reading',
     listenerAttentionTimestamp: nowMs,
     listenerUnavailable: false,
@@ -915,7 +1120,11 @@ export function openDiscussionWithKey(
   };
 
   all[index] = updatedDisc;
+  markDiscussionAsHandledLocally(discussionId);
   saveStoredDiscussions(all, updatedDisc);
+  saveDiscussionToFirestore(updatedDisc).catch((err) => {
+    console.warn('Firestore openDiscussionWithKey immediate save notice:', err);
+  });
 
   return {
     success: true,
@@ -966,14 +1175,16 @@ export function recordLiveDiscussionMessage(
     }
     saveStoredDiscussions(all, disc);
   } else {
+    const nowMs = Date.now();
+    const exactStartedAt = formatDiscussionDateTime(nowMs);
     const newDisc: DiscussionConversation = {
       id: discussionId,
       type,
-      userName: userName || (type === 'anonymous' ? 'Anonymous Visitor' : 'Registered Member'),
+      userName: userName || (type === 'anonymous' ? 'Anonymous User' : 'Registered Member'),
       userEmail,
       userId,
-      startedAt: 'Just now',
-      startedAtTimestamp: Date.now(),
+      startedAt: exactStartedAt,
+      startedAtTimestamp: nowMs,
       status: 'unopened',
       genderPreference: genderPreference || 'any',
       messages: [messageWithMs],
@@ -1014,6 +1225,7 @@ export function createNewDiscussion(
 
   const nowMs = Date.now();
   const nowFormatted = formatSiteTime(nowMs);
+  const exactStartedAt = formatDiscussionDateTime(nowMs);
 
   // For anonymous conversations, tie to the real Firebase Auth UID (owner/creator ID)
   let ownerCreatorId = params?.userId || params?.creatorId || params?.ownerId;
@@ -1055,9 +1267,9 @@ export function createNewDiscussion(
     userId: ownerCreatorId,
     creatorId: ownerCreatorId,
     ownerId: ownerCreatorId,
-    userName: params?.userName || (type === 'anonymous' ? 'Anonymous Visitor' : 'Registered Member'),
+    userName: params?.userName || (type === 'anonymous' ? 'Anonymous User' : 'Registered Member'),
     userEmail: params?.userEmail,
-    startedAt: 'Just now',
+    startedAt: exactStartedAt,
     startedAtTimestamp: nowMs,
     status: 'unopened',
     genderPreference: params?.genderPreference || 'any',
@@ -1216,7 +1428,7 @@ export function joinDiscussion(
     : newListener.role === 'admin'
     ? 'Administrator'
     : 'Listener';
-  disc.joinedAt = `Today at ${nowFormatted}`;
+  disc.joinedAt = formatDiscussionDateTime(nowMs);
 
   const joinNotice: ChatMessage = {
     id: `msg_join_${nowMs}`,
@@ -1259,7 +1471,7 @@ export function takeoverDiscussion(
     listenerName: originalListenerName,
     listenerProfession: origUser?.profession || 'Support Specialist',
     listenerGender: origUser?.gender,
-    excludedAt: `Today at ${nowFormatted}`,
+    excludedAt: formatDiscussionDateTime(nowMs),
     excludedAtTimestamp: nowMs,
     reason: `Handover taken over by ${newListener.name}`,
     newListenerName: newListener.name,
@@ -1329,7 +1541,10 @@ export function getVisibleMessagesForListener(
 }
 
 // Get active and excluded participants for the user-facing participant bar
-export function getDiscussionParticipants(discussion: DiscussionConversation): DiscussionParticipant[] {
+export function getDiscussionParticipants(
+  discussion: DiscussionConversation,
+  explicitViewerId?: string | null
+): DiscussionParticipant[] {
   const participants: DiscussionParticipant[] = [];
   const users = getStoredUsers();
 
@@ -1339,24 +1554,75 @@ export function getDiscussionParticipants(discussion: DiscussionConversation): D
     return Boolean(u && (u.is_listener || u.isListener || u.role === 'listener'));
   };
 
-  // 1. User
+  // Determine current viewer ID (Firebase UID or user ID)
+  let viewerId = (explicitViewerId || '').trim();
+  if (!viewerId) {
+    try {
+      const u = getCurrentUser();
+      if (u?.id) viewerId = u.id;
+    } catch {}
+  }
+  if (!viewerId) {
+    try {
+      const fbUid = getCurrentFirebaseAuthUid();
+      if (fbUid) viewerId = fbUid;
+    } catch {}
+  }
+  if (!viewerId) {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        const storedAnon = localStorage.getItem('3awdli_anon_firebase_uid');
+        if (storedAnon) viewerId = storedAnon;
+      }
+    } catch {}
+  }
+
+  // 1. User participant
+  const userId = discussion.userId || discussion.creatorId || discussion.ownerId || (discussion.type === 'anonymous' ? 'visitor' : 'user');
+  
+  // Decide who is "You" by comparing participant ID with logged-in viewer ID (Firebase UID or user ID)
+  const isUserViewer = Boolean(
+    viewerId && (
+      viewerId === discussion.userId ||
+      viewerId === discussion.creatorId ||
+      viewerId === discussion.ownerId ||
+      viewerId === userId
+    )
+  );
+
+  let userNameDisplay: string;
+  if (discussion.type === 'anonymous') {
+    // When listener, head of listeners, admin views: "Anonymous User"
+    // When the anonymous user views their own conversation: "You (Anonymous)"
+    userNameDisplay = isUserViewer ? 'You (Anonymous)' : 'Anonymous User';
+  } else {
+    // Registered user keeps showing real name, with "You" only on viewer's own entry
+    const rawName = discussion.userName || 'Member';
+    userNameDisplay = isUserViewer ? `${rawName} (You)` : rawName;
+  }
+
   participants.push({
-    id: discussion.userId || (discussion.type === 'anonymous' ? 'visitor' : 'user'),
-    name: discussion.type === 'anonymous' ? 'You (Anonymous Visitor)' : (discussion.userName ? `You (${discussion.userName})` : 'You (Member)'),
+    id: userId,
+    name: userNameDisplay,
     role: 'user',
     status: 'active',
+    isYou: isUserViewer,
   });
 
   // 2. Primary listener
   if (discussion.openedByListenerId) {
     const isExcluded = discussion.excludedListeners?.some((e) => e.listenerId === discussion.openedByListenerId);
     if (!isExcluded && isUserActiveListener(discussion.openedByListenerId)) {
+      const isListenerViewer = Boolean(viewerId && viewerId === discussion.openedByListenerId);
+      const listenerRawName = discussion.openedByListenerName || 'Assigned Listener';
+      const listenerNameDisplay = isListenerViewer ? `${listenerRawName} (You)` : listenerRawName;
       participants.push({
         id: discussion.openedByListenerId,
-        name: discussion.openedByListenerName || 'Assigned Listener',
+        name: listenerNameDisplay,
         role: 'listener',
         status: 'active',
         isOriginalListener: true,
+        isYou: isListenerViewer,
       });
     }
   }
@@ -1365,13 +1631,17 @@ export function getDiscussionParticipants(discussion: DiscussionConversation): D
   if (discussion.joinedListenerId) {
     const isExcluded = discussion.excludedListeners?.some((e) => e.listenerId === discussion.joinedListenerId);
     if (!isExcluded && isUserActiveListener(discussion.joinedListenerId)) {
+      const isJoinedViewer = Boolean(viewerId && viewerId === discussion.joinedListenerId);
+      const joinedRawName = discussion.joinedListenerName || 'Joined Listener';
+      const joinedNameDisplay = isJoinedViewer ? `${joinedRawName} (You)` : joinedRawName;
       participants.push({
         id: discussion.joinedListenerId,
-        name: discussion.joinedListenerName || 'Joined Listener',
+        name: joinedNameDisplay,
         profession: discussion.joinedListenerProfession,
         gender: discussion.joinedListenerGender,
         role: 'listener',
         status: 'active',
+        isYou: isJoinedViewer,
       });
     }
   }
@@ -1380,15 +1650,17 @@ export function getDiscussionParticipants(discussion: DiscussionConversation): D
   if (discussion.excludedListeners && discussion.excludedListeners.length > 0) {
     discussion.excludedListeners.forEach((ex) => {
       if (!participants.some((p) => p.id === ex.listenerId)) {
+        const isExViewer = Boolean(viewerId && viewerId === ex.listenerId);
         participants.push({
           id: ex.listenerId,
-          name: ex.listenerName,
+          name: isExViewer ? `${ex.listenerName} (You)` : ex.listenerName,
           profession: ex.listenerProfession,
           gender: ex.listenerGender,
           role: 'listener',
           status: 'excluded',
           excludedAt: ex.excludedAt,
           excludedAtTimestamp: ex.excludedAtTimestamp,
+          isYou: isExViewer,
         });
       }
     });
