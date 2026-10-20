@@ -199,26 +199,9 @@ export async function acquireMicrophoneStream(): Promise<MediaStream> {
     // echoCancellation, noiseSuppression, and autoGainControl are essential for eliminating feedback.
     // channelCount: 1 (mono) forces hardware & browser AEC engines to engage properly without stereo phasing.
     // latency: 0.01 minimizes buffer queues to eliminate "repeating last words" buffer lag.
+    // Keep constraints simple. Over-constraining (sampleRate, latency, goog* flags)
+    // can make browsers disable or re-init their echo canceller / noise suppressor.
     try {
-      stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: { ideal: true },
-          noiseSuppression: { ideal: true },
-          autoGainControl: { ideal: true },
-          channelCount: { ideal: 1 },
-          sampleRate: { ideal: 48000 },
-          latency: { ideal: 0.01 },
-          // Vendor-specific WebRTC APM extensions (Chrome, Edge, Android Chrome, Opera)
-          googEchoCancellation: { ideal: true },
-          googAutoGainControl: { ideal: true },
-          googNoiseSuppression: { ideal: true },
-          googHighpassFilter: { ideal: true },
-          googAudioMirroring: { ideal: false },
-        } as any,
-        video: false,
-      });
-    } catch {
-      // Fallback to strict W3C standard constraints if browser rejects vendor extensions
       stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
@@ -228,21 +211,16 @@ export async function acquireMicrophoneStream(): Promise<MediaStream> {
         },
         video: false,
       });
+    } catch {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
     }
 
     activeLocalStream = stream;
 
     // Ensure all acquired audio tracks enforce echo cancellation and respect current mute state
     stream.getAudioTracks().forEach((track) => {
-      try {
-        track.applyConstraints({
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-          channelCount: 1,
-          latency: 0.01,
-        } as MediaTrackConstraints).catch(() => {});
-      } catch {}
+      // Tell the browser this is speech so it tunes processing accordingly
+      try { (track as any).contentHint = 'speech'; } catch {}
 
       // Hardware level mute enforcement
       track.enabled = !currentMuteState;
@@ -282,27 +260,20 @@ export async function acquireMicrophoneStream(): Promise<MediaStream> {
 // -------------------------------------------------------------
 function formatOpusSdp(sdp: string): string {
   if (!sdp) return sdp;
-  // Match Opus payload type in RTPMAP (e.g., a=rtpmap:111 opus/48000/2)
   const opusMatch = sdp.match(/a=rtpmap:(\d+)\s+opus\/48000/i);
   if (!opusMatch) return sdp;
-
   const pt = opusMatch[1];
-  // Optimal voice parameters:
-  // - stereo=0 / sprop-stereo=0: Single mono audio avoids spatial phase delay, letting AEC cancel acoustic echo cleanly
-  // - usedtx=1: Discontinuous Transmission (stops sending audio packets during silence/pauses, breaking echo/cavern loops)
-  // - useinbandfec=1: Forward Error Correction prevents audio buffer repeats on jitter
-  // - minptime=10 / ptime=20: Low latency packet frames prevent deep audio buffer queues that cause "repeating last words"
-  const audioParams = 'stereo=0;sprop-stereo=0;useinbandfec=1;usedtx=1;cbr=1;maxaveragebitrate=32000;minptime=10;ptime=20';
 
-  const fmtpRegex = new RegExp(`a=fmtp:${pt}\\s+(.*)`, 'i');
-  if (fmtpRegex.test(sdp)) {
-    return sdp.replace(fmtpRegex, `a=fmtp:${pt} ${audioParams};$1`);
-  } else {
-    return sdp.replace(
-      opusMatch[0],
-      `${opusMatch[0]}\r\na=fmtp:${pt} ${audioParams}`
-    );
+  // Clean voice settings. NOTE: no usedtx (DTX causes hiss / pumping noise between words)
+  // and no cbr (forces constant bitrate and hurts quality on weak mobile networks).
+  const params = 'minptime=10;useinbandfec=1;stereo=0;sprop-stereo=0;maxaveragebitrate=40000;maxplaybackrate=48000';
+
+  const fmtpLine = new RegExp(`a=fmtp:${pt}\\s+[^\\r\\n]*`, 'i');
+  if (fmtpLine.test(sdp)) {
+    // Replace the existing line entirely (prepending created duplicate keys)
+    return sdp.replace(fmtpLine, `a=fmtp:${pt} ${params}`);
   }
+  return sdp.replace(opusMatch[0], `${opusMatch[0]}\r\na=fmtp:${pt} ${params}`);
 }
 
 // -------------------------------------------------------------
