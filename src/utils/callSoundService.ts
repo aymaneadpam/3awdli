@@ -110,19 +110,32 @@ export function startOutgoingRingback(): void {
 /**
  * Stop all active ringtones and sounds
  */
-export function stopAllCallSounds(): void {
+export function stopAllCallSounds(releaseContext = true): void {
   isRinging = false;
   if (ringInterval) {
     clearInterval(ringInterval);
     ringInterval = null;
   }
+  if (releaseContext) releaseAudioContext(0);
+}
+
+// An open AudioContext keeps the phone in "media playback" mode, which can disable
+// the hardware echo canceller and add noise to the WebRTC call. Close it when idle.
+function releaseAudioContext(delayMs: number) {
+  setTimeout(() => {
+    if (audioCtx && audioCtx.state !== 'closed' && !isRinging) {
+      audioCtx.close().catch(() => {});
+      audioCtx = null;
+    }
+  }, delayMs);
 }
 
 /**
  * Play a pleasant positive connection chime when call is accepted
  */
 export function playCallConnectedChime(): void {
-  stopAllCallSounds();
+  stopAllCallSounds(false);
+  releaseAudioContext(900);
   const ctx = getAudioContext();
   if (!ctx) return;
 
@@ -148,7 +161,8 @@ export function playCallConnectedChime(): void {
  * Play a soft gentle call-ended tone
  */
 export function playCallEndedChime(): void {
-  stopAllCallSounds();
+  stopAllCallSounds(false);
+  releaseAudioContext(900);
   const ctx = getAudioContext();
   if (!ctx) return;
 
