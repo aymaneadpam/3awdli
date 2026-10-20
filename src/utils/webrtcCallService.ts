@@ -206,7 +206,7 @@ export async function acquireMicrophoneStream(): Promise<MediaStream> {
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
-          autoGainControl: true,
+          autoGainControl: false,
           channelCount: 1,
         },
         video: false,
