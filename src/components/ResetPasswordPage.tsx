@@ -29,6 +29,7 @@ interface ResetPasswordPageProps {
   onNavigateTeenSpace?: () => void;
   onNavigateLounge?: () => void;
   onNavigateRules?: () => void;
+  onNavigateSchedules?: () => void;
   onOpenContactSupport?: () => void;
   onOpenEmergencyModal?: () => void;
   onTalkAnonymously?: () => void;
@@ -43,6 +44,7 @@ export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({
   onNavigateTeenSpace,
   onNavigateLounge,
   onNavigateRules,
+  onNavigateSchedules,
   onOpenContactSupport,
   onOpenEmergencyModal,
   onTalkAnonymously,
@@ -236,6 +238,7 @@ export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({
       onNavigateTeenSpace={onNavigateTeenSpace}
       onNavigateLounge={onNavigateLounge}
       onNavigateRules={onNavigateRules}
+      onNavigateSchedules={onNavigateSchedules}
       onOpenAuth={() => onNavigateSignIn(targetEmail)}
       onOpenContactSupport={onOpenContactSupport}
       onOpenEmergencyModal={onOpenEmergencyModal}

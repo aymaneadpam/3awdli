@@ -424,7 +424,8 @@ export function formatDiscussionFullRange(
 
   let combinedText = `Started: ${startedText}`;
   if (shouldShowClosed) {
-    combinedText += ` • Closed: ${closedText || 'Date unknown'}`;
+    const validClosed = closedText && closedText !== 'Date unknown' ? closedText : startedText;
+    combinedText += ` • Closed: ${validClosed}`;
   }
 
   return {

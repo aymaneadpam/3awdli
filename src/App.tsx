@@ -35,6 +35,7 @@ import { AdminReportsPage } from './components/AdminReportsPage';
 import { RulesPage } from './components/RulesPage';
 import { GenderPreferenceModal } from './components/GenderPreferenceModal';
 import { ContactSupportModal } from './components/ContactSupportModal';
+import { NavigationProvider, NavigationHandlers } from './context/NavigationContext';
 import { ViewState, UserAccount, AuthMode, ListenerGenderPreference, SupportCategory, DiscussionConversation } from './types';
 import { getCurrentUser, getStoredUsers, initFirestoreUsersSync, isAdministrator } from './utils/userManagement';
 import { 
@@ -455,126 +456,202 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // Dedicated page rendering based on view state
-  if (currentView === 'reset-password') {
-    return (
-      <>
-        <ResetPasswordPage
-          token={resetPasswordToken}
-          initialEmail={resetPasswordEmail}
-          onNavigateSignIn={handleNavigateSignInFromReset}
-          onNavigateHome={() => {
-            setCurrentView('home');
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-          }}
-          onNavigateGames={() => {
-            setCurrentView('games');
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-          }}
-          onNavigateTeenSpace={handleNavigateTeenSpace}
-          onNavigateLounge={handleNavigateLounge}
-          onNavigateRules={handleNavigateRules}
-          onOpenContactSupport={() => setIsContactSupportOpen(true)}
-          onOpenEmergencyModal={() => setIsEmergencyModalOpen(true)}
-          onTalkAnonymously={handleTalkAnonymously}
-        />
-        <ContactSupportModal
-          isOpen={isContactSupportOpen}
-          onClose={handleCloseContactSupport}
-          currentUser={currentUser}
-          initialCategory={contactSupportInitialCategory}
-          onRedirectToChat={handleTalkAnonymously}
-        />
-        <EmergencyModal
-          isOpen={isEmergencyModalOpen}
-          onClose={() => setIsEmergencyModalOpen(false)}
-          onTalkAnonymously={handleTalkAnonymously}
-        />
-      </>
-    );
-  }
+  // Global event listener for custom navigation and modal events
+  useEffect(() => {
+    const handleCustomNavigate = (e: any) => {
+      const view = e.detail?.view as ViewState;
+      const tab = e.detail?.tab;
+      if (view) {
+        if (view === 'discussions' && tab) {
+          setDiscussionsInitialTab(tab);
+        }
+        setCurrentView(view);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    };
+    const handleOpenContact = () => setIsContactSupportOpen(true);
+    const handleOpenEmerg = () => setIsEmergencyModalOpen(true);
+    const handleTalkAnon = () => handleTalkAnonymously();
 
-  if (currentView === 'signin') {
-    return (
-      <>
-        <SignInPage
-          initialEmail={signInPrefillEmail}
-          openForgotOnMount={signInOpenForgot}
-          onSuccess={handleAuthSuccess}
-          onNavigateToSignUp={() => {
-            setCurrentView('signup');
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-          }}
-          onNavigateHome={() => {
-            setCurrentView('home');
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-          }}
-          onNavigateGames={() => {
-            setCurrentView('games');
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-          }}
-          onNavigateTeenSpace={handleNavigateTeenSpace}
-          onNavigateLounge={handleNavigateLounge}
-          onNavigateRules={handleNavigateRules}
-          onOpenContactSupport={handleOpenContactSupport}
-          onOpenEmergencyModal={() => setIsEmergencyModalOpen(true)}
-          onTalkAnonymously={handleTalkAnonymously}
-        />
-        <ContactSupportModal
-          isOpen={isContactSupportOpen}
-          onClose={handleCloseContactSupport}
-          currentUser={currentUser}
-          initialCategory={contactSupportInitialCategory}
-          onRedirectToChat={handleTalkAnonymously}
-        />
-        <EmergencyModal
-          isOpen={isEmergencyModalOpen}
-          onClose={() => setIsEmergencyModalOpen(false)}
-          onTalkAnonymously={handleTalkAnonymously}
-        />
-      </>
-    );
-  }
+    window.addEventListener('3awdli_navigate', handleCustomNavigate as EventListener);
+    window.addEventListener('3awdli_open_contact_support', handleOpenContact);
+    window.addEventListener('3awdli_open_emergency_modal', handleOpenEmerg);
+    window.addEventListener('3awdli_talk_anonymously', handleTalkAnon);
 
-  if (currentView === 'signup') {
-    return (
-      <>
-        <SignUpPage
-          onSuccess={handleAuthSuccess}
-          onNavigateToSignIn={() => {
-            setCurrentView('signin');
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-          }}
-          onNavigateHome={() => {
-            setCurrentView('home');
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-          }}
-          onNavigateGames={() => {
-            setCurrentView('games');
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-          }}
-          onNavigateTeenSpace={handleNavigateTeenSpace}
-          onNavigateLounge={handleNavigateLounge}
-          onNavigateRules={handleNavigateRules}
-          onOpenContactSupport={handleOpenContactSupport}
-          onOpenEmergencyModal={() => setIsEmergencyModalOpen(true)}
-          onTalkAnonymously={handleTalkAnonymously}
-        />
-        <ContactSupportModal
-          isOpen={isContactSupportOpen}
-          onClose={handleCloseContactSupport}
-          currentUser={currentUser}
-          initialCategory={contactSupportInitialCategory}
-          onRedirectToChat={handleTalkAnonymously}
-        />
-        <EmergencyModal
-          isOpen={isEmergencyModalOpen}
-          onClose={() => setIsEmergencyModalOpen(false)}
-          onTalkAnonymously={handleTalkAnonymously}
-        />
-      </>
-    );
-  }
+    return () => {
+      window.removeEventListener('3awdli_navigate', handleCustomNavigate as EventListener);
+      window.removeEventListener('3awdli_open_contact_support', handleOpenContact);
+      window.removeEventListener('3awdli_open_emergency_modal', handleOpenEmerg);
+      window.removeEventListener('3awdli_talk_anonymously', handleTalkAnon);
+    };
+  }, []);
+
+  const navigationHandlers: NavigationHandlers = {
+    onNavigateHome: () => {
+      setCurrentView('home');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    },
+    onNavigateDashboard: () => {
+      if (currentUser) {
+        setCurrentView('dashboard');
+      } else {
+        setCurrentView('signin');
+      }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    },
+    onNavigateMailbox: handleNavigateUserMailbox,
+    onNavigateDiscussions: (tab) => {
+      setDiscussionsInitialTab(tab || 'unopened');
+      setCurrentView('discussions');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    },
+    onNavigateReports: handleNavigateReports,
+    onNavigateAdminReports: handleNavigateAdminReports,
+    onNavigateAdminSupport: handleNavigateAdminSupport,
+    onNavigateAdmin: () => {
+      setCurrentView('admin');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    },
+    onNavigateMemberManagement: handleNavigateMemberManagement,
+    onNavigateGames: () => {
+      setCurrentView('games');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    },
+    onNavigateTeenSpace: handleNavigateTeenSpace,
+    onNavigateLounge: handleNavigateLounge,
+    onNavigateRules: handleNavigateRules,
+    onNavigateSchedules: handleNavigateSchedules,
+    onOpenContactSupport: handleOpenContactSupport,
+    onOpenEmergencyModal: () => setIsEmergencyModalOpen(true),
+    onOpenAuth: handleOpenAuth,
+    onTalkAnonymously: handleTalkAnonymously,
+    onSignOut: handleSignOut,
+  };
+
+  const renderCurrentView = () => {
+    // Dedicated page rendering based on view state
+    if (currentView === 'reset-password') {
+      return (
+        <>
+          <ResetPasswordPage
+            token={resetPasswordToken}
+            initialEmail={resetPasswordEmail}
+            onNavigateSignIn={handleNavigateSignInFromReset}
+            onNavigateHome={() => {
+              setCurrentView('home');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            onNavigateGames={() => {
+              setCurrentView('games');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            onNavigateTeenSpace={handleNavigateTeenSpace}
+            onNavigateLounge={handleNavigateLounge}
+            onNavigateRules={handleNavigateRules}
+            onNavigateSchedules={handleNavigateSchedules}
+            onOpenContactSupport={() => setIsContactSupportOpen(true)}
+            onOpenEmergencyModal={() => setIsEmergencyModalOpen(true)}
+            onTalkAnonymously={handleTalkAnonymously}
+          />
+          <ContactSupportModal
+            isOpen={isContactSupportOpen}
+            onClose={handleCloseContactSupport}
+            currentUser={currentUser}
+            initialCategory={contactSupportInitialCategory}
+            onRedirectToChat={handleTalkAnonymously}
+          />
+          <EmergencyModal
+            isOpen={isEmergencyModalOpen}
+            onClose={() => setIsEmergencyModalOpen(false)}
+            onTalkAnonymously={handleTalkAnonymously}
+          />
+        </>
+      );
+    }
+
+    if (currentView === 'signin') {
+      return (
+        <>
+          <SignInPage
+            initialEmail={signInPrefillEmail}
+            openForgotOnMount={signInOpenForgot}
+            onSuccess={handleAuthSuccess}
+            onNavigateToSignUp={() => {
+              setCurrentView('signup');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            onNavigateHome={() => {
+              setCurrentView('home');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            onNavigateGames={() => {
+              setCurrentView('games');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            onNavigateTeenSpace={handleNavigateTeenSpace}
+            onNavigateLounge={handleNavigateLounge}
+            onNavigateRules={handleNavigateRules}
+            onNavigateSchedules={handleNavigateSchedules}
+            onOpenContactSupport={handleOpenContactSupport}
+            onOpenEmergencyModal={() => setIsEmergencyModalOpen(true)}
+            onTalkAnonymously={handleTalkAnonymously}
+          />
+          <ContactSupportModal
+            isOpen={isContactSupportOpen}
+            onClose={handleCloseContactSupport}
+            currentUser={currentUser}
+            initialCategory={contactSupportInitialCategory}
+            onRedirectToChat={handleTalkAnonymously}
+          />
+          <EmergencyModal
+            isOpen={isEmergencyModalOpen}
+            onClose={() => setIsEmergencyModalOpen(false)}
+            onTalkAnonymously={handleTalkAnonymously}
+          />
+        </>
+      );
+    }
+
+    if (currentView === 'signup') {
+      return (
+        <>
+          <SignUpPage
+            onSuccess={handleAuthSuccess}
+            onNavigateToSignIn={() => {
+              setCurrentView('signin');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            onNavigateHome={() => {
+              setCurrentView('home');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            onNavigateGames={() => {
+              setCurrentView('games');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            onNavigateTeenSpace={handleNavigateTeenSpace}
+            onNavigateLounge={handleNavigateLounge}
+            onNavigateRules={handleNavigateRules}
+            onNavigateSchedules={handleNavigateSchedules}
+            onOpenContactSupport={handleOpenContactSupport}
+            onOpenEmergencyModal={() => setIsEmergencyModalOpen(true)}
+            onTalkAnonymously={handleTalkAnonymously}
+          />
+          <ContactSupportModal
+            isOpen={isContactSupportOpen}
+            onClose={handleCloseContactSupport}
+            currentUser={currentUser}
+            initialCategory={contactSupportInitialCategory}
+            onRedirectToChat={handleTalkAnonymously}
+          />
+          <EmergencyModal
+            isOpen={isEmergencyModalOpen}
+            onClose={() => setIsEmergencyModalOpen(false)}
+            onTalkAnonymously={handleTalkAnonymously}
+          />
+        </>
+      );
+    }
 
   if (currentView === 'discussions') {
     const activeListenerUser: UserAccount = currentUser || DEFAULT_DEMO_LISTENER;
@@ -604,6 +681,7 @@ export default function App() {
           onNavigateTeenSpace={handleNavigateTeenSpace}
           onNavigateLounge={handleNavigateLounge}
           onNavigateRules={handleNavigateRules}
+          onNavigateSchedules={handleNavigateSchedules}
           onNavigateReports={handleNavigateReports}
           onNavigateAdminReports={isAdministrator(currentUser) ? handleNavigateAdminReports : undefined}
           onNavigateAdminSupport={isAdministrator(currentUser) ? handleNavigateAdminSupport : undefined}
@@ -665,6 +743,7 @@ export default function App() {
           onNavigateTeenSpace={handleNavigateTeenSpace}
           onNavigateLounge={handleNavigateLounge}
           onNavigateRules={handleNavigateRules}
+          onNavigateSchedules={handleNavigateSchedules}
           onNavigateAdmin={() => {
             setCurrentView('admin');
             window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -784,6 +863,7 @@ export default function App() {
           onNavigateTeenSpace={handleNavigateTeenSpace}
           onNavigateLounge={handleNavigateLounge}
           onNavigateRules={handleNavigateRules}
+          onNavigateSchedules={handleNavigateSchedules}
           onOpenEmergencyModal={() => setIsEmergencyModalOpen(true)}
           onOpenContactSupport={() => setIsContactSupportOpen(true)}
           onTalkAnonymously={handleTalkAnonymously}
@@ -831,6 +911,7 @@ export default function App() {
           onNavigateTeenSpace={handleNavigateTeenSpace}
           onNavigateLounge={handleNavigateLounge}
           onNavigateRules={handleNavigateRules}
+          onNavigateSchedules={handleNavigateSchedules}
           onNavigateMailbox={handleNavigateUserMailbox}
           onOpenContactSupport={() => setIsContactSupportOpen(true)}
           onOpenEmergencyModal={() => setIsEmergencyModalOpen(true)}
@@ -879,6 +960,7 @@ export default function App() {
           onNavigateTeenSpace={handleNavigateTeenSpace}
           onNavigateLounge={handleNavigateLounge}
           onNavigateRules={handleNavigateRules}
+          onNavigateSchedules={handleNavigateSchedules}
           onNavigateMailbox={handleNavigateUserMailbox}
           onOpenContactSupport={() => setIsContactSupportOpen(true)}
           onOpenEmergencyModal={() => setIsEmergencyModalOpen(true)}
@@ -930,6 +1012,7 @@ export default function App() {
           }}
           onNavigateTeenSpace={handleNavigateTeenSpace}
           onNavigateRules={handleNavigateRules}
+          onNavigateSchedules={handleNavigateSchedules}
           onNavigateMailbox={handleNavigateUserMailbox}
           onNavigateSignIn={() => {
             setCurrentView('signin');
@@ -1055,6 +1138,7 @@ export default function App() {
           onNavigateTeenSpace={handleNavigateTeenSpace}
           onNavigateLounge={handleNavigateLounge}
           onNavigateRules={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+          onNavigateSchedules={handleNavigateSchedules}
           onNavigateMailbox={handleNavigateUserMailbox}
           onNavigateSignIn={() => {
             setCurrentView('signin');
@@ -1180,6 +1264,7 @@ export default function App() {
           onNavigateTeenSpace={handleNavigateTeenSpace}
           onNavigateLounge={handleNavigateLounge}
           onNavigateRules={handleNavigateRules}
+          onNavigateSchedules={handleNavigateSchedules}
           onNavigateMailbox={handleNavigateUserMailbox}
           onOpenEmergencyModal={() => setIsEmergencyModalOpen(true)}
           onOpenContactSupport={() => setIsContactSupportOpen(true)}
@@ -1256,6 +1341,7 @@ export default function App() {
           onNavigateTeenSpace={handleNavigateTeenSpace}
           onNavigateLounge={handleNavigateLounge}
           onNavigateRules={handleNavigateRules}
+          onNavigateSchedules={handleNavigateSchedules}
           onNavigateMailbox={handleNavigateUserMailbox}
           onOpenEmergencyModal={() => setIsEmergencyModalOpen(true)}
           onOpenContactSupport={handleOpenContactSupport}
@@ -1713,5 +1799,12 @@ export default function App() {
         currentUser={currentUser}
       />
     </>
+  );
+};
+
+  return (
+    <NavigationProvider value={navigationHandlers}>
+      {renderCurrentView()}
+    </NavigationProvider>
   );
 }

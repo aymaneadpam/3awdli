@@ -8,7 +8,7 @@ import {
   DiscussionReport
 } from '../types';
 import { Language } from './translations';
-import { formatSiteTime, formatDiscussionDateTime, formatDiscussionFullRange, extractTimestampMs } from './timezoneManagement';
+import { formatSiteTime, formatDiscussionDateTime, formatDiscussionFullRange, extractTimestampMs, SiteTimezoneConfig } from './timezoneManagement';
 import { verifyListenerKeyCode, getStoredUsers, StoredUser, isFakeUser, getCurrentUser } from './userManagement';
 import { getShareRequestsForDiscussion, getStoredShareRequests } from './shareManagement';
 import {
@@ -96,6 +96,94 @@ const SAMPLE_USER_EMAILS = new Set([
   'mehdi.b@example.com',
   'sofia.berrada@example.com',
 ]);
+
+/**
+ * Resolves a reliable millisecond timestamp for when a closed discussion ended.
+ * Follows strict fallback chain:
+ * closedAtTimestamp -> closedAt -> endedAtTimestamp -> endedAt ->
+ * timestampMs of last system message whose id starts with "msg_close_" ->
+ * timestampMs of last message ->
+ * lastActivity/updatedAt timestamp if it exists ->
+ * startedAtTimestamp / createdAt.
+ * Always uses extractTimestampMs. Never returns a string; returns number or null.
+ */
+export function getDiscussionClosedMs(discussion: Partial<DiscussionConversation> | null | undefined): number | null {
+  if (!discussion) return null;
+
+  // 1. closedAtTimestamp
+  let ms = extractTimestampMs(discussion.closedAtTimestamp);
+  if (ms) return ms;
+
+  // 2. closedAt
+  ms = extractTimestampMs(discussion.closedAt);
+  if (ms) return ms;
+
+  // 3. endedAtTimestamp
+  ms = extractTimestampMs((discussion as any).endedAtTimestamp);
+  if (ms) return ms;
+
+  // 4. endedAt
+  ms = extractTimestampMs((discussion as any).endedAt);
+  if (ms) return ms;
+
+  // 5. timestampMs of the last system message whose id starts with "msg_close_"
+  if (Array.isArray(discussion.messages) && discussion.messages.length > 0) {
+    const closeMsg = [...discussion.messages].reverse().find(
+      (m) => (m.id && m.id.startsWith('msg_close_')) || ((m as any).system && m.id?.includes('close'))
+    );
+    if (closeMsg) {
+      ms = extractTimestampMs(closeMsg.timestampMs) || extractTimestampMs(closeMsg.timestamp);
+      if (ms) return ms;
+    }
+
+    // 6. timestampMs of the last message
+    const lastMsg = discussion.messages[discussion.messages.length - 1];
+    if (lastMsg) {
+      ms = extractTimestampMs(lastMsg.timestampMs) || extractTimestampMs(lastMsg.timestamp);
+      if (ms) return ms;
+    }
+  }
+
+  // 7. lastActivity/updatedAt timestamp if it exists
+  ms = extractTimestampMs((discussion as any).lastActivityTimestamp) ||
+       extractTimestampMs((discussion as any).lastActivity) ||
+       extractTimestampMs((discussion as any).updatedAtTimestamp) ||
+       extractTimestampMs((discussion as any).updatedAt);
+  if (ms) return ms;
+
+  // 8. startedAtTimestamp / createdAt
+  ms = extractTimestampMs(discussion.startedAtTimestamp) ||
+       extractTimestampMs(discussion.startedAt) ||
+       extractTimestampMs((discussion as any).createdAtTimestamp) ||
+       extractTimestampMs((discussion as any).createdAt);
+  if (ms) return ms;
+
+  return null;
+}
+
+/**
+ * Formats the close date of a discussion using getDiscussionClosedMs.
+ * If the helper returns null, shows the creation date instead of "Date unknown".
+ * The text "Date unknown" must never appear for a closed discussion.
+ */
+export function formatDiscussionClosedDate(
+  discussion: Partial<DiscussionConversation> | null | undefined,
+  customTimezone?: SiteTimezoneConfig
+): string {
+  if (!discussion) return '';
+  const closedMs = getDiscussionClosedMs(discussion);
+  if (closedMs) {
+    return formatDiscussionDateTime(closedMs, customTimezone);
+  }
+  const createdMs = extractTimestampMs(discussion.startedAtTimestamp) || extractTimestampMs(discussion.startedAt);
+  if (createdMs) {
+    return formatDiscussionDateTime(createdMs, customTimezone);
+  }
+  if (discussion.startedAt && discussion.startedAt !== 'Date unknown') {
+    return discussion.startedAt;
+  }
+  return formatDiscussionDateTime(Date.now(), customTimezone);
+}
 
 export function isFakeDiscussion(d: Partial<DiscussionConversation> | null | undefined): boolean {
   if (!d) return true;
@@ -185,11 +273,13 @@ export function getStoredDiscussions(): DiscussionConversation[] {
         hasChanges = true;
       }
       if (d.status === 'closed') {
-        const closedMs = extractTimestampMs(d.closedAtTimestamp) || extractTimestampMs(d.closedAt) || extractTimestampMs((d as any).endedAtTimestamp) || extractTimestampMs((d as any).endedAt);
-        if (closedMs && (!d.closedAtTimestamp || d.closedAt?.toLowerCase().includes('today') || d.closedAt === 'Date unknown')) {
-          d.closedAtTimestamp = closedMs;
-          d.closedAt = formatDiscussionDateTime(closedMs);
+        const hasValidClosedTimestamp = Boolean(extractTimestampMs(d.closedAtTimestamp));
+        if (!hasValidClosedTimestamp || d.closedAt === 'Date unknown' || d.closedAt?.toLowerCase().includes('today')) {
+          const repairedMs = getDiscussionClosedMs(d) || extractTimestampMs(d.startedAtTimestamp) || extractTimestampMs(d.startedAt) || Date.now();
+          d.closedAtTimestamp = repairedMs;
+          d.closedAt = formatDiscussionDateTime(repairedMs);
           hasChanges = true;
+          saveDiscussionToFirestore(d).catch(() => {});
         }
       }
       if (d.openedAt || d.openedAtTimestamp) {
@@ -248,23 +338,25 @@ export function reconcileDiscussionsWithLocal(
     const startMs = extractTimestampMs(r.startedAtTimestamp) || extractTimestampMs(r.startedAt);
     const exactStartedAt = startMs ? formatDiscussionDateTime(startMs) : (r.startedAt && r.startedAt !== 'Date unknown' ? r.startedAt : 'Date unknown');
 
-    let closedMs = extractTimestampMs(r.closedAtTimestamp) || extractTimestampMs(r.closedAt) || extractTimestampMs((r as any).endedAtTimestamp) || extractTimestampMs((r as any).endedAt);
-
-    // If discussion is closed but has no closedAt timestamp on remote, look for close message or last message timestamp
-    if (!closedMs && r.status === 'closed' && Array.isArray(r.messages) && r.messages.length > 0) {
-      const closeMsg = [...r.messages].reverse().find((m) => m.id?.includes('close') || m.text?.toLowerCase().includes('ended') || m.text?.toLowerCase().includes('closed'));
-      if (closeMsg) {
-        closedMs = extractTimestampMs(closeMsg.timestampMs) || extractTimestampMs(closeMsg.timestamp);
-      }
+    let closedMs: number | null = null;
+    if (r.status === 'closed') {
+      closedMs = getDiscussionClosedMs(r);
       if (!closedMs) {
-        const lastMsg = r.messages[r.messages.length - 1];
-        if (lastMsg) {
-          closedMs = extractTimestampMs(lastMsg.timestampMs) || extractTimestampMs(lastMsg.timestamp);
-        }
+        closedMs = extractTimestampMs(r.startedAtTimestamp) || extractTimestampMs(r.startedAt) || Date.now();
+      }
+      const hasValidClosedTimestamp = Boolean(extractTimestampMs(r.closedAtTimestamp));
+      if (!hasValidClosedTimestamp || r.closedAt === 'Date unknown' || r.closedAt?.toLowerCase().includes('today')) {
+        r.closedAtTimestamp = closedMs;
+        r.closedAt = formatDiscussionDateTime(closedMs);
+        saveDiscussionToFirestore(r).catch(() => {});
       }
     }
 
-    const exactClosedAt = closedMs ? formatDiscussionDateTime(closedMs) : (r.closedAt && r.closedAt !== 'Date unknown' ? r.closedAt : (r.status === 'closed' ? 'Date unknown' : undefined));
+    const exactClosedAt = closedMs
+      ? formatDiscussionDateTime(closedMs)
+      : (r.status === 'closed'
+        ? formatDiscussionDateTime(startMs || Date.now())
+        : undefined);
 
     const openedMs = extractTimestampMs(r.openedAtTimestamp) || extractTimestampMs(r.openedAt);
     const exactOpenedAt = openedMs ? formatDiscussionDateTime(openedMs) : (r.openedAt && r.openedAt !== 'Date unknown' ? r.openedAt : undefined);
@@ -274,24 +366,41 @@ export function reconcileDiscussionsWithLocal(
       startedAt: exactStartedAt,
       startedAtTimestamp: startMs || (r.startedAtTimestamp || 0),
       closedAt: exactClosedAt,
-      closedAtTimestamp: closedMs || r.closedAtTimestamp,
+      closedAtTimestamp: closedMs || (r.status === 'closed' ? (startMs || Date.now()) : undefined),
       openedAt: exactOpenedAt,
       openedAtTimestamp: openedMs || r.openedAtTimestamp,
     });
   }
 
-  // Preserve every valid local discussion that is pending or in-progress
+  const now = Date.now();
+  const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
+
+  // Preserve valid local discussions: only re-upload if NOT closed and created/updated within last 24h
   for (const l of localDiscussions) {
     if (isFakeDiscussion(l)) continue;
     const remote = mergedMap.get(l.id);
     if (!remote) {
-      mergedMap.set(l.id, l);
-      // Ensure local discussion is also persisted to Firestore
-      saveDiscussionToFirestore(l).catch(() => {});
+      const isClosed = l.status === 'closed';
+      const createdOrUpdatedMs =
+        extractTimestampMs(l.startedAtTimestamp) ||
+        extractTimestampMs(l.startedAt) ||
+        extractTimestampMs((l as any).updatedAtTimestamp) ||
+        extractTimestampMs((l as any).updatedAt) ||
+        0;
+      const isWithinLast24Hours = (now - createdOrUpdatedMs) < TWENTY_FOUR_HOURS_MS;
+
+      // Re-upload ONLY if it is not closed and was created or updated within the last 24 hours
+      if (!isClosed && isWithinLast24Hours) {
+        mergedMap.set(l.id, l);
+        // Ensure local discussion is also persisted to Firestore
+        saveDiscussionToFirestore(l).catch(() => {});
+      } else {
+        // Local-only closed or older discussions must be dropped from the local list and NOT re-uploaded
+      }
     } else {
       // Merge all timestamp fields from whichever side has real values
-      const lClosedMs = extractTimestampMs(l.closedAtTimestamp) || extractTimestampMs(l.closedAt) || extractTimestampMs((l as any).endedAtTimestamp) || extractTimestampMs((l as any).endedAt);
-      const rClosedMs = extractTimestampMs(remote.closedAtTimestamp) || extractTimestampMs(remote.closedAt) || extractTimestampMs((remote as any).endedAtTimestamp) || extractTimestampMs((remote as any).endedAt);
+      const lClosedMs = getDiscussionClosedMs(l);
+      const rClosedMs = getDiscussionClosedMs(remote);
       const bestClosedMs = rClosedMs || lClosedMs;
       if (bestClosedMs) {
         remote.closedAtTimestamp = bestClosedMs;
@@ -327,8 +436,9 @@ export function reconcileDiscussionsWithLocal(
       if (l.status === 'closed') {
         if (!remote.reopenedAt || remote.status !== 'opened') {
           remote.status = 'closed';
-          remote.closedAt = remote.closedAt || l.closedAt || (bestClosedMs ? formatDiscussionDateTime(bestClosedMs) : undefined);
-          remote.closedAtTimestamp = remote.closedAtTimestamp || l.closedAtTimestamp || bestClosedMs || undefined;
+          const repairedClosedMs = bestClosedMs || getDiscussionClosedMs(remote) || getDiscussionClosedMs(l) || extractTimestampMs(remote.startedAtTimestamp) || Date.now();
+          remote.closedAt = formatDiscussionDateTime(repairedClosedMs);
+          remote.closedAtTimestamp = repairedClosedMs;
           remote.closedByRole = l.closedByRole || remote.closedByRole;
           remote.closedByListenerId = l.closedByListenerId || remote.closedByListenerId;
           remote.closedByListenerName = l.closedByListenerName || remote.closedByListenerName;

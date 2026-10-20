@@ -21,6 +21,7 @@ interface GamesPageProps {
   onNavigateTeenSpace?: () => void;
   onNavigateLounge?: () => void;
   onNavigateRules?: () => void;
+  onNavigateSchedules?: () => void;
   onNavigateMailbox?: () => void;
   onOpenContactSupport?: () => void;
   onOpenEmergencyModal?: () => void;
@@ -40,6 +41,7 @@ export const GamesPage: React.FC<GamesPageProps> = ({
   onNavigateTeenSpace,
   onNavigateLounge,
   onNavigateRules,
+  onNavigateSchedules,
   onNavigateMailbox,
   onOpenContactSupport,
   onOpenEmergencyModal,
@@ -97,6 +99,7 @@ export const GamesPage: React.FC<GamesPageProps> = ({
       onNavigateTeenSpace={onNavigateTeenSpace}
       onNavigateLounge={onNavigateLounge}
       onNavigateRules={onNavigateRules}
+      onNavigateSchedules={onNavigateSchedules}
       onOpenContactSupport={onOpenContactSupport}
       onOpenEmergencyModal={onOpenEmergencyModal}
       onOpenAuth={onOpenAuth}

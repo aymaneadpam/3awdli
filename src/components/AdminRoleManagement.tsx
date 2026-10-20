@@ -68,6 +68,7 @@ interface AdminRoleManagementProps {
   onNavigateTeenSpace?: () => void;
   onNavigateLounge?: () => void;
   onNavigateRules?: () => void;
+  onNavigateSchedules?: () => void;
   onNavigateAdmin?: () => void;
   onNavigateMemberManagement?: () => void;
   onNavigateAdminReports?: () => void;
@@ -90,6 +91,7 @@ export const AdminRoleManagement = ({
   onNavigateTeenSpace,
   onNavigateLounge,
   onNavigateRules,
+  onNavigateSchedules,
   onNavigateAdmin,
   onNavigateMemberManagement,
   onNavigateAdminReports,
@@ -433,6 +435,7 @@ export const AdminRoleManagement = ({
         onNavigateTeenSpace={onNavigateTeenSpace}
         onNavigateLounge={onNavigateLounge}
         onNavigateRules={onNavigateRules}
+        onNavigateSchedules={onNavigateSchedules}
         onOpenContactSupport={onOpenContactSupport}
         onOpenEmergencyModal={onOpenEmergencyModal}
         onTalkAnonymously={onTalkAnonymously}

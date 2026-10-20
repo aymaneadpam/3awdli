@@ -36,6 +36,7 @@ import { checkAndNotifyWaitingDiscussions } from '../utils/listenerNotificationS
 import { ConnectedTeamIndicator } from './ConnectedTeamIndicator';
 import { ChatScheduleBanner } from './ChatScheduleBanner';
 import { useChatSchedule } from '../utils/scheduleManagement';
+import { useNavigation } from '../context/NavigationContext';
 
 export interface NavbarProps {
   children?: React.ReactNode;
@@ -162,6 +163,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   const canSeeDiscussionsQueueBadge = isListener || isHeadOfListeners || hasAdminAccess;
 
   const { language, setLanguage, strings } = useLanguage();
+  const navContext = useNavigation();
 
   // Live waiting discussions count for Listeners, Head of Listeners, and Administrators
   const [waitingDiscussionsCount, setWaitingDiscussionsCount] = useState<number>(() => {
@@ -320,112 +322,185 @@ export const Navbar: React.FC<NavbarProps> = ({
     closeSidebarOnMobile();
     if (onNavigateHome) onNavigateHome();
     else if (onOpenHome) onOpenHome();
+    else if (navContext?.onNavigateHome) navContext.onNavigateHome();
+    else if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('3awdli_navigate', { detail: { view: 'home' } }));
+    }
   };
 
   const handleDashboard = () => {
     closeSidebarOnMobile();
     if (onNavigateDashboard) onNavigateDashboard();
     else if (onOpenDashboard) onOpenDashboard();
+    else if (navContext?.onNavigateDashboard) navContext.onNavigateDashboard();
+    else if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('3awdli_navigate', { detail: { view: 'dashboard' } }));
+    }
   };
 
   const handleUserMailbox = () => {
     closeSidebarOnMobile();
     if (onNavigateMailbox) onNavigateMailbox();
     else if (onOpenMailbox) onOpenMailbox();
+    else if (navContext?.onNavigateMailbox) navContext.onNavigateMailbox();
+    else if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('3awdli_navigate', { detail: { view: 'user-mailbox' } }));
+    }
   };
 
   const handleDiscussions = (tab?: 'unopened' | 'mailbox') => {
     closeSidebarOnMobile();
     if (onNavigateDiscussions) onNavigateDiscussions(tab);
     else if (onOpenDiscussions) onOpenDiscussions(tab);
+    else if (navContext?.onNavigateDiscussions) navContext.onNavigateDiscussions(tab);
+    else if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('3awdli_navigate', { detail: { view: 'discussions', tab } }));
+    }
   };
 
   const handleAdmin = () => {
     closeSidebarOnMobile();
     if (onNavigateAdmin) onNavigateAdmin();
     else if (onOpenAdmin) onOpenAdmin();
+    else if (navContext?.onNavigateAdmin) navContext.onNavigateAdmin();
+    else if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('3awdli_navigate', { detail: { view: 'admin' } }));
+    }
   };
 
   const handleMemberManagement = () => {
     closeSidebarOnMobile();
     if (onNavigateMemberManagement) onNavigateMemberManagement();
     else if (onOpenMemberManagement) onOpenMemberManagement();
+    else if (navContext?.onNavigateMemberManagement) navContext.onNavigateMemberManagement();
     else if (onNavigateAdmin) onNavigateAdmin();
+    else if (navContext?.onNavigateAdmin) navContext.onNavigateAdmin();
+    else if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('3awdli_navigate', { detail: { view: 'member-management' } }));
+    }
   };
 
   const handleReports = () => {
     closeSidebarOnMobile();
     if (onNavigateReports) onNavigateReports();
     else if (onOpenReports) onOpenReports();
+    else if (navContext?.onNavigateReports) navContext.onNavigateReports();
+    else if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('3awdli_navigate', { detail: { view: 'reports' } }));
+    }
   };
 
   const handleAdminReports = () => {
     closeSidebarOnMobile();
     if (onNavigateAdminReports) onNavigateAdminReports();
+    else if (navContext?.onNavigateAdminReports) navContext.onNavigateAdminReports();
     else if (onNavigateReports) onNavigateReports();
     else if (onOpenReports) onOpenReports();
+    else if (navContext?.onNavigateReports) navContext.onNavigateReports();
+    else if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('3awdli_navigate', { detail: { view: 'admin-reports' } }));
+    }
   };
 
   const handleAdminSupport = () => {
     closeSidebarOnMobile();
     if (onNavigateAdminSupport) onNavigateAdminSupport();
     else if (onOpenAdminSupport) onOpenAdminSupport();
+    else if (navContext?.onNavigateAdminSupport) navContext.onNavigateAdminSupport();
     else if (onNavigateAdmin) onNavigateAdmin();
+    else if (navContext?.onNavigateAdmin) navContext.onNavigateAdmin();
+    else if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('3awdli_navigate', { detail: { view: 'admin-support' } }));
+    }
   };
 
   const handleGames = () => {
     closeSidebarOnMobile();
     if (onNavigateGames) onNavigateGames();
     else if (onOpenGames) onOpenGames();
+    else if (navContext?.onNavigateGames) navContext.onNavigateGames();
+    else if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('3awdli_navigate', { detail: { view: 'games' } }));
+    }
   };
 
   const handleTeenSpace = () => {
     closeSidebarOnMobile();
     if (onNavigateTeenSpace) onNavigateTeenSpace();
     else if (onOpenTeenSpace) onOpenTeenSpace();
+    else if (navContext?.onNavigateTeenSpace) navContext.onNavigateTeenSpace();
+    else if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('3awdli_navigate', { detail: { view: 'teen-space' } }));
+    }
   };
 
   const handleLounge = () => {
     closeSidebarOnMobile();
     if (onNavigateLounge) onNavigateLounge();
     else if (onOpenLounge) onOpenLounge();
+    else if (navContext?.onNavigateLounge) navContext.onNavigateLounge();
+    else if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('3awdli_navigate', { detail: { view: 'lounge' } }));
+    }
   };
 
   const handleRules = () => {
     closeSidebarOnMobile();
     if (onNavigateRules) onNavigateRules();
     else if (onOpenRules) onOpenRules();
+    else if (navContext?.onNavigateRules) navContext.onNavigateRules();
+    else if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('3awdli_navigate', { detail: { view: 'rules' } }));
+    }
   };
 
   const handleSchedules = () => {
     closeSidebarOnMobile();
     if (onNavigateSchedules) onNavigateSchedules();
     else if (onOpenSchedules) onOpenSchedules();
+    else if (navContext?.onNavigateSchedules) navContext.onNavigateSchedules();
+    else if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('3awdli_navigate', { detail: { view: 'schedules' } }));
+    }
   };
 
   const handleSupport = () => {
     closeSidebarOnMobile();
     if (onOpenContactSupport) onOpenContactSupport();
+    else if (navContext?.onOpenContactSupport) navContext.onOpenContactSupport();
+    else if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('3awdli_open_contact_support'));
+    }
   };
 
   const handleAuth = (mode: AuthMode) => {
     closeSidebarOnMobile();
     if (onOpenAuth) onOpenAuth(mode);
+    else if (navContext?.onOpenAuth) navContext.onOpenAuth(mode);
   };
 
   const handleEmergency = () => {
     closeSidebarOnMobile();
     if (onOpenEmergencyModal) onOpenEmergencyModal();
+    else if (navContext?.onOpenEmergencyModal) navContext.onOpenEmergencyModal();
+    else if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('3awdli_open_emergency_modal'));
+    }
   };
 
   const handleSignOut = () => {
     closeSidebarOnMobile();
     if (onSignOut) onSignOut();
+    else if (navContext?.onSignOut) navContext.onSignOut();
   };
 
   const handleTalk = () => {
     closeSidebarOnMobile();
     if (onTalkAnonymously) onTalkAnonymously();
+    else if (navContext?.onTalkAnonymously) navContext.onTalkAnonymously();
+    else if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('3awdli_talk_anonymously'));
+    }
   };
 
   // Build the list of menu items in the EXACT top-to-bottom fixed order:
@@ -446,7 +521,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   // 15. Log Out
   const navItems: NavItem[] = [];
 
-  // 1. Home
+  // 1. Home (All users)
   navItems.push({
     id: 'sidebar-nav-home',
     label: strings.nav.home,
@@ -460,8 +535,8 @@ export const Navbar: React.FC<NavbarProps> = ({
     onClick: handleHome,
   });
 
-  // 2. Personal Space (Logged in users)
-  if (currentUser && (onNavigateDashboard || onOpenDashboard)) {
+  // 2. Personal Space (Logged in users only)
+  if (currentUser) {
     navItems.push({
       id: 'sidebar-nav-myspace',
       label: strings.nav.personalSpace,
@@ -477,7 +552,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   }
 
   // 3. Discussions (All logged-in users: Regular members, Listeners & Admins)
-  if (currentUser && (onNavigateDiscussions || onOpenDiscussions)) {
+  if (currentUser) {
     const showWaitingBadge = canSeeDiscussionsQueueBadge && waitingDiscussionsCount > 0;
     navItems.push({
       id: 'sidebar-nav-discussions',
@@ -501,87 +576,77 @@ export const Navbar: React.FC<NavbarProps> = ({
   }
 
   // 4. Games (All users: logged in or anonymous)
-  if (onNavigateGames || onOpenGames) {
-    navItems.push({
-      id: 'sidebar-nav-games',
-      label: strings.nav.games,
-      description: language === 'fr' 
-        ? 'Espaces anti-stress apaisants et sans pression' 
-        : language === 'ar'
-        ? 'مساحات مهدئة لتخفيف التوتر والضغط'
-        : 'Calming, zero-pressure anti-stress spaces',
-      icon: Gamepad2,
-      isActive: currentView === 'games',
-      onClick: handleGames,
-    });
-  }
+  navItems.push({
+    id: 'sidebar-nav-games',
+    label: strings.nav.games,
+    description: language === 'fr' 
+      ? 'Espaces anti-stress apaisants et sans pression' 
+      : language === 'ar'
+      ? 'مساحات مهدئة لتخفيف التوتر والضغط'
+      : 'Calming, zero-pressure anti-stress spaces',
+    icon: Gamepad2,
+    isActive: currentView === 'games',
+    onClick: handleGames,
+  });
 
-  // 5. The Lounge (All logged-in users)
-  if (currentUser && (onNavigateLounge || onOpenLounge)) {
-    navItems.push({
-      id: 'sidebar-nav-lounge',
-      label: strings.nav.theLounge,
-      description: language === 'fr' 
-        ? 'Articles, réflexions & salons d\'échange' 
-        : language === 'ar'
-        ? 'مقالات داعمة وحلقات حوار ونقاش'
-        : 'Articles, reflections & scheduled live sessions',
-      icon: Coffee,
-      isActive: currentView === 'lounge',
-      onClick: handleLounge,
-    });
-  }
+  // 5. The Lounge (All users: logged in or anonymous)
+  navItems.push({
+    id: 'sidebar-nav-lounge',
+    label: strings.nav.theLounge,
+    description: language === 'fr' 
+      ? 'Articles, réflexions & salons d\'échange' 
+      : language === 'ar'
+      ? 'مقالات داعمة وحلقات حوار ونقاش'
+      : 'Articles, reflections & scheduled live sessions',
+    icon: Coffee,
+    isActive: currentView === 'lounge',
+    onClick: handleLounge,
+  });
 
   // 6. Teen Space (All users: logged in or anonymous)
-  if (onNavigateTeenSpace || onOpenTeenSpace) {
-    navItems.push({
-      id: 'sidebar-nav-teen-space',
-      label: strings.nav.teenSpace,
-      description: language === 'fr' 
-        ? 'Articles de bien-être mental & réflexions pour les ados' 
-        : language === 'ar'
-        ? 'مقالات وخواطر داعمة لليافعين والشباب'
-        : 'Mental wellness articles & reflections for youth',
-      icon: BookOpen,
-      isActive: currentView === 'teen-space',
-      onClick: handleTeenSpace,
-    });
-  }
+  navItems.push({
+    id: 'sidebar-nav-teen-space',
+    label: strings.nav.teenSpace,
+    description: language === 'fr' 
+      ? 'Articles de bien-être mental & réflexions pour les ados' 
+      : language === 'ar'
+      ? 'مقالات وخواطر داعمة لليافعين والشباب'
+      : 'Mental wellness articles & reflections for youth',
+    icon: BookOpen,
+    isActive: currentView === 'teen-space',
+    onClick: handleTeenSpace,
+  });
 
   // 7. Schedules (Horaires - Open chat windows & availability for all users)
-  if (onNavigateSchedules || onOpenSchedules) {
-    navItems.push({
-      id: 'sidebar-nav-schedules',
-      label: strings.nav.schedules || (language === 'fr' ? 'Horaires' : language === 'ar' ? 'المواعيد' : 'Schedules'),
-      description: language === 'fr' 
-        ? 'Créneaux d\'ouverture & permanences d\'écoute' 
-        : language === 'ar'
-        ? 'أوقات ومواعيد فتح محادثات الاستماع'
-        : 'Open chat availability & listening shifts',
-      icon: CalendarClock,
-      isActive: currentView === 'schedules',
-      onClick: handleSchedules,
-    });
-  }
+  navItems.push({
+    id: 'sidebar-nav-schedules',
+    label: strings.nav.schedules || (language === 'fr' ? 'Horaires' : language === 'ar' ? 'المواعيد' : 'Schedules'),
+    description: language === 'fr' 
+      ? 'Créneaux d\'ouverture & permanences d\'écoute' 
+      : language === 'ar'
+      ? 'أوقات ومواعيد فتح محادثات الاستماع'
+      : 'Open chat availability & listening shifts',
+    icon: CalendarClock,
+    isActive: currentView === 'schedules',
+    onClick: handleSchedules,
+  });
 
   // 8. Rules (Règlement - Available to all users including visitors)
-  if (onNavigateRules || onOpenRules) {
-    navItems.push({
-      id: 'sidebar-nav-rules',
-      label: strings.nav.rules || (language === 'fr' ? 'Réglement' : language === 'ar' ? 'القوانين' : 'Rules'),
-      description: language === 'fr' 
-        ? 'Réglement général & chartes éthiques' 
-        : language === 'ar'
-        ? 'القوانين والمواثيق الأخلاقية للمنصة'
-        : 'General rules & ethical charters',
-      icon: ShieldCheck,
-      isActive: currentView === 'rules',
-      onClick: handleRules,
-    });
-  }
+  navItems.push({
+    id: 'sidebar-nav-rules',
+    label: strings.nav.rules || (language === 'fr' ? 'Réglement' : language === 'ar' ? 'القوانين' : 'Rules'),
+    description: language === 'fr' 
+      ? 'Réglement général & chartes éthiques' 
+      : language === 'ar'
+      ? 'القوانين والمواثيق الأخلاقية للمنصة'
+      : 'General rules & ethical charters',
+    icon: ShieldCheck,
+    isActive: currentView === 'rules',
+    onClick: handleRules,
+  });
 
-  // 9. Member Management (Visible to Administrators and Admin)
-  if (currentUser && hasAdminAccess && (onNavigateMemberManagement || onOpenMemberManagement || onNavigateAdmin || onOpenAdmin)) {
+  // 9. Member Management (Visible to Administrators and Super Admin)
+  if (currentUser && hasAdminAccess) {
     navItems.push({
       id: 'sidebar-nav-member-management',
       label: strings.nav.memberManagement,
@@ -597,7 +662,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   }
 
   // 10. Reports (Administrators: transferred reports escalated by Head of Listeners; Head of Listeners: original reports queue)
-  if (currentUser && hasAdminAccess && (onNavigateAdminReports || onNavigateReports || onOpenReports)) {
+  if (currentUser && hasAdminAccess) {
     navItems.push({
       id: 'sidebar-nav-admin-reports',
       label: strings.nav.reports,
@@ -611,7 +676,7 @@ export const Navbar: React.FC<NavbarProps> = ({
       onClick: handleAdminReports,
       badge: pendingTransferredCount > 0 ? pendingTransferredCount : null,
     });
-  } else if (currentUser && isHeadOfListeners && (onNavigateReports || onOpenReports)) {
+  } else if (currentUser && isHeadOfListeners) {
     navItems.push({
       id: 'sidebar-nav-reports',
       label: strings.nav.reports,
@@ -628,7 +693,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   }
 
   // 11. Mailbox (Listeners & Admins OR Regular users)
-  if (currentUser && (isListener || isAdmin) && (onNavigateDiscussions || onOpenDiscussions)) {
+  if (currentUser && (isListener || isAdmin)) {
     navItems.push({
       id: 'sidebar-nav-mailbox',
       label: strings.nav.mailbox,
@@ -642,7 +707,7 @@ export const Navbar: React.FC<NavbarProps> = ({
       onClick: () => handleDiscussions('mailbox'),
       badge: unreadShareCount > 0 ? unreadShareCount : null,
     });
-  } else if (currentUser && !isListener && !isAdmin && (onNavigateMailbox || onOpenMailbox)) {
+  } else if (currentUser && !isListener && !isAdmin) {
     navItems.push({
       id: 'sidebar-nav-user-mailbox',
       label: strings.nav.mailbox,
@@ -659,7 +724,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   }
 
   // 12. Support (Support Inbox visible to Administrators)
-  if (currentUser && hasAdminAccess && (onNavigateAdminSupport || onOpenAdminSupport || onNavigateAdmin || onOpenAdmin)) {
+  if (currentUser && hasAdminAccess) {
     navItems.push({
       id: 'sidebar-nav-admin-support',
       label: strings.nav.support,
@@ -676,39 +741,35 @@ export const Navbar: React.FC<NavbarProps> = ({
   }
 
   // 13. Emergency Help (Crisis hotlines & urgent assistance resources)
-  if (onOpenEmergencyModal) {
-    navItems.push({
-      id: 'sidebar-nav-emergency',
-      label: strings.nav.emergencyHelp,
-      description: language === 'fr' 
-        ? 'Numéros d\'urgence & assistance immédiate' 
-        : language === 'ar'
-        ? 'أرقام الطوارئ والمساعدة العاجلة'
-        : 'Crisis hotlines & urgent assistance resources',
-      icon: LifeBuoy,
-      isActive: false,
-      onClick: handleEmergency,
-    });
-  }
+  navItems.push({
+    id: 'sidebar-nav-emergency',
+    label: strings.nav.emergencyHelp,
+    description: language === 'fr' 
+      ? 'Numéros d\'urgence & assistance immédiate' 
+      : language === 'ar'
+      ? 'أرقام الطوارئ والمساعدة العاجلة'
+      : 'Crisis hotlines & urgent assistance resources',
+    icon: LifeBuoy,
+    isActive: false,
+    onClick: handleEmergency,
+  });
 
   // 14. Contact Support (All users)
-  if (onOpenContactSupport) {
-    navItems.push({
-      id: 'sidebar-nav-support',
-      label: strings.nav.contactSupport,
-      description: language === 'fr' 
-        ? 'Assistance technique, de compte ou service membre' 
-        : language === 'ar'
-        ? 'الدعم الفني، مشاكل الحساب واستفسارات الأعضاء'
-        : 'Technical, account or user service help',
-      icon: HelpCircle,
-      isActive: false,
-      onClick: handleSupport,
-    });
-  }
+  navItems.push({
+    id: 'sidebar-nav-support',
+    label: strings.nav.contactSupport,
+    description: language === 'fr' 
+      ? 'Assistance technique, de compte ou service membre' 
+      : language === 'ar'
+      ? 'الدعم الفني، مشاكل الحساب واستفسارات الأعضاء'
+      : 'Technical, account or user service help',
+    icon: HelpCircle,
+    isActive: false,
+    onClick: handleSupport,
+  });
 
-  // 15. Log Out
-  if (currentUser && onSignOut) {
+  // 15. Log Out (Logged in users only)
+  if (currentUser) {
     navItems.push({
       id: 'sidebar-nav-signout',
       label: strings.nav.logout,
@@ -1232,7 +1293,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         </header>
 
         {/* Chat Schedule Status Message Banner */}
-        {currentView !== 'schedules' && (onNavigateSchedules || onOpenSchedules) && (
+        {currentView !== 'schedules' && (
           <ChatScheduleBanner onNavigateSchedules={handleSchedules} />
         )}
 

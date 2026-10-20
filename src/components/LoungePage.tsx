@@ -55,6 +55,7 @@ interface LoungePageProps {
   onNavigateGames: () => void;
   onNavigateTeenSpace?: () => void;
   onNavigateRules?: () => void;
+  onNavigateSchedules?: () => void;
   onNavigateMailbox?: () => void;
   onNavigateSignIn?: () => void;
   onNavigateSignUp?: () => void;
@@ -76,6 +77,7 @@ export const LoungePage: React.FC<LoungePageProps> = ({
   onNavigateGames,
   onNavigateTeenSpace,
   onNavigateRules,
+  onNavigateSchedules,
   onNavigateMailbox,
   onNavigateSignIn,
   onNavigateSignUp,
@@ -367,6 +369,7 @@ export const LoungePage: React.FC<LoungePageProps> = ({
       onNavigateGames={onNavigateGames}
       onNavigateTeenSpace={onNavigateTeenSpace}
       onNavigateRules={onNavigateRules}
+      onNavigateSchedules={onNavigateSchedules}
       onNavigateMailbox={onNavigateMailbox}
       onNavigateLounge={() => {
         setSubView('lobby');

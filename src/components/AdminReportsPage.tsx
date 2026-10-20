@@ -62,6 +62,7 @@ interface AdminReportsPageProps {
   onNavigateTeenSpace?: () => void;
   onNavigateLounge?: () => void;
   onNavigateRules?: () => void;
+  onNavigateSchedules?: () => void;
   onNavigateMailbox?: () => void;
   onNavigateAdminSupport?: () => void;
   onOpenEmergencyModal?: () => void;
@@ -83,6 +84,7 @@ export const AdminReportsPage: React.FC<AdminReportsPageProps> = ({
   onNavigateTeenSpace,
   onNavigateLounge,
   onNavigateRules,
+  onNavigateSchedules,
   onNavigateMailbox,
   onNavigateAdminSupport,
   onOpenEmergencyModal,
@@ -270,6 +272,7 @@ export const AdminReportsPage: React.FC<AdminReportsPageProps> = ({
         onNavigateTeenSpace={onNavigateTeenSpace}
         onNavigateLounge={onNavigateLounge}
         onNavigateRules={onNavigateRules}
+        onNavigateSchedules={onNavigateSchedules}
         onNavigateMailbox={onNavigateMailbox}
         onOpenEmergencyModal={onOpenEmergencyModal}
         onOpenContactSupport={onOpenContactSupport}
@@ -313,6 +316,7 @@ export const AdminReportsPage: React.FC<AdminReportsPageProps> = ({
       onNavigateTeenSpace={onNavigateTeenSpace}
       onNavigateLounge={onNavigateLounge}
       onNavigateRules={onNavigateRules}
+      onNavigateSchedules={onNavigateSchedules}
       onNavigateMailbox={onNavigateMailbox}
       onOpenEmergencyModal={onOpenEmergencyModal}
       onOpenContactSupport={onOpenContactSupport}

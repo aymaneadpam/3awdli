@@ -36,6 +36,7 @@ interface UserMailboxPageProps {
   onNavigateTeenSpace?: () => void;
   onNavigateLounge?: () => void;
   onNavigateRules?: () => void;
+  onNavigateSchedules?: () => void;
   onOpenEmergencyModal?: () => void;
   onOpenContactSupport?: () => void;
   onTalkAnonymously?: () => void;
@@ -50,6 +51,7 @@ export const UserMailboxPage: React.FC<UserMailboxPageProps> = ({
   onNavigateTeenSpace,
   onNavigateLounge,
   onNavigateRules,
+  onNavigateSchedules,
   onOpenEmergencyModal,
   onOpenContactSupport,
   onTalkAnonymously,
@@ -173,6 +175,7 @@ export const UserMailboxPage: React.FC<UserMailboxPageProps> = ({
       onNavigateTeenSpace={onNavigateTeenSpace}
       onNavigateLounge={onNavigateLounge}
       onNavigateRules={onNavigateRules}
+      onNavigateSchedules={onNavigateSchedules}
       onOpenEmergencyModal={onOpenEmergencyModal}
       onOpenContactSupport={onOpenContactSupport}
       onTalkAnonymously={onTalkAnonymously}

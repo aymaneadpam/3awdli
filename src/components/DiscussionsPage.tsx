@@ -45,7 +45,9 @@ import {
   reconcileDiscussionsWithLocal,
   clearAllDiscussionData,
   getHandledDiscussionsSet,
-  DISCUSSIONS_STORAGE_KEY
+  DISCUSSIONS_STORAGE_KEY,
+  getDiscussionClosedMs,
+  formatDiscussionClosedDate
 } from '../utils/discussionManagement';
 import { 
   subscribeToDiscussions 
@@ -88,6 +90,7 @@ interface DiscussionsPageProps {
   onNavigateTeenSpace?: () => void;
   onNavigateLounge?: () => void;
   onNavigateRules?: () => void;
+  onNavigateSchedules?: () => void;
   onNavigateReports?: () => void;
   onNavigateAdminReports?: () => void;
   onNavigateAdminSupport?: () => void;
@@ -108,6 +111,7 @@ export const DiscussionsPage = ({
   onNavigateTeenSpace,
   onNavigateLounge,
   onNavigateRules,
+  onNavigateSchedules,
   onNavigateReports,
   onNavigateAdminReports,
   onNavigateAdminSupport,
@@ -160,6 +164,7 @@ export const DiscussionsPage = ({
         onNavigateTeenSpace={onNavigateTeenSpace}
         onNavigateLounge={onNavigateLounge}
         onNavigateRules={onNavigateRules}
+        onNavigateSchedules={onNavigateSchedules}
         onNavigateReports={onNavigateReports}
         onNavigateAdminReports={onNavigateAdminReports}
         onNavigateAdminSupport={onNavigateAdminSupport}
@@ -391,16 +396,16 @@ export const DiscussionsPage = ({
       })
       .sort((a, b) => {
         // Sort newest first: prioritize closedAtTimestamp, then startedAtTimestamp
-        const timeA = extractTimestampMs(a.closedAtTimestamp) || extractTimestampMs(a.startedAtTimestamp) || extractTimestampMs(a.closedAt) || 0;
-        const timeB = extractTimestampMs(b.closedAtTimestamp) || extractTimestampMs(b.startedAtTimestamp) || extractTimestampMs(b.closedAt) || 0;
+        const timeA = getDiscussionClosedMs(a) || extractTimestampMs(a.startedAtTimestamp) || 0;
+        const timeB = getDiscussionClosedMs(b) || extractTimestampMs(b.startedAtTimestamp) || 0;
         return timeB - timeA;
       });
   }, [discussions, user.id, user.name]);
 
   const allList = useMemo(() => {
     return [...discussions].sort((a, b) => {
-      const timeA = extractTimestampMs(a.closedAtTimestamp) || extractTimestampMs(a.openedAtTimestamp) || extractTimestampMs(a.startedAtTimestamp) || extractTimestampMs(a.startedAt) || 0;
-      const timeB = extractTimestampMs(b.closedAtTimestamp) || extractTimestampMs(b.openedAtTimestamp) || extractTimestampMs(b.startedAtTimestamp) || extractTimestampMs(b.startedAt) || 0;
+      const timeA = getDiscussionClosedMs(a) || extractTimestampMs(a.openedAtTimestamp) || extractTimestampMs(a.startedAtTimestamp) || 0;
+      const timeB = getDiscussionClosedMs(b) || extractTimestampMs(b.openedAtTimestamp) || extractTimestampMs(b.startedAtTimestamp) || 0;
       return timeB - timeA;
     });
   }, [discussions]);
@@ -612,6 +617,7 @@ export const DiscussionsPage = ({
         onNavigateTeenSpace={onNavigateTeenSpace}
         onNavigateLounge={onNavigateLounge}
         onNavigateRules={onNavigateRules}
+        onNavigateSchedules={onNavigateSchedules}
         onNavigateReports={onNavigateReports}
         onNavigateAdminReports={onNavigateAdminReports}
         onNavigateAdminSupport={onNavigateAdminSupport}
@@ -1209,7 +1215,7 @@ export const DiscussionsPage = ({
                               </div>
                               <div className="flex items-center gap-1.5 text-stone-700">
                                 <Archive className="w-3.5 h-3.5 text-stone-500" />
-                                <span>Closed: <strong>{formatDiscussionDateTime(disc.closedAtTimestamp || disc.closedAt)}</strong></span>
+                                <span>Closed: <strong>{formatDiscussionClosedDate(disc)}</strong></span>
                               </div>
                               <div className="text-[11px] text-[#7A8C81] pt-1">
                                 Total message exchanges: <strong>{disc.messages.length}</strong>
@@ -1329,7 +1335,7 @@ export const DiscussionsPage = ({
                               {disc.status === 'closed' && (
                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-stone-100 text-stone-700 border border-stone-300">
                                   <Archive className="w-3 h-3 text-stone-500" />
-                                  Concluded (Closed: {formatDiscussionDateTime(disc.closedAtTimestamp || disc.closedAt)})
+                                  Concluded (Closed: {formatDiscussionClosedDate(disc)})
                                 </span>
                               )}
                             </div>
@@ -1337,7 +1343,7 @@ export const DiscussionsPage = ({
                             <div className="text-xs text-[#6B7D72] flex items-center gap-3 flex-wrap">
                               <span>Started: <strong>{formatDiscussionDateTime(disc.startedAtTimestamp || disc.startedAt)}</strong></span>
                               {disc.status === 'closed' && (
-                                <span>Closed: <strong>{formatDiscussionDateTime(disc.closedAtTimestamp || disc.closedAt)}</strong></span>
+                                <span>Closed: <strong>{formatDiscussionClosedDate(disc)}</strong></span>
                               )}
                               {disc.openedAt && disc.status !== 'closed' && (
                                 <span>Claimed: <strong>{formatDiscussionDateTime(disc.openedAtTimestamp || disc.openedAt)}</strong></span>

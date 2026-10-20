@@ -31,7 +31,8 @@ import { VoiceCallOverlay, CallButton } from './VoiceCallOverlay';
 import { getShareRequestsForDiscussion } from '../utils/shareManagement';
 import { 
   getVisibleMessagesForListener, 
-  isListenerExcludedFromDiscussion 
+  isListenerExcludedFromDiscussion,
+  formatDiscussionClosedDate 
 } from '../utils/discussionManagement';
 import { formatDiscussionDateTime } from '../utils/timezoneManagement';
 import { useLanguage } from '../context/LanguageContext';
@@ -284,7 +285,7 @@ export const ListenerChatInterface = ({
               </span>
               {isClosed && (
                 <span className="text-emerald-200/90 shrink-0">
-                  &bull; {language === 'fr' ? 'Clôturée :' : 'Closed:'} <strong>{formatDiscussionDateTime(discussion.closedAtTimestamp || discussion.closedAt)}</strong>
+                  &bull; {language === 'fr' ? 'Clôturée :' : 'Closed:'} <strong>{formatDiscussionClosedDate(discussion)}</strong>
                 </span>
               )}
               {discussion.userEmail && (

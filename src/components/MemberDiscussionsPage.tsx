@@ -33,7 +33,9 @@ import {
   closeDiscussion,
   isFakeDiscussion,
   reconcileDiscussionsWithLocal,
-  DISCUSSIONS_STORAGE_KEY
+  DISCUSSIONS_STORAGE_KEY,
+  getDiscussionClosedMs,
+  formatDiscussionClosedDate
 } from '../utils/discussionManagement';
 import { 
   fetchDiscussionsFromFirestore, 
@@ -60,6 +62,7 @@ interface MemberDiscussionsPageProps {
   onNavigateTeenSpace?: () => void;
   onNavigateLounge?: () => void;
   onNavigateRules?: () => void;
+  onNavigateSchedules?: () => void;
   onNavigateReports?: () => void;
   onNavigateAdminReports?: () => void;
   onNavigateAdminSupport?: () => void;
@@ -80,6 +83,7 @@ export const MemberDiscussionsPage: React.FC<MemberDiscussionsPageProps> = ({
   onNavigateTeenSpace,
   onNavigateLounge,
   onNavigateRules,
+  onNavigateSchedules,
   onNavigateReports,
   onNavigateAdminReports,
   onNavigateAdminSupport,
@@ -233,8 +237,8 @@ export const MemberDiscussionsPage: React.FC<MemberDiscussionsPageProps> = ({
         return false;
       })
       .sort((a, b) => {
-        const timeA = extractTimestampMs(a.closedAtTimestamp) || extractTimestampMs(a.startedAtTimestamp) || extractTimestampMs(a.startedAt) || 0;
-        const timeB = extractTimestampMs(b.closedAtTimestamp) || extractTimestampMs(b.startedAtTimestamp) || extractTimestampMs(b.startedAt) || 0;
+        const timeA = getDiscussionClosedMs(a) || extractTimestampMs(a.startedAtTimestamp) || extractTimestampMs(a.startedAt) || 0;
+        const timeB = getDiscussionClosedMs(b) || extractTimestampMs(b.startedAtTimestamp) || extractTimestampMs(b.startedAt) || 0;
         return timeB - timeA;
       });
   }, [allDiscussions, user.id, user.email]);
@@ -363,6 +367,7 @@ export const MemberDiscussionsPage: React.FC<MemberDiscussionsPageProps> = ({
         onNavigateTeenSpace={onNavigateTeenSpace}
         onNavigateLounge={onNavigateLounge}
         onNavigateRules={onNavigateRules}
+        onNavigateSchedules={onNavigateSchedules}
         onNavigateReports={onNavigateReports}
         onNavigateAdminReports={onNavigateAdminReports}
         onNavigateAdminSupport={onNavigateAdminSupport}
@@ -735,7 +740,7 @@ export const MemberDiscussionsPage: React.FC<MemberDiscussionsPageProps> = ({
                       {formatDiscussionDateTime(selectedHistoryDiscussion.startedAtTimestamp || selectedHistoryDiscussion.startedAt)}
                       {selectedHistoryDiscussion.status === 'closed' && (
                         <span className="ml-2 text-stone-700">
-                          • {language === 'fr' ? 'Clôturée :' : 'Closed:'} {formatDiscussionDateTime(selectedHistoryDiscussion.closedAtTimestamp || selectedHistoryDiscussion.closedAt)}
+                          • {language === 'fr' ? 'Clôturée :' : 'Closed:'} {formatDiscussionClosedDate(selectedHistoryDiscussion)}
                         </span>
                       )}
                       {selectedHistoryDiscussion.openedByListenerName && (
@@ -841,7 +846,7 @@ export const MemberDiscussionsPage: React.FC<MemberDiscussionsPageProps> = ({
                                 </span>
                                 {disc.status === 'closed' && (
                                   <span className="text-xs text-stone-600">
-                                    • Closed: {formatDiscussionDateTime(disc.closedAtTimestamp || disc.closedAt)}
+                                    • Closed: {formatDiscussionClosedDate(disc)}
                                   </span>
                                 )}
                                 <span className="text-[10.5px] px-2 py-0.5 rounded-full bg-[#EAE5DB] text-[#4D5E53] font-medium">

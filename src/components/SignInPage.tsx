@@ -48,6 +48,7 @@ interface SignInPageProps {
   onNavigateTeenSpace?: () => void;
   onNavigateLounge?: () => void;
   onNavigateRules?: () => void;
+  onNavigateSchedules?: () => void;
   onOpenContactSupport?: (category?: SupportCategory) => void;
   onOpenEmergencyModal?: () => void;
   onTalkAnonymously?: () => void;
@@ -63,6 +64,7 @@ export const SignInPage = ({
   onNavigateTeenSpace,
   onNavigateLounge,
   onNavigateRules,
+  onNavigateSchedules,
   onOpenContactSupport,
   onOpenEmergencyModal,
   onTalkAnonymously,
@@ -346,6 +348,7 @@ export const SignInPage = ({
         onNavigateTeenSpace={onNavigateTeenSpace}
         onNavigateLounge={onNavigateLounge}
         onNavigateRules={onNavigateRules}
+        onNavigateSchedules={onNavigateSchedules}
         onOpenAuth={(mode) => {
           if (mode === 'signup') {
             onNavigateToSignUp();

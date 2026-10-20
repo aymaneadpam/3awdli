@@ -54,6 +54,7 @@ interface ReportsPageProps {
   onNavigateTeenSpace?: () => void;
   onNavigateLounge?: () => void;
   onNavigateRules?: () => void;
+  onNavigateSchedules?: () => void;
   onNavigateMailbox?: () => void;
   onOpenEmergencyModal?: () => void;
   onOpenContactSupport?: () => void;
@@ -74,6 +75,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
   onNavigateTeenSpace,
   onNavigateLounge,
   onNavigateRules,
+  onNavigateSchedules,
   onNavigateMailbox,
   onOpenEmergencyModal,
   onOpenContactSupport,
@@ -288,6 +290,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
       onNavigateTeenSpace={onNavigateTeenSpace}
       onNavigateLounge={onNavigateLounge}
       onNavigateRules={onNavigateRules}
+      onNavigateSchedules={onNavigateSchedules}
       onNavigateMailbox={onNavigateMailbox}
       onNavigateReports={() => {
         setSelectedReport(null);
