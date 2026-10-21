@@ -1,4 +1,4 @@
-import { SupportRequest, SupportCategory } from '../types';
+import { SupportRequest, SupportCategory, UserAccount } from '../types';
 import {
   saveSupportRequestToFirestore,
   fetchSupportRequestsFromFirestore,
@@ -55,17 +55,14 @@ export function saveStoredSupportRequests(requests: SupportRequest[], changedReq
   }
 }
 
-let isSupportSyncInitialized = false;
-
-// Initialize real-time Firestore sync for support requests
-export function initFirestoreSupportRequestsSync(): () => void {
-  if (isSupportSyncInitialized) {
+// Initialize real-time Firestore sync for support requests (Admin & Head of Listeners only)
+export function initFirestoreSupportRequestsSync(currentUser?: UserAccount | null): () => void {
+  if (!currentUser?.id) {
     return () => {};
   }
-  isSupportSyncInitialized = true;
 
   // 1. Initial fetch from Firestore
-  fetchSupportRequestsFromFirestore()
+  fetchSupportRequestsFromFirestore(currentUser)
     .then((remoteReqs) => {
       if (remoteReqs && remoteReqs.length > 0) {
         const cleanRemote = remoteReqs.filter((r) => !isFakeSupportRequest(r));
@@ -83,30 +80,31 @@ export function initFirestoreSupportRequestsSync(): () => void {
         }
       }
     })
-    .catch((err) => {
-      console.warn('Initial Firestore support requests fetch notice:', err);
-    });
+    .catch(() => {});
 
   // 2. Real-time Firestore subscription
-  const unsubscribeFirestore = subscribeToSupportRequests((remoteReqs) => {
-    if (!remoteReqs) return;
-    const cleanRemote = remoteReqs.filter((r) => !isFakeSupportRequest(r));
-    const local = getStoredSupportRequests();
-    const mergedMap = new Map<string, SupportRequest>();
-    local.forEach((r) => mergedMap.set(r.id, r));
-    cleanRemote.forEach((r) => {
-      const existing = mergedMap.get(r.id);
-      mergedMap.set(r.id, { ...existing, ...r });
-    });
-    const merged = Array.from(mergedMap.values());
-    localStorage.setItem(SUPPORT_REQUESTS_KEY, JSON.stringify(merged));
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('3awdli_support_requests_updated'));
-    }
-  });
+  const unsubscribeFirestore = subscribeToSupportRequests(
+    currentUser,
+    (remoteReqs) => {
+      if (!remoteReqs) return;
+      const cleanRemote = remoteReqs.filter((r) => !isFakeSupportRequest(r));
+      const local = getStoredSupportRequests();
+      const mergedMap = new Map<string, SupportRequest>();
+      local.forEach((r) => mergedMap.set(r.id, r));
+      cleanRemote.forEach((r) => {
+        const existing = mergedMap.get(r.id);
+        mergedMap.set(r.id, { ...existing, ...r });
+      });
+      const merged = Array.from(mergedMap.values());
+      localStorage.setItem(SUPPORT_REQUESTS_KEY, JSON.stringify(merged));
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('3awdli_support_requests_updated'));
+      }
+    },
+    () => {}
+  );
 
   return () => {
-    isSupportSyncInitialized = false;
     unsubscribeFirestore();
   };
 }

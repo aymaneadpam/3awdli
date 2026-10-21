@@ -1,4 +1,4 @@
-import { UserMailboxMessage } from '../types';
+import { UserMailboxMessage, UserAccount } from '../types';
 import { formatSiteDateReadable, formatSiteTime } from './timezoneManagement';
 import {
   saveUserMailboxMessageToFirestore,
@@ -257,80 +257,31 @@ function mergeRemoteMailboxMessages(remoteMessages: UserMailboxMessage[]) {
 /**
  * Initialize real-time synchronization between Firestore and local storage for user mailbox messages.
  */
-export function initFirestoreUserMailboxSync(): () => void {
-  if (isUserMailboxSyncInitialized) {
+export function initFirestoreUserMailboxSync(currentUser?: UserAccount | null): () => void {
+  if (!currentUser?.id) {
     return () => {};
   }
-  isUserMailboxSyncInitialized = true;
 
   // 1. Initial fetch from Firestore
-  fetchUserMailboxMessagesFromFirestore()
+  fetchUserMailboxMessagesFromFirestore(currentUser)
     .then((remoteMessages) => {
       if (remoteMessages && remoteMessages.length > 0) {
         mergeRemoteMailboxMessages(remoteMessages);
-
-        // Check if there are local mailbox messages that don't exist remotely and migrate them
-        const remoteIds = new Set(remoteMessages.map((m) => m.id));
-        try {
-          for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key && key.startsWith(STORAGE_KEY_PREFIX)) {
-              const raw = localStorage.getItem(key);
-              if (raw) {
-                const parsed = JSON.parse(raw);
-                if (Array.isArray(parsed)) {
-                  parsed.forEach((localMsg: UserMailboxMessage) => {
-                    if (localMsg.id && !remoteIds.has(localMsg.id) && !isFakeMailboxMessage(localMsg)) {
-                      saveUserMailboxMessageToFirestore(localMsg).catch((e) =>
-                        console.warn('Migrating local mailbox message to Firestore notice:', e)
-                      );
-                    }
-                  });
-                }
-              }
-            }
-          }
-        } catch {
-          // Safe traversal fallback
-        }
-      } else {
-        // If Firestore has no mailbox messages yet, scan localStorage and push any existing ones
-        try {
-          for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key && key.startsWith(STORAGE_KEY_PREFIX)) {
-              const raw = localStorage.getItem(key);
-              if (raw) {
-                const parsed = JSON.parse(raw);
-                if (Array.isArray(parsed)) {
-                  parsed.forEach((localMsg: UserMailboxMessage) => {
-                    if (localMsg.id && !isFakeMailboxMessage(localMsg)) {
-                      saveUserMailboxMessageToFirestore(localMsg).catch((e) =>
-                        console.warn('Initial push of local mailbox message to Firestore notice:', e)
-                      );
-                    }
-                  });
-                }
-              }
-            }
-          }
-        } catch {
-          // Safe traversal fallback
-        }
       }
     })
-    .catch((err) => {
-      console.warn('Initial Firestore user mailbox messages fetch notice:', err);
-    });
+    .catch(() => {});
 
   // 2. Real-time Firestore subscription
-  const unsubscribeFirestore = subscribeToUserMailboxMessages((remoteMessages) => {
-    if (!remoteMessages) return;
-    mergeRemoteMailboxMessages(remoteMessages);
-  });
+  const unsubscribeFirestore = subscribeToUserMailboxMessages(
+    currentUser,
+    (remoteMessages) => {
+      if (!remoteMessages) return;
+      mergeRemoteMailboxMessages(remoteMessages);
+    },
+    () => {}
+  );
 
   return () => {
-    isUserMailboxSyncInitialized = false;
     unsubscribeFirestore();
   };
 }

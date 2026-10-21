@@ -158,7 +158,6 @@ export const SignUpPage = ({
       const existingIdx = users.findIndex(u => u.email.toLowerCase() === trimmedEmail);
       const fullUser = {
         ...firebaseUser,
-        password: password,
       };
 
       if (existingIdx >= 0) {

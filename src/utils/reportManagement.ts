@@ -439,19 +439,16 @@ export function deleteDiscussionReport(reportId: string): void {
   }
 }
 
-let isReportsSyncInitialized = false;
-
 /**
  * Initialize real-time synchronization between Firestore and local storage for discussion reports.
  */
-export function initFirestoreReportsSync(): () => void {
-  if (isReportsSyncInitialized) {
+export function initFirestoreReportsSync(currentUser?: UserAccount | null): () => void {
+  if (!currentUser?.id) {
     return () => {};
   }
-  isReportsSyncInitialized = true;
 
   // 1. Initial fetch from Firestore
-  fetchReportsFromFirestore()
+  fetchReportsFromFirestore(currentUser)
     .then((remoteReports) => {
       if (remoteReports && remoteReports.length > 0) {
         const cleanRemote = remoteReports.filter((r) => !isFakeReport(r));
@@ -472,55 +469,36 @@ export function initFirestoreReportsSync(): () => void {
           window.dispatchEvent(new CustomEvent('3awdli_report_updated', { detail: { reports: merged } }));
           window.dispatchEvent(new CustomEvent('3awdli_discussion_sync', {}));
         }
-
-        // Migrate any pre-existing local reports to Firestore if missing remotely
-        const remoteIds = new Set(cleanRemote.map((r) => r.id));
-        local.forEach((localReport) => {
-          if (!remoteIds.has(localReport.id) && !isFakeReport(localReport)) {
-            saveReportToFirestore(localReport).catch((e) =>
-              console.warn('Syncing local report to Firestore notice:', e)
-            );
-          }
-        });
-      } else {
-        // If Firestore had no reports yet, push any local non-sample reports to Firestore
-        const local = getStoredReports();
-        local.forEach((localReport) => {
-          if (!isFakeReport(localReport)) {
-            saveReportToFirestore(localReport).catch((e) =>
-              console.warn('Migrating local report to Firestore notice:', e)
-            );
-          }
-        });
       }
     })
-    .catch((err) => {
-      console.warn('Initial Firestore reports fetch notice:', err);
-    });
+    .catch(() => {});
 
   // 2. Real-time Firestore subscription
-  const unsubscribeFirestore = subscribeToReports((remoteReports) => {
-    if (!remoteReports) return;
-    const cleanRemote = remoteReports.filter((r) => !isFakeReport(r));
-    const local = getStoredReports();
-    const mergedMap = new Map<string, DiscussionReport>();
-    local.forEach((r) => mergedMap.set(r.id, r));
-    cleanRemote.forEach((r) => {
-      const existing = mergedMap.get(r.id);
-      mergedMap.set(r.id, { ...existing, ...r });
-    });
-    const merged = Array.from(mergedMap.values()).sort(
-      (a, b) => (b.createdAtTimestamp || 0) - (a.createdAtTimestamp || 0)
-    );
-    localStorage.setItem(REPORTS_STORAGE_KEY, JSON.stringify(merged));
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('3awdli_report_updated', { detail: { reports: merged } }));
-      window.dispatchEvent(new CustomEvent('3awdli_discussion_sync', {}));
-    }
-  });
+  const unsubscribeFirestore = subscribeToReports(
+    currentUser,
+    (remoteReports) => {
+      if (!remoteReports) return;
+      const cleanRemote = remoteReports.filter((r) => !isFakeReport(r));
+      const local = getStoredReports();
+      const mergedMap = new Map<string, DiscussionReport>();
+      local.forEach((r) => mergedMap.set(r.id, r));
+      cleanRemote.forEach((r) => {
+        const existing = mergedMap.get(r.id);
+        mergedMap.set(r.id, { ...existing, ...r });
+      });
+      const merged = Array.from(mergedMap.values()).sort(
+        (a, b) => (b.createdAtTimestamp || 0) - (a.createdAtTimestamp || 0)
+      );
+      localStorage.setItem(REPORTS_STORAGE_KEY, JSON.stringify(merged));
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('3awdli_report_updated', { detail: { reports: merged } }));
+        window.dispatchEvent(new CustomEvent('3awdli_discussion_sync', {}));
+      }
+    },
+    () => {}
+  );
 
   return () => {
-    isReportsSyncInitialized = false;
     unsubscribeFirestore();
   };
 }

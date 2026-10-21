@@ -1,13 +1,5 @@
 import crypto from 'crypto';
 import nodemailer from 'nodemailer';
-import {
-  saveResetTokenToFirestore,
-  getResetTokenFromFirestore,
-  markResetTokenUsedInFirestore,
-  updateUserPasswordInFirestore,
-  FirestoreResetToken,
-} from '../../src/lib/firestoreService';
-
 interface NetlifyEvent {
   path: string;
   httpMethod: string;
@@ -22,9 +14,6 @@ interface NetlifyResponse {
   headers?: Record<string, string>;
   body: string;
 }
-
-// In-memory token cache for ultra-fast validation
-const inMemoryTokens = new Map<string, FirestoreResetToken>();
 
 // Safe timeout wrapper for cloud database calls in serverless context
 async function withTimeout<T>(promise: Promise<T>, ms = 2000, fallback: T): Promise<T> {
@@ -297,260 +286,45 @@ export const handler = async (event: NetlifyEvent): Promise<NetlifyResponse> => 
     }
 
     // -------------------------------------------------------------
-    // POST /request-password-reset
+    // POST /request-password-reset (Neutral response for security)
     // -------------------------------------------------------------
     if (isRequestPasswordReset && event.httpMethod === 'POST') {
-      const email = (body.email || '').trim().toLowerCase();
-      if (!email) {
-        console.warn('[Password Reset Flow] [Netlify Step 1/5] Rejected: No email provided in request body');
-        return {
-          statusCode: 400,
-          headers: CORS_HEADERS,
-          body: JSON.stringify({ success: false, error: 'Email address is required' }),
-        };
-      }
-
-      console.log(`[Password Reset Flow] [Netlify Step 1/5] Initiating reset request for: "${email}" (client host: ${body.appUrl || 'auto'})`);
-
-      // 1. Generate secure 32-byte hex token
-      const token = crypto.randomBytes(32).toString('hex');
-      const now = Date.now();
-      const expiresAt = now + 60 * 60 * 1000; // 1-hour expiration
-      console.log(`[Password Reset Flow] [Netlify Step 2/5] Generated crypto token: ${token.substring(0, 10)}... (valid until ${new Date(expiresAt).toISOString()})`);
-
-      const tokenRecord: FirestoreResetToken = {
-        token,
-        email,
-        createdAt: now,
-        expiresAt,
-        used: false,
-      };
-
-      // Save to memory cache
-      inMemoryTokens.set(token, tokenRecord);
-
-      // Save to Firestore cloud database with timeout protection
-      try {
-        await withTimeout(saveResetTokenToFirestore(tokenRecord), 2000, undefined);
-        console.log(`[Password Reset Flow] [Netlify Step 3/5] Token synced to Firestore database for ${email}`);
-      } catch (err: any) {
-        console.warn('[Password Reset Flow] [Netlify Step 3/5] Firestore sync notice:', err?.message);
-      }
-
-      // Build reset URL
-      const origin = resolveAppUrl(event, body.appUrl);
-      const resetUrl = `${origin}/reset-password?token=${token}&email=${encodeURIComponent(email)}`;
-      console.log(`[Password Reset Flow] [Netlify Step 4/5] Generated secure reset URL: ${resetUrl}`);
-
-      console.log(`[Password Reset Flow] [Netlify Step 5/5] Invoking dispatchEmail for recipient: "${email}"`);
-
-      // 2. Dispatch email
-      const emailHtml = `
-        <!DOCTYPE html>
-        <html>
-        <head><meta charset="utf-8"></head>
-        <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #FAF8F5; margin: 0; padding: 24px; color: #1F362C;">
-          <div style="max-width: 560px; margin: 0 auto; background: #ffffff; border-radius: 16px; border: 1px solid #EBE5DC; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.04);">
-            <div style="background: #315243; padding: 28px 24px; text-align: center;">
-              <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 700;">3awdli • عاود لي</h1>
-              <p style="color: #E2ECE6; margin: 6px 0 0 0; font-size: 13px;">Confidential Emotional & Peer Support</p>
-            </div>
-            <div style="padding: 28px 24px;">
-              <h2 style="font-size: 18px; color: #1F362C; margin: 0 0 14px 0;">Reset Your Password / طلب إعادة تعيين كلمة المرور</h2>
-              <p style="font-size: 14px; line-height: 1.6; color: #4A5B52; margin: 0 0 16px 0;">
-                Hello, we received a request to reset the password for your 3awdli account associated with <strong>${email}</strong>.
-              </p>
-              <div style="text-align: center; margin: 28px 0;">
-                <a href="${resetUrl}" style="background-color: #315243; color: #ffffff; padding: 14px 32px; border-radius: 10px; font-weight: 600; text-decoration: none; display: inline-block; font-size: 15px;">
-                  Reset Password / إعادة تعيين كلمة المرور
-                </a>
-              </div>
-              <p style="font-size: 12px; word-break: break-all; color: #315243; background: #F4F8F5; padding: 10px 12px; border-radius: 8px; border: 1px solid #E1ECE5;">
-                <a href="${resetUrl}" style="color: #315243; text-decoration: underline;">${resetUrl}</a>
-              </p>
-              <p style="font-size: 12px; color: #7B8B82; margin-top: 20px;">
-                This link will expire in 1 hour and can only be used once. If you did not request this, you can safely ignore this message.
-              </p>
-            </div>
-          </div>
-        </body>
-        </html>
-      `;
-
-      const emailResult = await dispatchEmail({
-        to: email,
-        subject: 'Reset your 3awdli password / إعادة تعيين كلمة المرور',
-        html: emailHtml,
-        text: `Reset your 3awdli password by visiting this link: ${resetUrl}`,
-      });
-
-      return {
-        statusCode: 200,
-        headers: CORS_HEADERS,
-        body: JSON.stringify({
-          success: emailResult.success,
-          emailSent: emailResult.success,
-          provider: emailResult.provider || 'none',
-          messageId: emailResult.messageId,
-          error: emailResult.error,
-          smtpConfigured: emailResult.success,
-          message: emailResult.success
-            ? 'Password reset email sent successfully.'
-            : (emailResult.error || 'Password reset link prepared, but email delivery failed.'),
-          resetUrl,
-          expiresIn: '1 hour',
-        }),
-      };
-    }
-
-    // -------------------------------------------------------------
-    // POST /verify-reset-token
-    // -------------------------------------------------------------
-    if (isVerifyResetToken && event.httpMethod === 'POST') {
-      const token = (body.token || '').trim();
-      if (!token) {
-        return {
-          statusCode: 400,
-          headers: CORS_HEADERS,
-          body: JSON.stringify({ valid: false, error: 'missing_token', message: 'Reset token is required' }),
-        };
-      }
-
-      // Check memory cache first
-      let record = inMemoryTokens.get(token);
-
-      // Check Firestore if not found in memory
-      if (!record) {
-        try {
-          const fromFirestore = await withTimeout(getResetTokenFromFirestore(token), 2000, null);
-          if (fromFirestore) {
-            record = fromFirestore;
-            inMemoryTokens.set(token, record);
-          }
-        } catch (err: any) {
-          console.warn('[Netlify Function] Firestore token verification warning:', err?.message);
-        }
-      }
-
-      if (!record) {
-        return {
-          statusCode: 404,
-          headers: CORS_HEADERS,
-          body: JSON.stringify({ valid: false, error: 'invalid', message: 'This reset link is invalid or has expired.' }),
-        };
-      }
-
-      if (record.used) {
-        return {
-          statusCode: 410,
-          headers: CORS_HEADERS,
-          body: JSON.stringify({ valid: false, error: 'already_used', message: 'This reset link has already been used.' }),
-        };
-      }
-
-      if (Date.now() > record.expiresAt) {
-        return {
-          statusCode: 410,
-          headers: CORS_HEADERS,
-          body: JSON.stringify({ valid: false, error: 'expired', message: 'This reset link has expired.' }),
-        };
-      }
-
-      return {
-        statusCode: 200,
-        headers: CORS_HEADERS,
-        body: JSON.stringify({ valid: true, email: record.email }),
-      };
-    }
-
-    // -------------------------------------------------------------
-    // POST /reset-password
-    // -------------------------------------------------------------
-    if (isResetPassword && event.httpMethod === 'POST') {
-      const { token, newPassword } = body;
-      const cleanToken = (token || '').trim();
-
-      if (!cleanToken || !newPassword) {
-        return {
-          statusCode: 400,
-          headers: CORS_HEADERS,
-          body: JSON.stringify({ success: false, error: 'Token and new password are required' }),
-        };
-      }
-
-      if (newPassword.length < 8 || !/[a-zA-Z]/.test(newPassword) || !/[0-9]/.test(newPassword)) {
-        return {
-          statusCode: 400,
-          headers: CORS_HEADERS,
-          body: JSON.stringify({
-            success: false,
-            error: 'Password must be at least 8 characters long and contain both letters and numbers.'
-          }),
-        };
-      }
-
-      // Check memory or Firestore
-      let record = inMemoryTokens.get(cleanToken);
-      if (!record) {
-        try {
-          const fromFirestore = await withTimeout(getResetTokenFromFirestore(cleanToken), 2000, null);
-          if (fromFirestore) {
-            record = fromFirestore;
-          }
-        } catch (err: any) {
-          console.warn('[Netlify Function] Firestore fetch warning during reset:', err?.message);
-        }
-      }
-
-      if (!record) {
-        return {
-          statusCode: 404,
-          headers: CORS_HEADERS,
-          body: JSON.stringify({ success: false, error: 'Invalid reset token' }),
-        };
-      }
-
-      if (record.used) {
-        return {
-          statusCode: 410,
-          headers: CORS_HEADERS,
-          body: JSON.stringify({ success: false, error: 'This reset link has already been used.' }),
-        };
-      }
-
-      if (Date.now() > record.expiresAt) {
-        return {
-          statusCode: 410,
-          headers: CORS_HEADERS,
-          body: JSON.stringify({ success: false, error: 'This reset link has expired.' }),
-        };
-      }
-
-      // Mark used in memory and Firestore
-      record.used = true;
-      record.usedAt = Date.now();
-      inMemoryTokens.set(cleanToken, record);
-
-      try {
-        await withTimeout(markResetTokenUsedInFirestore(cleanToken), 2000, false);
-      } catch (err: any) {
-        console.warn('[Netlify Function] Could not mark token used in Firestore:', err?.message);
-      }
-
-      // Overwrite and invalidate old password in Firestore
-      try {
-        await withTimeout(updateUserPasswordInFirestore(record.email, newPassword), 3000, { success: false, updatedCount: 0 });
-      } catch (err: any) {
-        console.warn('[Netlify Function] Firestore password overwrite notice:', err?.message);
-      }
-
       return {
         statusCode: 200,
         headers: CORS_HEADERS,
         body: JSON.stringify({
           success: true,
-          email: record.email,
-          message: 'Password successfully updated.',
+          emailSent: true,
+          message: 'If an account exists for this email, a reset link has been sent.',
+        }),
+      };
+    }
+
+    // -------------------------------------------------------------
+    // POST /verify-reset-token (Deprecated - managed by Firebase Auth)
+    // -------------------------------------------------------------
+    if (isVerifyResetToken && event.httpMethod === 'POST') {
+      return {
+        statusCode: 400,
+        headers: CORS_HEADERS,
+        body: JSON.stringify({
+          valid: false,
+          error: 'invalid',
+          message: 'Password reset is managed securely by the Firebase email link.',
+        }),
+      };
+    }
+
+    // -------------------------------------------------------------
+    // POST /reset-password (Deprecated - managed by Firebase Auth)
+    // -------------------------------------------------------------
+    if (isResetPassword && event.httpMethod === 'POST') {
+      return {
+        statusCode: 400,
+        headers: CORS_HEADERS,
+        body: JSON.stringify({
+          success: false,
+          error: 'Please use the password reset link sent to your email by Firebase.',
         }),
       };
     }

@@ -7,7 +7,9 @@ import {
   updateDoc,
   deleteDoc,
   onSnapshot,
-  writeBatch
+  writeBatch,
+  query,
+  where
 } from 'firebase/firestore';
 import {
   createUserWithEmailAndPassword,
@@ -46,10 +48,35 @@ export const TEEN_SPACE_ARTICLES_COLLECTION = 'teen_space_articles';
 export const RULES_CATEGORIES_COLLECTION = 'rules_categories';
 export const CHAT_SCHEDULES_COLLECTION = 'chat_schedules';
 
-// Helper to remove undefined fields before sending to Firestore
+// Role checking helpers
+export function isUserAdminOrHead(user?: UserAccount | null): boolean {
+  if (!user) return false;
+  const email = (user.email || '').toLowerCase().trim();
+  const isAdmin =
+    user.role === 'admin' ||
+    user.role === 'administrator' ||
+    Boolean(user.is_administrator) ||
+    Boolean(user.is_founder) ||
+    email === 'aymane.habbo@gmail.com' ||
+    email === 'aymaneoumlala@gmail.com';
+  const isHead = Boolean(user.is_head_of_listeners);
+  return isAdmin || isHead;
+}
+
+export function isUserListenerOrHigher(user?: UserAccount | null): boolean {
+  if (!user) return false;
+  if (isUserAdminOrHead(user)) return true;
+  return Boolean(user.is_listener || user.isListener || user.role === 'listener');
+}
+
+// Helper to remove undefined fields and strip plaintext passwords before sending to Firestore
 export function sanitizeForFirestore<T extends Record<string, any>>(obj: T): T {
   const result: Record<string, any> = {};
   for (const [key, value] of Object.entries(obj)) {
+    if (key === 'password') {
+      // NEVER store password in Firestore
+      continue;
+    }
     if (value !== undefined) {
       if (value && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date)) {
         result[key] = sanitizeForFirestore(value);
@@ -71,51 +98,95 @@ export function sanitizeForFirestore<T extends Record<string, any>>(obj: T): T {
 // FIRESTORE USERS MANAGEMENT
 // -------------------------------------------------------------
 
-export async function fetchUsersFromFirestore(): Promise<UserAccount[]> {
-  try {
-    const colRef = collection(db, USERS_COLLECTION);
-    const snap = await getDocs(colRef);
-    const users: UserAccount[] = [];
-    snap.forEach((docSnap) => {
-      users.push({ id: docSnap.id, ...docSnap.data() } as UserAccount);
-    });
-    return users;
-  } catch (err) {
-    console.error('Error fetching users from Firestore:', err);
+export async function fetchUsersFromFirestore(currentUser?: UserAccount | null): Promise<UserAccount[]> {
+  if (!currentUser?.id || isCurrentFirebaseUserAnonymous()) {
     return [];
   }
-}
-
-export async function saveUserToFirestore(user: UserAccount & { password?: string }): Promise<void> {
-  if (!user.id) return;
   try {
-    const docRef = doc(db, USERS_COLLECTION, user.id);
-    const cleanData = sanitizeForFirestore(user);
-    await setDoc(docRef, cleanData, { merge: true });
-  } catch (err) {
-    console.error(`Error saving user ${user.id} to Firestore:`, err);
-  }
-}
-
-export function subscribeToUsers(
-  onUsersUpdate: (users: UserAccount[]) => void,
-  onError?: (error: Error) => void
-): () => void {
-  const colRef = collection(db, USERS_COLLECTION);
-  return onSnapshot(
-    colRef,
-    (snap) => {
+    if (isUserAdminOrHead(currentUser)) {
+      const colRef = collection(db, USERS_COLLECTION);
+      const snap = await getDocs(colRef);
       const users: UserAccount[] = [];
       snap.forEach((docSnap) => {
         users.push({ id: docSnap.id, ...docSnap.data() } as UserAccount);
       });
-      onUsersUpdate(users);
-    },
-    (err) => {
-      console.error('Firestore users subscription error:', err);
-      if (onError) onError(err);
+      return users;
+    } else {
+      // Regular user only reads own document
+      const docRef = doc(db, USERS_COLLECTION, currentUser.id);
+      const snap = await getDoc(docRef);
+      if (snap.exists()) {
+        return [{ id: snap.id, ...snap.data() } as UserAccount];
+      }
+      return [];
     }
-  );
+  } catch (err) {
+    // Fail silently from local cache
+    return [];
+  }
+}
+
+export async function saveUserToFirestore(user: UserAccount): Promise<void> {
+  if (!user.id) return;
+  try {
+    const docRef = doc(db, USERS_COLLECTION, user.id);
+    const cleanData = sanitizeForFirestore(user);
+    delete (cleanData as any).password;
+    await setDoc(docRef, cleanData, { merge: true });
+  } catch (err) {
+    // Fail silently
+  }
+}
+
+export function subscribeToUsers(
+  currentUser: UserAccount | null | undefined,
+  onUsersUpdate: (users: UserAccount[]) => void,
+  onError?: (error: Error) => void
+): () => void {
+  if (!currentUser?.id || isCurrentFirebaseUserAnonymous()) {
+    onUsersUpdate([]);
+    return () => {};
+  }
+
+  try {
+    if (isUserAdminOrHead(currentUser)) {
+      const colRef = collection(db, USERS_COLLECTION);
+      return onSnapshot(
+        colRef,
+        (snap) => {
+          const users: UserAccount[] = [];
+          snap.forEach((docSnap) => {
+            users.push({ id: docSnap.id, ...docSnap.data() } as UserAccount);
+          });
+          onUsersUpdate(users);
+        },
+        (err) => {
+          // Fail silently
+          if (onError) onError(err);
+        }
+      );
+    } else {
+      // Regular user only reads own document
+      const docRef = doc(db, USERS_COLLECTION, currentUser.id);
+      return onSnapshot(
+        docRef,
+        (docSnap) => {
+          if (docSnap.exists()) {
+            onUsersUpdate([{ id: docSnap.id, ...docSnap.data() } as UserAccount]);
+          } else {
+            onUsersUpdate([]);
+          }
+        },
+        (err) => {
+          // Fail silently
+          if (onError) onError(err);
+        }
+      );
+    }
+  } catch (err: any) {
+    if (onError) onError(err);
+    return () => {};
+  }
 }
 
 // -------------------------------------------------------------
@@ -203,7 +274,10 @@ export function subscribeToDiscussions(
 // FIRESTORE SHARE REQUESTS MANAGEMENT
 // -------------------------------------------------------------
 
-export async function fetchShareRequestsFromFirestore(): Promise<ConversationShareRequest[]> {
+export async function fetchShareRequestsFromFirestore(currentUser?: UserAccount | null): Promise<ConversationShareRequest[]> {
+  if (!currentUser?.id || isCurrentFirebaseUserAnonymous() || !isUserListenerOrHigher(currentUser)) {
+    return [];
+  }
   try {
     const colRef = collection(db, SHARE_REQUESTS_COLLECTION);
     const snap = await getDocs(colRef);
@@ -213,7 +287,6 @@ export async function fetchShareRequestsFromFirestore(): Promise<ConversationSha
     });
     return list;
   } catch (err) {
-    console.error('Error fetching share requests from Firestore:', err);
     return [];
   }
 }
@@ -225,36 +298,50 @@ export async function saveShareRequestToFirestore(request: ConversationShareRequ
     const cleanData = sanitizeForFirestore(request);
     await setDoc(docRef, cleanData, { merge: true });
   } catch (err) {
-    console.error(`Error saving share request ${request.id} to Firestore:`, err);
+    // Fail silently
   }
 }
 
 export function subscribeToShareRequests(
+  currentUser: UserAccount | null | undefined,
   onUpdate: (requests: ConversationShareRequest[]) => void,
   onError?: (error: Error) => void
 ): () => void {
-  const colRef = collection(db, SHARE_REQUESTS_COLLECTION);
-  return onSnapshot(
-    colRef,
-    (snap) => {
-      const list: ConversationShareRequest[] = [];
-      snap.forEach((docSnap) => {
-        list.push({ id: docSnap.id, ...docSnap.data() } as ConversationShareRequest);
-      });
-      onUpdate(list);
-    },
-    (err) => {
-      console.error('Firestore share requests subscription error:', err);
-      if (onError) onError(err);
-    }
-  );
+  if (!currentUser?.id || isCurrentFirebaseUserAnonymous() || !isUserListenerOrHigher(currentUser)) {
+    onUpdate([]);
+    return () => {};
+  }
+
+  try {
+    const colRef = collection(db, SHARE_REQUESTS_COLLECTION);
+    return onSnapshot(
+      colRef,
+      (snap) => {
+        const list: ConversationShareRequest[] = [];
+        snap.forEach((docSnap) => {
+          list.push({ id: docSnap.id, ...docSnap.data() } as ConversationShareRequest);
+        });
+        onUpdate(list);
+      },
+      (err) => {
+        // Fail silently
+        if (onError) onError(err);
+      }
+    );
+  } catch (err: any) {
+    if (onError) onError(err);
+    return () => {};
+  }
 }
 
 // -------------------------------------------------------------
 // FIRESTORE SUPPORT REQUESTS MANAGEMENT
 // -------------------------------------------------------------
 
-export async function fetchSupportRequestsFromFirestore(): Promise<SupportRequest[]> {
+export async function fetchSupportRequestsFromFirestore(currentUser?: UserAccount | null): Promise<SupportRequest[]> {
+  if (!currentUser?.id || isCurrentFirebaseUserAnonymous() || !isUserAdminOrHead(currentUser)) {
+    return [];
+  }
   try {
     const colRef = collection(db, SUPPORT_REQUESTS_COLLECTION);
     const snap = await getDocs(colRef);
@@ -264,7 +351,6 @@ export async function fetchSupportRequestsFromFirestore(): Promise<SupportReques
     });
     return list;
   } catch (err) {
-    console.error('Error fetching support requests from Firestore:', err);
     return [];
   }
 }
@@ -276,46 +362,72 @@ export async function saveSupportRequestToFirestore(req: SupportRequest): Promis
     const cleanData = sanitizeForFirestore(req);
     await setDoc(docRef, cleanData, { merge: true });
   } catch (err) {
-    console.error(`Error saving support request ${req.id} to Firestore:`, err);
+    // Fail silently
   }
 }
 
 export function subscribeToSupportRequests(
+  currentUser: UserAccount | null | undefined,
   onUpdate: (requests: SupportRequest[]) => void,
   onError?: (error: Error) => void
 ): () => void {
-  const colRef = collection(db, SUPPORT_REQUESTS_COLLECTION);
-  return onSnapshot(
-    colRef,
-    (snap) => {
-      const list: SupportRequest[] = [];
-      snap.forEach((docSnap) => {
-        list.push({ id: docSnap.id, ...docSnap.data() } as SupportRequest);
-      });
-      onUpdate(list);
-    },
-    (err) => {
-      console.error('Firestore support requests subscription error:', err);
-      if (onError) onError(err);
-    }
-  );
+  if (!currentUser?.id || isCurrentFirebaseUserAnonymous() || !isUserAdminOrHead(currentUser)) {
+    onUpdate([]);
+    return () => {};
+  }
+
+  try {
+    const colRef = collection(db, SUPPORT_REQUESTS_COLLECTION);
+    return onSnapshot(
+      colRef,
+      (snap) => {
+        const list: SupportRequest[] = [];
+        snap.forEach((docSnap) => {
+          list.push({ id: docSnap.id, ...docSnap.data() } as SupportRequest);
+        });
+        onUpdate(list);
+      },
+      (err) => {
+        // Fail silently
+        if (onError) onError(err);
+      }
+    );
+  } catch (err: any) {
+    if (onError) onError(err);
+    return () => {};
+  }
 }
 
 // -------------------------------------------------------------
 // FIRESTORE DISCUSSION REPORTS MANAGEMENT
 // -------------------------------------------------------------
 
-export async function fetchReportsFromFirestore(): Promise<DiscussionReport[]> {
+export async function fetchReportsFromFirestore(currentUser?: UserAccount | null): Promise<DiscussionReport[]> {
+  if (!currentUser?.id || isCurrentFirebaseUserAnonymous()) {
+    return [];
+  }
   try {
-    const colRef = collection(db, DISCUSSION_REPORTS_COLLECTION);
-    const snap = await getDocs(colRef);
-    const list: DiscussionReport[] = [];
-    snap.forEach((docSnap) => {
-      list.push({ id: docSnap.id, ...docSnap.data() } as DiscussionReport);
-    });
-    return list;
+    if (isUserAdminOrHead(currentUser)) {
+      const colRef = collection(db, DISCUSSION_REPORTS_COLLECTION);
+      const snap = await getDocs(colRef);
+      const list: DiscussionReport[] = [];
+      snap.forEach((docSnap) => {
+        list.push({ id: docSnap.id, ...docSnap.data() } as DiscussionReport);
+      });
+      return list;
+    } else {
+      const q = query(
+        collection(db, DISCUSSION_REPORTS_COLLECTION),
+        where('reporterId', '==', currentUser.id)
+      );
+      const snap = await getDocs(q);
+      const list: DiscussionReport[] = [];
+      snap.forEach((docSnap) => {
+        list.push({ id: docSnap.id, ...docSnap.data() } as DiscussionReport);
+      });
+      return list;
+    }
   } catch (err) {
-    console.error('Error fetching discussion reports from Firestore:', err);
     return [];
   }
 }
@@ -327,7 +439,7 @@ export async function saveReportToFirestore(report: DiscussionReport): Promise<v
     const cleanData = sanitizeForFirestore(report);
     await setDoc(docRef, cleanData, { merge: true });
   } catch (err) {
-    console.error(`Error saving report ${report.id} to Firestore:`, err);
+    // Fail silently
   }
 }
 
@@ -337,46 +449,93 @@ export async function deleteReportFromFirestore(reportId: string): Promise<void>
     const docRef = doc(db, DISCUSSION_REPORTS_COLLECTION, reportId);
     await deleteDoc(docRef);
   } catch (err) {
-    console.error(`Error deleting report ${reportId} from Firestore:`, err);
+    // Fail silently
   }
 }
 
 export function subscribeToReports(
+  currentUser: UserAccount | null | undefined,
   onUpdate: (reports: DiscussionReport[]) => void,
   onError?: (error: Error) => void
 ): () => void {
-  const colRef = collection(db, DISCUSSION_REPORTS_COLLECTION);
-  return onSnapshot(
-    colRef,
-    (snap) => {
-      const list: DiscussionReport[] = [];
-      snap.forEach((docSnap) => {
-        list.push({ id: docSnap.id, ...docSnap.data() } as DiscussionReport);
-      });
-      onUpdate(list);
-    },
-    (err) => {
-      console.error('Firestore discussion reports subscription error:', err);
-      if (onError) onError(err);
+  if (!currentUser?.id || isCurrentFirebaseUserAnonymous()) {
+    onUpdate([]);
+    return () => {};
+  }
+
+  try {
+    if (isUserAdminOrHead(currentUser)) {
+      const colRef = collection(db, DISCUSSION_REPORTS_COLLECTION);
+      return onSnapshot(
+        colRef,
+        (snap) => {
+          const list: DiscussionReport[] = [];
+          snap.forEach((docSnap) => {
+            list.push({ id: docSnap.id, ...docSnap.data() } as DiscussionReport);
+          });
+          onUpdate(list);
+        },
+        (err) => {
+          // Fail silently
+          if (onError) onError(err);
+        }
+      );
+    } else {
+      const q = query(
+        collection(db, DISCUSSION_REPORTS_COLLECTION),
+        where('reporterId', '==', currentUser.id)
+      );
+      return onSnapshot(
+        q,
+        (snap) => {
+          const list: DiscussionReport[] = [];
+          snap.forEach((docSnap) => {
+            list.push({ id: docSnap.id, ...docSnap.data() } as DiscussionReport);
+          });
+          onUpdate(list);
+        },
+        (err) => {
+          // Fail silently
+          if (onError) onError(err);
+        }
+      );
     }
-  );
+  } catch (err: any) {
+    if (onError) onError(err);
+    return () => {};
+  }
 }
 
 // -------------------------------------------------------------
 // FIRESTORE USER MAILBOX MESSAGES MANAGEMENT
 // -------------------------------------------------------------
 
-export async function fetchUserMailboxMessagesFromFirestore(): Promise<UserMailboxMessage[]> {
+export async function fetchUserMailboxMessagesFromFirestore(currentUser?: UserAccount | null): Promise<UserMailboxMessage[]> {
+  if (!currentUser?.id || isCurrentFirebaseUserAnonymous()) {
+    return [];
+  }
   try {
-    const colRef = collection(db, USER_MAILBOX_MESSAGES_COLLECTION);
-    const snap = await getDocs(colRef);
-    const list: UserMailboxMessage[] = [];
-    snap.forEach((docSnap) => {
-      list.push({ id: docSnap.id, ...docSnap.data() } as UserMailboxMessage);
-    });
-    return list;
+    if (isUserAdminOrHead(currentUser)) {
+      const colRef = collection(db, USER_MAILBOX_MESSAGES_COLLECTION);
+      const snap = await getDocs(colRef);
+      const list: UserMailboxMessage[] = [];
+      snap.forEach((docSnap) => {
+        list.push({ id: docSnap.id, ...docSnap.data() } as UserMailboxMessage);
+      });
+      return list;
+    } else {
+      const q = query(
+        collection(db, USER_MAILBOX_MESSAGES_COLLECTION),
+        where('userId', '==', currentUser.id)
+      );
+      const snap = await getDocs(q);
+      const list: UserMailboxMessage[] = [];
+      snap.forEach((docSnap) => {
+        list.push({ id: docSnap.id, ...docSnap.data() } as UserMailboxMessage);
+      });
+      return list;
+    }
   } catch (err) {
-    console.error('Error fetching mailbox messages from Firestore:', err);
     return [];
   }
 }
@@ -388,7 +547,7 @@ export async function saveUserMailboxMessageToFirestore(msg: UserMailboxMessage)
     const cleanData = sanitizeForFirestore(msg);
     await setDoc(docRef, cleanData, { merge: true });
   } catch (err) {
-    console.error(`Error saving user mailbox message ${msg.id} to Firestore:`, err);
+    // Fail silently
   }
 }
 
@@ -398,29 +557,61 @@ export async function deleteUserMailboxMessageFromFirestore(messageId: string): 
     const docRef = doc(db, USER_MAILBOX_MESSAGES_COLLECTION, messageId);
     await deleteDoc(docRef);
   } catch (err) {
-    console.error(`Error deleting user mailbox message ${messageId} from Firestore:`, err);
+    // Fail silently
   }
 }
 
 export function subscribeToUserMailboxMessages(
+  currentUser: UserAccount | null | undefined,
   onUpdate: (messages: UserMailboxMessage[]) => void,
   onError?: (error: Error) => void
 ): () => void {
-  const colRef = collection(db, USER_MAILBOX_MESSAGES_COLLECTION);
-  return onSnapshot(
-    colRef,
-    (snap) => {
-      const list: UserMailboxMessage[] = [];
-      snap.forEach((docSnap) => {
-        list.push({ id: docSnap.id, ...docSnap.data() } as UserMailboxMessage);
-      });
-      onUpdate(list);
-    },
-    (err) => {
-      console.error('Firestore user mailbox messages subscription error:', err);
-      if (onError) onError(err);
+  if (!currentUser?.id || isCurrentFirebaseUserAnonymous()) {
+    onUpdate([]);
+    return () => {};
+  }
+
+  try {
+    if (isUserAdminOrHead(currentUser)) {
+      const colRef = collection(db, USER_MAILBOX_MESSAGES_COLLECTION);
+      return onSnapshot(
+        colRef,
+        (snap) => {
+          const list: UserMailboxMessage[] = [];
+          snap.forEach((docSnap) => {
+            list.push({ id: docSnap.id, ...docSnap.data() } as UserMailboxMessage);
+          });
+          onUpdate(list);
+        },
+        (err) => {
+          // Fail silently
+          if (onError) onError(err);
+        }
+      );
+    } else {
+      const q = query(
+        collection(db, USER_MAILBOX_MESSAGES_COLLECTION),
+        where('userId', '==', currentUser.id)
+      );
+      return onSnapshot(
+        q,
+        (snap) => {
+          const list: UserMailboxMessage[] = [];
+          snap.forEach((docSnap) => {
+            list.push({ id: docSnap.id, ...docSnap.data() } as UserMailboxMessage);
+          });
+          onUpdate(list);
+        },
+        (err) => {
+          // Fail silently
+          if (onError) onError(err);
+        }
+      );
     }
-  );
+  } catch (err: any) {
+    if (onError) onError(err);
+    return () => {};
+  }
 }
 
 // -------------------------------------------------------------
@@ -434,43 +625,22 @@ export async function firebaseRegisterUser(
 ): Promise<{ user: UserAccount; firebaseUid: string }> {
   const cleanEmail = email.trim().toLowerCase();
   const trimmedName = name.trim();
-  const isTargetAdmin = cleanEmail === 'aymaneoumlala@gmail.com';
+  const isTargetAdmin = cleanEmail === 'aymane.habbo@gmail.com' || cleanEmail === 'aymaneoumlala@gmail.com';
   const nowStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
-  try {
-    const cred = await createUserWithEmailAndPassword(auth, cleanEmail, password);
-    const newUser: UserAccount = {
-      id: cred.user.uid,
-      name: trimmedName,
-      email: cleanEmail,
-      createdAt: nowStr,
-      role: isTargetAdmin ? 'admin' : 'user',
-      is_administrator: isTargetAdmin,
-      is_founder: isTargetAdmin,
-    };
+  const cred = await createUserWithEmailAndPassword(auth, cleanEmail, password);
+  const newUser: UserAccount = {
+    id: cred.user.uid,
+    name: trimmedName,
+    email: cleanEmail,
+    createdAt: nowStr,
+    role: isTargetAdmin ? 'admin' : 'user',
+    is_administrator: isTargetAdmin,
+    is_founder: isTargetAdmin,
+  };
 
-    await saveUserToFirestore({ ...newUser, password });
-    return { user: newUser, firebaseUid: cred.user.uid };
-  } catch (err: any) {
-    // If Email/Password provider is disabled in Firebase Console (auth/operation-not-allowed)
-    if (err.code === 'auth/operation-not-allowed') {
-      console.warn('Firebase Email/Password is not enabled in Firebase Console. Registering directly in Firestore.');
-      const generatedUid = `user_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
-      const newUser: UserAccount = {
-        id: generatedUid,
-        name: trimmedName,
-        email: cleanEmail,
-        createdAt: nowStr,
-        role: isTargetAdmin ? 'admin' : 'user',
-        is_administrator: isTargetAdmin,
-        is_founder: isTargetAdmin,
-      };
-
-      await saveUserToFirestore({ ...newUser, password });
-      return { user: newUser, firebaseUid: generatedUid };
-    }
-    throw err;
-  }
+  await saveUserToFirestore(newUser);
+  return { user: newUser, firebaseUid: cred.user.uid };
 }
 
 export async function firebaseSignInUser(
@@ -479,91 +649,36 @@ export async function firebaseSignInUser(
   existingUserAccount?: UserAccount
 ): Promise<UserAccount> {
   const cleanEmail = email.trim().toLowerCase();
+  const cred = await signInWithEmailAndPassword(auth, cleanEmail, password);
   
+  // Fetch profile from Firestore
   try {
-    const cred = await signInWithEmailAndPassword(auth, cleanEmail, password);
-    // Fetch profile from Firestore
-    try {
-      const docRef = doc(db, USERS_COLLECTION, cred.user.uid);
-      const snap = await getDoc(docRef);
-      if (snap.exists()) {
-        return { id: snap.id, ...snap.data() } as UserAccount;
-      }
-    } catch (fetchErr) {
-      console.warn('Firestore profile fetch warning:', fetchErr);
+    const docRef = doc(db, USERS_COLLECTION, cred.user.uid);
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      return { id: snap.id, ...snap.data() } as UserAccount;
     }
-    if (existingUserAccount) return existingUserAccount;
-  } catch (err: any) {
-    // If Firebase Auth throws operation-not-allowed, invalid-credential, or network errors,
-    // verify securely against Firestore database & local user records.
-    if (
-      err.code === 'auth/operation-not-allowed' || 
-      err.code === 'auth/network-request-failed' ||
-      err.message?.includes('operation-not-allowed') ||
-      err.code === 'auth/invalid-credential' ||
-      err.code === 'auth/wrong-password' ||
-      err.code === 'auth/user-not-found'
-    ) {
-      let matched: any = null;
-      try {
-        const allFirestoreUsers = await fetchUsersFromFirestore();
-        matched = allFirestoreUsers.find(u => u.email?.trim().toLowerCase() === cleanEmail);
-      } catch (firestoreErr) {
-        console.warn('Could not read from Firestore, checking local storage:', firestoreErr);
-      }
-
-      if (!matched) {
-        try {
-          const raw = localStorage.getItem('3awdli_users');
-          if (raw) {
-            const parsed = JSON.parse(raw);
-            if (Array.isArray(parsed)) {
-              matched = parsed.find((u: any) => u.email?.trim().toLowerCase() === cleanEmail);
-            }
-          }
-        } catch (storageErr) {
-          console.warn('Local storage user check error:', storageErr);
-        }
-      }
-      
-      if (!matched && existingUserAccount) {
-        matched = existingUserAccount;
-      }
-
-      if (!matched) {
-        const notFoundErr = new Error('No account was found with this email in the database. Please sign up or continue with Google.');
-        (notFoundErr as any).code = 'auth/user-not-found';
-        throw notFoundErr;
-      }
-
-      // STRICT PASSWORD CHECK: Verify entered password against the stored password
-      const storedWithPass = matched as UserAccount & { password?: string };
-      const storedPassword = storedWithPass.password;
-
-      if (!storedPassword) {
-        const noPassErr = new Error('This account does not have a password set. Please sign in with Google or use "Forgot password" to set one.');
-        (noPassErr as any).code = 'auth/no-password-set';
-        throw noPassErr;
-      }
-
-      if (storedPassword !== password) {
-        const passError = new Error('The password entered does not match our records.');
-        (passError as any).code = 'auth/wrong-password';
-        throw passError;
-      }
-
-      // Password matches!
-      return matched as UserAccount;
-    }
-
-    throw err;
+  } catch (fetchErr) {
+    console.warn('Firestore profile fetch notice:', fetchErr);
   }
 
-  if (existingUserAccount) {
+  if (existingUserAccount && existingUserAccount.id === cred.user.uid) {
     return existingUserAccount;
   }
 
-  throw new Error('User profile could not be loaded from database.');
+  // Fallback to minimal profile if doc does not yet exist
+  const isTargetAdmin = cleanEmail === 'aymane.habbo@gmail.com' || cleanEmail === 'aymaneoumlala@gmail.com';
+  const userProfile: UserAccount = {
+    id: cred.user.uid,
+    name: cleanEmail.split('@')[0],
+    email: cleanEmail,
+    createdAt: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+    role: isTargetAdmin ? 'admin' : 'user',
+    is_administrator: isTargetAdmin,
+    is_founder: isTargetAdmin,
+  };
+  saveUserToFirestore(userProfile).catch(() => {});
+  return userProfile;
 }
 
 /**
@@ -576,43 +691,27 @@ export async function firebaseSignInWithGoogle(): Promise<UserAccount> {
   const cred = await signInWithPopup(auth, provider);
   const fbUser = cred.user;
   const cleanEmail = (fbUser.email || '').toLowerCase().trim();
-  const isTargetAdmin = cleanEmail === 'aymaneoumlala@gmail.com';
+  const isTargetAdmin = cleanEmail === 'aymane.habbo@gmail.com' || cleanEmail === 'aymaneoumlala@gmail.com';
 
   // 1. Check if document exists under user UID
   const docRef = doc(db, USERS_COLLECTION, fbUser.uid);
-  const snap = await getDoc(docRef);
-
-  if (snap.exists()) {
-    const existing = { id: snap.id, ...snap.data() } as UserAccount;
-    if (isTargetAdmin && (!existing.is_administrator || existing.role !== 'admin')) {
-      existing.role = 'admin';
-      existing.is_administrator = true;
-      existing.is_founder = true;
-      await saveUserToFirestore(existing);
+  try {
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      const existing = { id: snap.id, ...snap.data() } as UserAccount;
+      if (isTargetAdmin && (!existing.is_administrator || existing.role !== 'admin')) {
+        existing.role = 'admin';
+        existing.is_administrator = true;
+        existing.is_founder = true;
+        await saveUserToFirestore(existing);
+      }
+      return existing;
     }
-    return existing;
+  } catch (err) {
+    console.warn('Google sign-in profile fetch notice:', err);
   }
 
-  // 2. Check if a pre-existing profile exists by email
-  const allUsers = await fetchUsersFromFirestore();
-  const existingByEmail = allUsers.find(u => u.email?.toLowerCase() === cleanEmail);
-  if (existingByEmail) {
-    const merged: UserAccount = {
-      ...existingByEmail,
-      id: fbUser.uid,
-      name: existingByEmail.name || fbUser.displayName || 'Member',
-      avatar: fbUser.photoURL || existingByEmail.avatar,
-    };
-    if (isTargetAdmin) {
-      merged.role = 'admin';
-      merged.is_administrator = true;
-      merged.is_founder = true;
-    }
-    await saveUserToFirestore(merged);
-    return merged;
-  }
-
-  // 3. Create fresh user profile in Firestore
+  // 2. Create fresh user profile in Firestore
   const nowStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   const newUser: UserAccount = {
     id: fbUser.uid,
@@ -873,124 +972,7 @@ export function subscribeToRulesCategories(
   );
 }
 
-// -------------------------------------------------------------
-// FIRESTORE PASSWORD RESET TOKENS MANAGEMENT
-// -------------------------------------------------------------
-export const PASSWORD_RESET_TOKENS_COLLECTION = 'password_reset_tokens';
 
-export interface FirestoreResetToken {
-  token: string;
-  email: string;
-  createdAt: number;
-  expiresAt: number;
-  used: boolean;
-  usedAt?: number;
-}
-
-export async function saveResetTokenToFirestore(record: FirestoreResetToken): Promise<void> {
-  if (!record.token) return;
-  try {
-    const docRef = doc(db, PASSWORD_RESET_TOKENS_COLLECTION, record.token.trim());
-    const cleanData = sanitizeForFirestore(record);
-    await setDoc(docRef, cleanData, { merge: true });
-  } catch (err) {
-    console.error('Error saving reset token to Firestore:', err);
-  }
-}
-
-export async function getResetTokenFromFirestore(token: string): Promise<FirestoreResetToken | null> {
-  if (!token) return null;
-  try {
-    const docRef = doc(db, PASSWORD_RESET_TOKENS_COLLECTION, token.trim());
-    const snap = await getDoc(docRef);
-    if (!snap.exists()) return null;
-    return snap.data() as FirestoreResetToken;
-  } catch (err) {
-    console.error('Error fetching reset token from Firestore:', err);
-    return null;
-  }
-}
-
-export async function markResetTokenUsedInFirestore(token: string): Promise<boolean> {
-  if (!token) return false;
-  try {
-    const docRef = doc(db, PASSWORD_RESET_TOKENS_COLLECTION, token.trim());
-    await updateDoc(docRef, {
-      used: true,
-      usedAt: Date.now(),
-    });
-    return true;
-  } catch (err) {
-    console.error('Error marking reset token used in Firestore:', err);
-    return false;
-  }
-}
-
-/**
- * Overwrite and invalidate the previous password for all Firestore documents
- * matching an email address. Ensures that the old password cannot authenticate.
- */
-export async function updateUserPasswordInFirestore(
-  email: string,
-  newPassword: string
-): Promise<{ success: boolean; updatedCount: number }> {
-  const cleanEmail = email.trim().toLowerCase();
-  if (!cleanEmail || !newPassword) {
-    return { success: false, updatedCount: 0 };
-  }
-
-  try {
-    const colRef = collection(db, USERS_COLLECTION);
-    const snap = await getDocs(colRef);
-    let count = 0;
-    const nowIso = new Date().toISOString();
-
-    const updatePromises: Promise<any>[] = [];
-    snap.forEach((docSnap) => {
-      const data = docSnap.data();
-      if (data.email && data.email.trim().toLowerCase() === cleanEmail) {
-        count++;
-        updatePromises.push(
-          setDoc(docSnap.ref, {
-            ...data,
-            password: newPassword,
-            updatedAt: nowIso,
-            passwordChangedAt: nowIso,
-          }, { merge: true }).catch(async (err) => {
-            console.warn(`Error updating password on doc ${docSnap.id}:`, err);
-          })
-        );
-      }
-    });
-
-    await Promise.all(updatePromises);
-
-    // If no document existed in Firestore, create one so the new password is firmly saved
-    if (count === 0) {
-      const isTargetAdmin = cleanEmail === 'aymane.habbo@gmail.com' || cleanEmail === 'aymaneoumlala@gmail.com';
-      const newDocRef = doc(collection(db, USERS_COLLECTION));
-      await setDoc(newDocRef, {
-        id: newDocRef.id,
-        email: cleanEmail,
-        name: cleanEmail.split('@')[0],
-        password: newPassword,
-        role: isTargetAdmin ? 'admin' : 'user',
-        is_administrator: isTargetAdmin,
-        is_founder: isTargetAdmin,
-        createdAt: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-        passwordChangedAt: nowIso,
-        updatedAt: nowIso,
-      });
-      count = 1;
-    }
-
-    console.log(`[Firestore] Overwrote password for ${cleanEmail} across ${count} document(s)`);
-    return { success: true, updatedCount: count };
-  } catch (err) {
-    console.error('Error updating user password in Firestore:', err);
-    return { success: false, updatedCount: 0 };
-  }
-}
 
 // -------------------------------------------------------------
 // FIRESTORE CHAT SCHEDULES MANAGEMENT

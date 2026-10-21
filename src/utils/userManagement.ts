@@ -3,12 +3,11 @@ import {
   saveUserToFirestore, 
   fetchUsersFromFirestore, 
   subscribeToUsers,
-  updateUserPasswordInFirestore
+  isUserAdminOrHead,
+  isCurrentFirebaseUserAnonymous
 } from '../lib/firestoreService';
 
-export interface StoredUser extends UserAccount {
-  password?: string;
-}
+export type StoredUser = UserAccount;
 
 const USERS_STORAGE_KEY = '3awdli_users';
 const CURRENT_USER_STORAGE_KEY = '3awdli_current_user';
@@ -105,50 +104,6 @@ export function generateOneTimeListenerKey(): string {
   return `3AW-LISTEN-${segment1}-${segment2}`;
 }
 
-// Initial platform users: verified team members (no fake sample discussions)
-const DEFAULT_INITIAL_USERS: StoredUser[] = [
-  {
-    id: 'user_admin_01',
-    name: 'Aymane Oumlala',
-    email: ADMIN_EMAIL,
-    password: 'adminpassword',
-    createdAt: 'Sep 1, 2026',
-    role: 'admin',
-    is_founder: true,
-    is_administrator: true,
-    is_facilitator: true,
-    is_host: true,
-    gender: 'Male',
-    profession: 'Platform Director & Admin',
-  },
-  {
-    id: 'team_listener_amina',
-    name: 'Dr. Amina Mansouri',
-    email: 'amina.mansouri@3awdli.org',
-    password: 'listenerpassword',
-    createdAt: 'Sep 1, 2026',
-    role: 'listener',
-    is_listener: true,
-    isListener: true,
-    is_head_of_listeners: true,
-    gender: 'Female',
-    profession: 'Clinical Psychologist & Supervisor',
-  },
-  {
-    id: 'team_listener_youssef',
-    name: 'Youssef Benali',
-    email: 'youssef.benali@3awdli.org',
-    password: 'listenerpassword',
-    createdAt: 'Sep 2, 2026',
-    role: 'listener',
-    is_listener: true,
-    isListener: true,
-    is_head_of_listeners: false,
-    gender: 'Male',
-    profession: 'Psychological Support Counselor',
-  },
-];
-
 const SAMPLE_USER_EMAILS = new Set([
   'salma.benali@example.com',
   'dr.youssef@example.com',
@@ -168,97 +123,59 @@ export function isFakeUser(u: Partial<StoredUser> | null | undefined): boolean {
 
 export function getStoredUsers(): StoredUser[] {
   try {
-    if (typeof localStorage === 'undefined') return DEFAULT_INITIAL_USERS;
+    if (typeof localStorage === 'undefined') return [];
     const raw = localStorage.getItem(USERS_STORAGE_KEY);
-    if (!raw) {
-      localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(DEFAULT_INITIAL_USERS));
-      return DEFAULT_INITIAL_USERS;
-    }
+    if (!raw) return [];
     const rawUsers: StoredUser[] = JSON.parse(raw);
-    if (!Array.isArray(rawUsers)) return DEFAULT_INITIAL_USERS;
+    if (!Array.isArray(rawUsers)) return [];
 
-    // Filter out any demo / test users from localStorage
-    const users = rawUsers.filter((u) => !isFakeUser(u));
-    
-    let hasUpdated = users.length !== rawUsers.length;
-    
-    // Check if initial admin needs to be merged into stored users
-    for (const initU of DEFAULT_INITIAL_USERS) {
-      if (!users.some(u => u.id === initU.id || u.email.toLowerCase() === initU.email.toLowerCase())) {
-        users.push(initU);
-        hasUpdated = true;
-      }
-    }
-
-    const verifiedUsers = users.map((u, idx) => {
-      let updatedUser = { ...u };
-      const isAdminByEmail = u.email.toLowerCase() === ADMIN_EMAIL.toLowerCase();
-      const isFirstAccount = idx === 0;
-      if (isAdminByEmail || isFirstAccount) {
-        if (updatedUser.role !== 'admin' || !updatedUser.is_founder || !updatedUser.is_administrator) {
-          hasUpdated = true;
-          updatedUser.role = 'admin';
-          updatedUser.is_founder = true;
-          updatedUser.is_administrator = true;
-        }
-      }
-
-      const isListener = updatedUser.is_listener || updatedUser.isListener || updatedUser.role === 'listener';
-      if (isListener && !updatedUser.listener_key_code) {
-        hasUpdated = true;
-        updatedUser.listener_key_code = generateOneTimeListenerKey();
-      }
-
-      // Ensure gender is defined on all profiles
-      if (!updatedUser.gender) {
-        hasUpdated = true;
-        const nameLower = updatedUser.name.toLowerCase();
-        const isFemale = nameLower.includes('amina') || nameLower.includes('salma') || nameLower.includes('nadia') || nameLower.includes('sara') || nameLower.includes('fatima');
-        updatedUser.gender = isFemale ? 'Female' : 'Male';
-      }
-
-      return updatedUser;
-    });
-
-    if (hasUpdated) {
-      localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(verifiedUsers));
-      return verifiedUsers;
-    }
+    // Filter out any demo / test users from localStorage and strip passwords
+    const users = rawUsers
+      .filter((u) => !isFakeUser(u))
+      .map((u) => {
+        const copy = { ...u };
+        delete (copy as any).password;
+        return copy;
+      });
 
     return users;
   } catch (err) {
-    console.error('Failed to read stored users:', err);
-    return DEFAULT_INITIAL_USERS;
+    return [];
   }
 }
 
 export function saveStoredUsers(users: StoredUser[], changedUser?: StoredUser): void {
   try {
-    const cleanUsers = users.filter((u) => !isFakeUser(u));
+    const cleanUsers = users
+      .filter((u) => !isFakeUser(u))
+      .map((u) => {
+        const copy = { ...u };
+        delete (copy as any).password;
+        return copy;
+      });
     localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(cleanUsers));
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('3awdli_users_updated'));
     }
     // Only persist single changed user to prevent quota exhaustion
     if (changedUser && !isFakeUser(changedUser)) {
-      saveUserToFirestore(changedUser).catch((e) => console.warn('Firestore single user save notice:', e));
+      const copyChanged = { ...changedUser };
+      delete (copyChanged as any).password;
+      saveUserToFirestore(copyChanged).catch(() => {});
     }
   } catch (err) {
-    console.error('Failed to save users:', err);
+    // Fail silently
   }
 }
 
-let isUsersSyncInitialized = false;
-
 // Initialize real-time Firestore sync for users
-export function initFirestoreUsersSync(): () => void {
-  if (isUsersSyncInitialized) {
+export function initFirestoreUsersSync(currentUser?: UserAccount | null): () => void {
+  if (!currentUser?.id || isCurrentFirebaseUserAnonymous()) {
     return () => {};
   }
-  isUsersSyncInitialized = true;
 
   // 1. Initial population from Firestore
-  fetchUsersFromFirestore()
+  fetchUsersFromFirestore(currentUser)
     .then((remoteUsers) => {
       if (remoteUsers && remoteUsers.length > 0) {
         const cleanRemote = remoteUsers.filter((u) => !isFakeUser(u));
@@ -267,7 +184,9 @@ export function initFirestoreUsersSync(): () => void {
         localUsers.forEach((u) => mergedMap.set(u.id, u));
         cleanRemote.forEach((u) => {
           const existing = mergedMap.get(u.id);
-          mergedMap.set(u.id, { ...existing, ...u });
+          const copy = { ...existing, ...u };
+          delete (copy as any).password;
+          mergedMap.set(u.id, copy);
         });
         const merged = Array.from(mergedMap.values());
         localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(merged));
@@ -276,30 +195,33 @@ export function initFirestoreUsersSync(): () => void {
         }
       }
     })
-    .catch((err) => {
-      console.warn('Initial Firestore user fetch notice:', err);
-    });
+    .catch(() => {});
 
   // 2. Real-time Firestore subscription
-  const unsubscribeFirestore = subscribeToUsers((remoteUsers) => {
-    if (!remoteUsers) return;
-    const cleanRemote = remoteUsers.filter((u) => !isFakeUser(u));
-    const localUsers = getStoredUsers();
-    const mergedMap = new Map<string, StoredUser>();
-    localUsers.forEach((u) => mergedMap.set(u.id, u));
-    cleanRemote.forEach((u) => {
-      const existing = mergedMap.get(u.id);
-      mergedMap.set(u.id, { ...existing, ...u });
-    });
-    const merged = Array.from(mergedMap.values());
-    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(merged));
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('3awdli_users_updated'));
-    }
-  });
+  const unsubscribeFirestore = subscribeToUsers(
+    currentUser,
+    (remoteUsers) => {
+      if (!remoteUsers) return;
+      const cleanRemote = remoteUsers.filter((u) => !isFakeUser(u));
+      const localUsers = getStoredUsers();
+      const mergedMap = new Map<string, StoredUser>();
+      localUsers.forEach((u) => mergedMap.set(u.id, u));
+      cleanRemote.forEach((u) => {
+        const existing = mergedMap.get(u.id);
+        const copy = { ...existing, ...u };
+        delete (copy as any).password;
+        mergedMap.set(u.id, copy);
+      });
+      const merged = Array.from(mergedMap.values());
+      localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(merged));
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('3awdli_users_updated'));
+      }
+    },
+    () => {}
+  );
 
   return () => {
-    isUsersSyncInitialized = false;
     unsubscribeFirestore();
   };
 }
@@ -823,70 +745,7 @@ export function findUserByEmail(email: string): StoredUser | null {
   return users.find(u => u.email.toLowerCase() === cleanEmail) || null;
 }
 
-// Update password directly in local storage and Firestore to guarantee complete invalidation of old password
-export function updateUserPassword(email: string, newPassword: string): { success: boolean; user?: StoredUser; message?: string } {
-  try {
-    const users = getStoredUsers();
-    const cleanEmail = email.trim().toLowerCase();
-    let updatedCount = 0;
-    let targetUser: StoredUser | undefined;
 
-    const updatedUsers = users.map(u => {
-      if (u.email && u.email.trim().toLowerCase() === cleanEmail) {
-        updatedCount++;
-        const updated = { ...u, password: newPassword };
-        targetUser = updated;
-        return updated;
-      }
-      return u;
-    });
-
-    if (updatedCount === 0) {
-      const isTargetAdmin = cleanEmail === ADMIN_EMAIL.toLowerCase() || cleanEmail === LEGACY_ADMIN_EMAIL.toLowerCase();
-      const newUser: StoredUser = {
-        id: `user_${Date.now()}`,
-        name: cleanEmail.split('@')[0],
-        email: cleanEmail,
-        password: newPassword,
-        createdAt: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-        role: isTargetAdmin ? 'admin' : 'user',
-        is_administrator: isTargetAdmin,
-        is_founder: isTargetAdmin,
-      };
-      updatedUsers.push(newUser);
-      targetUser = newUser;
-    }
-
-    saveStoredUsers(updatedUsers, targetUser);
-
-    // Also update currently active session if same email
-    try {
-      const currentRaw = localStorage.getItem(CURRENT_USER_STORAGE_KEY);
-      if (currentRaw) {
-        const current = JSON.parse(currentRaw);
-        if (current.email && current.email.trim().toLowerCase() === cleanEmail) {
-          localStorage.setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify({ ...current, ...targetUser }));
-        }
-      }
-    } catch {}
-
-    // Synchronize to Firestore database
-    updateUserPasswordInFirestore(cleanEmail, newPassword).catch(err => {
-      console.warn('Firestore password overwrite notice:', err);
-    });
-
-    return { 
-      success: true, 
-      user: targetUser 
-    };
-  } catch (err) {
-    console.error('Failed to update user password:', err);
-    return { 
-      success: false, 
-      message: 'An error occurred while saving the new password.' 
-    };
-  }
-}
 
 /**
  * Permanently disable a registered user's account (Administrative Ban).

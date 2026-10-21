@@ -36,7 +36,7 @@ import {
   saveUserToFirestore,
   firebaseSignOut 
 } from '../lib/firestoreService';
-import { requestPasswordResetViaEmail } from '../utils/emailService';
+
 import { Navbar } from './Navbar';
 import { useLanguage } from '../context/LanguageContext';
 
@@ -234,24 +234,6 @@ export const SignInPage = ({
         return;
       }
 
-      // Offline network fallback: ONLY if network failed, and ONLY if password matches strictly
-      if (err.code === 'auth/network-request-failed') {
-        const freshUsers = getStoredUsers();
-        const fallbackUser = freshUsers.find(u => u.email.trim().toLowerCase() === trimmedEmail);
-        if (fallbackUser?.is_banned || isUserAccountBanned(trimmedEmail)) {
-          setIsBannedError(true);
-          setError(null);
-          setIsSubmitting(false);
-          return;
-        }
-        if (fallbackUser && fallbackUser.password && fallbackUser.password === password) {
-          setCurrentUser(fallbackUser);
-          setIsSubmitting(false);
-          onSuccess(fallbackUser);
-          return;
-        }
-      }
-
       setError(err.message || 'The password or email entered does not match. Please try again.');
       setIsSubmitting(false);
     }
@@ -277,31 +259,15 @@ export const SignInPage = ({
     setIsSendingReset(true);
 
     try {
-      const res = await requestPasswordResetViaEmail(
-        cleanEmail, 
-        typeof window !== 'undefined' ? window.location.origin : undefined
-      );
-
-      if (!res.emailSent) {
-        setRecoveryError(
-          res.error || 
-          'Email delivery failed. If hosted on Netlify, please ensure GMAIL_APP_PASSWORD is set in your Netlify Site Environment Variables.'
-        );
-        setIsSendingReset(false);
-        return;
-      }
-
+      await firebaseSendPasswordReset(cleanEmail);
+    } catch (err: any) {
+      console.warn('Password reset notice:', err);
+    } finally {
+      setIsSendingReset(false);
       setSentToEmail(cleanEmail);
-      setSentProvider(res.provider || 'smtp');
-      setSentMessageId(res.messageId || null);
-      setSentWarning(res.warning || null);
       setRecoveryStep('sent');
       setResendCooldown(30);
       setResendSuccessNotice(null);
-    } catch (err: any) {
-      setRecoveryError(err.message || 'An error occurred while dispatching the reset email.');
-    } finally {
-      setIsSendingReset(false);
     }
   };
 
@@ -313,27 +279,13 @@ export const SignInPage = ({
     setResendSuccessNotice(null);
 
     try {
-      const res = await requestPasswordResetViaEmail(
-        sentToEmail,
-        typeof window !== 'undefined' ? window.location.origin : undefined
-      );
-
-      if (res.emailSent) {
-        setSentProvider(res.provider || 'smtp');
-        setSentMessageId(res.messageId || null);
-        setSentWarning(res.warning || null);
-        setResendSuccessNotice('A fresh password reset link has been dispatched to your inbox.');
-        setResendCooldown(30);
-      } else {
-        setRecoveryError(
-          res.error ||
-          'Failed to resend reset email. Please ensure GMAIL_APP_PASSWORD is set in Netlify site environment variables.'
-        );
-      }
+      await firebaseSendPasswordReset(sentToEmail);
     } catch (err: any) {
-      setRecoveryError(err.message || 'An unexpected error occurred while resending.');
+      console.warn('Password reset resend notice:', err);
     } finally {
       setIsResending(false);
+      setResendSuccessNotice('If an account exists for this email, a reset link has been sent.');
+      setResendCooldown(30);
     }
   };
 
@@ -682,54 +634,22 @@ export const SignInPage = ({
 
                   <div className="space-y-1">
                     <h4 className="text-base sm:text-lg font-bold text-[#1E3025] font-['Lora',serif]">
-                      Password Reset Email Sent!
+                      Password Reset
                     </h4>
                     <p className="text-xs text-[#526359] leading-relaxed">
-                      We have dispatched a secure password reset link to:
+                      If an account exists for this email, a reset link has been sent:
                     </p>
                   </div>
 
                   <div className="p-3 bg-white border border-[#D9D1C5] rounded-xl text-center space-y-1">
                     <span className="text-xs font-mono font-bold text-[#1F3329] break-all">{sentToEmail}</span>
-                    <div className="text-[11px] text-[#6B7E74] flex items-center justify-center gap-1.5">
-                      <span>Service:</span>
-                      <strong className="text-[#2F473A]">
-                        {sentProvider === 'firebase'
-                          ? 'Firebase Auth'
-                          : 'Gmail (aymane.habbo@gmail.com)'}
-                      </strong>
-                    </div>
-                    {sentMessageId && (
-                      <div className="text-[10px] font-mono text-[#829188] break-all">
-                        ID: {sentMessageId}
-                      </div>
-                    )}
                   </div>
-
-                  {/* Provider notice / warning if fallback was engaged */}
-                  {sentWarning && (
-                    <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl text-xs flex items-start gap-2 text-start">
-                      <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600" />
-                      <div className="space-y-0.5">
-                        <strong className="block text-[11px] text-amber-800">Delivery Channel Notice:</strong>
-                        <span className="text-[11px] leading-relaxed text-amber-700">{sentWarning}</span>
-                      </div>
-                    </div>
-                  )}
 
                   {/* Resend success banner */}
                   {resendSuccessNotice && (
                     <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs flex items-center gap-2 text-start">
                       <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
                       <span>{resendSuccessNotice}</span>
-                    </div>
-                  )}
-
-                  {/* Recovery error banner during resend */}
-                  {recoveryError && (
-                    <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs flex items-start gap-2 text-start">
-                      <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-500" />
-                      <span>{recoveryError}</span>
                     </div>
                   )}
 
@@ -740,10 +660,7 @@ export const SignInPage = ({
                     </div>
                     <ul className="space-y-1.5 text-[11px] pl-4 list-disc text-[#607369]">
                       <li>
-                        <strong>1-Hour Expiration:</strong> The secure link will expire in 60 minutes.
-                      </li>
-                      <li>
-                        <strong>Single-Use:</strong> For your security, this link is valid for a single password reset.
+                        <strong>Secure Email Link:</strong> Click the link in the email from Firebase to set your new password.
                       </li>
                       <li>
                         <strong>Check Spam:</strong> If you do not see the email shortly, please check your spam or junk folder.

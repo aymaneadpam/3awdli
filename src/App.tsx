@@ -71,15 +71,7 @@ import { initFirestoreTimezoneSync } from './utils/timezoneManagement';
 import { initFirestoreReportsSync } from './utils/reportManagement';
 import { initFirestoreUserMailboxSync } from './utils/userMailboxManagement';
 
-const DEFAULT_DEMO_LISTENER: UserAccount = {
-  id: 'listener_demo',
-  name: 'Team Listener',
-  email: 'listener@3awdli.org',
-  role: 'listener',
-  is_listener: true,
-  profession: 'Psychology Resident',
-  createdAt: '17 Oct 2026, 12:00',
-};
+
 
 function resolveInitialRouteState(): { view: ViewState; token: string; email: string } {
   if (typeof window === 'undefined') {
@@ -201,41 +193,54 @@ export default function App() {
     };
   }, []);
 
+  // 1. Public content synchronization starts immediately on mount (publicly readable)
   useEffect(() => {
-    // Seed and refresh users
-    getStoredUsers();
-    const user = getCurrentUser();
-    if (user) {
-      setCurrentUser(user);
-    } else {
-      // Proactively ensure Firebase Anonymous Auth session for visitors behind the scenes
-      ensureAnonymousFirebaseAuth().catch(() => {});
-    }
-
-    // 1. Initialize real-time synchronization for all application collections with Firestore
-    const unsubUsers = initFirestoreUsersSync();
-    const unsubDiscussions = initFirestoreDiscussionsSync();
-    const unsubReports = initFirestoreReportsSync();
-    const unsubMailbox = initFirestoreUserMailboxSync();
-    const unsubShares = initFirestoreShareRequestsSync();
-    const unsubSupports = initFirestoreSupportRequestsSync();
     const unsubLounge = initFirestoreLoungeArticlesSync();
     const unsubTeenSpace = initFirestoreTeenSpaceArticlesSync();
     const unsubRules = initFirestoreRulesSync();
     const unsubSchedules = initFirestoreSchedulesSync();
     const unsubTimezone = initFirestoreTimezoneSync();
 
-    // 2. Subscribe to Firebase Auth state
+    return () => {
+      unsubLounge();
+      unsubTeenSpace();
+      unsubRules();
+      unsubSchedules();
+      unsubTimezone();
+    };
+  }, []);
+
+  // Track resolved Firebase Auth user UID
+  const [resolvedAuthUid, setResolvedAuthUid] = useState<string | null>(null);
+
+  // 2. Track auth state: if no user, call ensureAnonymousFirebaseAuth() and wait for it
+  useEffect(() => {
+    const initialUser = getCurrentUser();
+    if (initialUser) {
+      setCurrentUser(initialUser);
+    }
+
     const unsubAuth = subscribeToAuthState((fbUser) => {
-      if (fbUser) {
-        const stored = getCurrentUser();
-        if (stored && stored.email.toLowerCase() === (fbUser.email || '').toLowerCase()) {
-          setCurrentUser(stored);
+      if (!fbUser) {
+        setResolvedAuthUid(null);
+        ensureAnonymousFirebaseAuth()
+          .then((anonUser) => {
+            if (anonUser) {
+              setResolvedAuthUid(anonUser.uid);
+            }
+          })
+          .catch(() => {});
+      } else {
+        setResolvedAuthUid(fbUser.uid);
+        if (!fbUser.isAnonymous) {
+          const stored = getCurrentUser();
+          if (stored && stored.email.toLowerCase() === (fbUser.email || '').toLowerCase()) {
+            setCurrentUser(stored);
+          }
         }
       }
     });
 
-    // 3. Listen to local update events to keep UI in sync
     const handleUserUpdated = () => {
       const updated = getCurrentUser();
       setCurrentUser(updated);
@@ -245,22 +250,43 @@ export default function App() {
     window.addEventListener('storage', handleUserUpdated);
 
     return () => {
+      unsubAuth();
+      window.removeEventListener('3awdli_users_updated', handleUserUpdated);
+      window.removeEventListener('storage', handleUserUpdated);
+    };
+  }, []);
+
+  // 3. Private, auth-gated Firestore subscriptions:
+  // Wait until Firebase Auth has resolved a user (real or anonymous).
+  // When the auth user changes (login, logout, switch), stop all subscriptions and start for new user.
+  useEffect(() => {
+    if (!resolvedAuthUid) {
+      return;
+    }
+
+    const unsubUsers = initFirestoreUsersSync(currentUser);
+    const unsubDiscussions = initFirestoreDiscussionsSync();
+    const unsubReports = initFirestoreReportsSync(currentUser);
+    const unsubMailbox = initFirestoreUserMailboxSync(currentUser);
+    const unsubShares = initFirestoreShareRequestsSync(currentUser);
+    const unsubSupports = initFirestoreSupportRequestsSync(currentUser);
+
+    return () => {
       unsubUsers();
       unsubDiscussions();
       unsubReports();
       unsubMailbox();
       unsubShares();
       unsubSupports();
-      unsubLounge();
-      unsubTeenSpace();
-      unsubRules();
-      unsubSchedules();
-      unsubTimezone();
-      unsubAuth();
-      window.removeEventListener('3awdli_users_updated', handleUserUpdated);
-      window.removeEventListener('storage', handleUserUpdated);
     };
-  }, []);
+  }, [
+    resolvedAuthUid,
+    currentUser?.id,
+    currentUser?.role,
+    currentUser?.is_head_of_listeners,
+    currentUser?.is_administrator,
+    currentUser?.is_listener
+  ]);
 
   // Update current user online status in presence registry
   useEffect(() => {
@@ -654,7 +680,14 @@ export default function App() {
     }
 
   if (currentView === 'discussions') {
-    const activeListenerUser: UserAccount = currentUser || DEFAULT_DEMO_LISTENER;
+    const activeListenerUser: UserAccount = currentUser || {
+      id: 'listener_unassigned',
+      name: 'Team Listener',
+      email: '',
+      role: 'listener',
+      is_listener: true,
+      createdAt: '',
+    };
 
     return (
       <>

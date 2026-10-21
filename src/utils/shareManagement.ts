@@ -11,7 +11,7 @@ import { formatSiteTime, formatSiteDateTime, formatDiscussionDateTime } from './
 const SHARE_REQUESTS_STORAGE_KEY = '3awdli_share_requests';
 const ONLINE_USERS_STORAGE_KEY = '3awdli_online_users';
 
-const DEFAULT_ONLINE_USERS: string[] = ['team_listener_amina'];
+const DEFAULT_ONLINE_USERS: string[] = [];
 
 export function isFakeShareRequest(r: Partial<ConversationShareRequest> | null | undefined): boolean {
   if (!r) return true;
@@ -139,17 +139,14 @@ export function saveStoredShareRequests(requests: ConversationShareRequest[], ch
   }
 }
 
-let isShareSyncInitialized = false;
-
-// Initialize real-time Firestore sync for share requests
-export function initFirestoreShareRequestsSync(): () => void {
-  if (isShareSyncInitialized) {
+// Initialize real-time Firestore sync for share requests (Listeners, Head, Admin only)
+export function initFirestoreShareRequestsSync(currentUser?: UserAccount | null): () => void {
+  if (!currentUser?.id) {
     return () => {};
   }
-  isShareSyncInitialized = true;
 
   // 1. Initial fetch from Firestore
-  fetchShareRequestsFromFirestore()
+  fetchShareRequestsFromFirestore(currentUser)
     .then((remoteReqs) => {
       if (remoteReqs && remoteReqs.length > 0) {
         const cleanRemote = remoteReqs.filter((r) => !isFakeShareRequest(r));
@@ -167,30 +164,31 @@ export function initFirestoreShareRequestsSync(): () => void {
         }
       }
     })
-    .catch((err) => {
-      console.warn('Initial Firestore share requests fetch notice:', err);
-    });
+    .catch(() => {});
 
   // 2. Real-time Firestore subscription
-  const unsubscribeFirestore = subscribeToShareRequests((remoteReqs) => {
-    if (!remoteReqs) return;
-    const cleanRemote = remoteReqs.filter((r) => !isFakeShareRequest(r));
-    const local = getStoredShareRequests();
-    const mergedMap = new Map<string, ConversationShareRequest>();
-    local.forEach((r) => mergedMap.set(r.id, r));
-    cleanRemote.forEach((r) => {
-      const existing = mergedMap.get(r.id);
-      mergedMap.set(r.id, { ...existing, ...r });
-    });
-    const merged = Array.from(mergedMap.values());
-    localStorage.setItem(SHARE_REQUESTS_STORAGE_KEY, JSON.stringify(merged));
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new Event('3awdli_share_request_updated'));
-    }
-  });
+  const unsubscribeFirestore = subscribeToShareRequests(
+    currentUser,
+    (remoteReqs) => {
+      if (!remoteReqs) return;
+      const cleanRemote = remoteReqs.filter((r) => !isFakeShareRequest(r));
+      const local = getStoredShareRequests();
+      const mergedMap = new Map<string, ConversationShareRequest>();
+      local.forEach((r) => mergedMap.set(r.id, r));
+      cleanRemote.forEach((r) => {
+        const existing = mergedMap.get(r.id);
+        mergedMap.set(r.id, { ...existing, ...r });
+      });
+      const merged = Array.from(mergedMap.values());
+      localStorage.setItem(SHARE_REQUESTS_STORAGE_KEY, JSON.stringify(merged));
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('3awdli_share_request_updated'));
+      }
+    },
+    () => {}
+  );
 
   return () => {
-    isShareSyncInitialized = false;
     unsubscribeFirestore();
   };
 }

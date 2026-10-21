@@ -1,8 +1,5 @@
 import { SupportRequest } from '../types';
 import {
-  saveResetTokenToFirestore,
-  getResetTokenFromFirestore,
-  markResetTokenUsedInFirestore,
   firebaseSendPasswordReset,
 } from '../lib/firestoreService';
 
@@ -178,336 +175,62 @@ export interface RequestPasswordResetResult {
 }
 
 /**
- * Requests a real password reset email.
- * Works seamlessly across both:
- * 1. Live Backend (Netlify Functions or Express server running Gmail SMTP)
- * 2. Client-side Firebase Auth backup (built-in Google email delivery)
+ * Requests a real password reset email using Firebase Auth's built-in reset email.
  */
 export async function requestPasswordResetViaEmail(
   email: string,
-  appUrl?: string
+  _appUrl?: string
 ): Promise<RequestPasswordResetResult> {
   const cleanEmail = email.trim().toLowerCase();
-  const currentOrigin =
-    appUrl || (typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.host}` : '');
-
-  console.log(`[Email Service] Initiating password reset request for: "${cleanEmail}"...`);
-
-  // 1. Try calling the backend API (Netlify Function or Express)
-  const result = await safeFetchJson<any>('/api/request-password-reset', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      email: cleanEmail,
-      appUrl: currentOrigin,
-    }),
-  });
-
-  console.log('[Email Service] Backend /api/request-password-reset response:', {
-    ok: result.ok,
-    status: result.status,
-    isHtml: result.isHtml,
-    data: result.data,
-  });
-
-  // If backend API responded
-  if (result.ok && result.data) {
-    const isEmailSent = Boolean(result.data.emailSent || (result.data.success && result.data.smtpConfigured));
-    const provider = result.data.provider || 'smtp';
-
-    // Also persist token copy to Firestore for maximum cross-environment resilience
-    if (result.data.resetUrl) {
-      try {
-        const urlObj = new URL(result.data.resetUrl);
-        const token = urlObj.searchParams.get('token');
-        if (token) {
-          saveResetTokenToFirestore({
-            token,
-            email: cleanEmail,
-            createdAt: Date.now(),
-            expiresAt: Date.now() + 60 * 60 * 1000,
-            used: false,
-          }).catch((e) => {
-            console.warn('[Email Service] Firestore token sync error:', e);
-          });
-        }
-      } catch (err) {
-        console.warn('[Email Service] Token URL parse error:', err);
-      }
-    }
-
-    if (isEmailSent) {
-      console.log(`[Email Service] Reset email confirmed dispatched via Gmail SMTP. Message ID: ${result.data.messageId || 'N/A'}`);
-      return {
-        success: true,
-        emailSent: true,
-        provider,
-        messageId: result.data.messageId,
-        message: `Password reset email dispatched via Gmail (aymane.habbo@gmail.com).${result.data.messageId ? ` Message ID: ${result.data.messageId}` : ''}`,
-        warning: result.data.warning,
-        resetUrl: result.data.resetUrl,
-        smtpConfigured: true,
-      };
-    }
-
-    // Backend reached, but email dispatch failed (e.g. missing GMAIL_APP_PASSWORD)
-    const backendError = result.data.error || 'Gmail delivery failed on backend';
-    console.error('[Email Service] Backend was reached, but email dispatch failed:', backendError);
-
-    // Attempt Firebase Auth as fallback
-    let fbBackupSent = false;
-    try {
-      await firebaseSendPasswordReset(cleanEmail);
-      fbBackupSent = true;
-      console.log('[Email Service] Firebase Auth backup password reset email triggered.');
-    } catch (fbErr: any) {
-      console.warn('[Email Service] Firebase Auth backup email error:', fbErr);
-    }
-
-    if (fbBackupSent) {
-      return {
-        success: true,
-        emailSent: true,
-        provider: 'firebase',
-        message: 'Password reset link sent via Firebase Auth backup.',
-        warning: `Gmail delivery was unavailable: ${backendError}`,
-        resetUrl: result.data.resetUrl,
-        smtpConfigured: false,
-      };
-    }
-
-    return {
-      success: false,
-      emailSent: false,
-      provider: 'none',
-      message: backendError,
-      error: backendError,
-      resetUrl: result.data.resetUrl,
-      smtpConfigured: false,
-    };
-  }
-
-  // 2. If backend is not reachable (e.g. Netlify static hosting where Netlify Function is not responding)
-  console.warn('[Email Service] Backend endpoint /api/request-password-reset unreachable or returned non-JSON:', {
-    status: result.status,
-    isHtml: result.isHtml,
-    rawTextPreview: result.rawText?.substring(0, 150),
-  });
 
   try {
-    const token = generateClientResetToken();
-    const now = Date.now();
-    const expiresAt = now + 60 * 60 * 1000; // 1-hour expiration
-    const resetUrl = `${currentOrigin}/reset-password?token=${token}&email=${encodeURIComponent(cleanEmail)}`;
-
-    await saveResetTokenToFirestore({
-      token,
-      email: cleanEmail,
-      createdAt: now,
-      expiresAt,
-      used: false,
-    });
-
-    let fbSent = false;
-    let fbError = '';
-    try {
-      await firebaseSendPasswordReset(cleanEmail);
-      fbSent = true;
-      console.log('[Email Service] Direct Firebase Auth password reset succeeded.');
-    } catch (fbErr: any) {
-      fbError = fbErr?.message || 'Firebase Auth password reset failed';
-      console.error('[Email Service] Direct Firebase Auth password reset error:', fbErr);
-    }
-
-    if (fbSent) {
-      return {
-        success: true,
-        emailSent: true,
-        provider: 'firebase',
-        message: 'Password reset link sent via Firebase Auth backup (backend function was unreachable).',
-        resetUrl,
-        smtpConfigured: false,
-      };
-    }
-
-    const failureReason = result.isHtml
-      ? 'The backend serverless function is not reachable on this host (Netlify returned HTML). Please verify Netlify environment variables and build output.'
-      : `Backend API unreachable (${result.status || 'network error'}) and Firebase Auth was unable to send: ${fbError}`;
-
-    return {
-      success: false,
-      emailSent: false,
-      provider: 'none',
-      message: failureReason,
-      error: failureReason,
-      resetUrl,
-      smtpConfigured: false,
-    };
+    await firebaseSendPasswordReset(cleanEmail);
   } catch (err: any) {
-    console.warn('Firestore direct reset token creation notice:', err);
-    return {
-      success: false,
-      emailSent: false,
-      provider: 'none',
-      error: err?.message || 'Could not initiate password reset. Please try again.',
-    };
+    console.warn('[Email Service] Firebase Auth password reset notice:', err);
   }
+
+  // Always return neutral success so nobody can discover which emails exist
+  return {
+    success: true,
+    emailSent: true,
+    provider: 'firebase',
+    message: 'If an account exists for this email, a reset link has been sent.',
+    smtpConfigured: false,
+  };
 }
 
 /**
- * Verifies if a reset token is valid, unused, and within the 1-hour expiration window.
- * Checks both backend API and live Firestore database.
+ * Legacy stub for backward compatibility
  */
-export async function verifyPasswordResetToken(token: string): Promise<{
+export async function verifyPasswordResetToken(_token: string): Promise<{
   valid: boolean;
   email?: string;
   error?: 'invalid' | 'expired' | 'already_used' | 'missing_token' | 'server_error';
   message?: string;
 }> {
-  const cleanToken = token.trim();
-  if (!cleanToken) {
-    return {
-      valid: false,
-      error: 'missing_token',
-      message: 'No reset token was provided in the link.',
-    };
-  }
-
-  // 1. Try backend API first
-  const result = await safeFetchJson<any>('/api/verify-reset-token', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ token: cleanToken }),
-  });
-
-  if (result.ok && result.data) {
-    return {
-      valid: Boolean(result.data.valid),
-      email: result.data.email,
-      error: result.data.error,
-      message: result.data.message,
-    };
-  }
-
-  // 2. Fallback to direct Firestore lookup (100% reliable on Netlify live site)
-  try {
-    const record = await getResetTokenFromFirestore(cleanToken);
-    if (!record) {
-      return {
-        valid: false,
-        error: 'invalid',
-        message: 'This password reset link is invalid or does not exist.',
-      };
-    }
-
-    if (record.used) {
-      return {
-        valid: false,
-        error: 'already_used',
-        message: 'This password reset link has already been used. Please request a new one.',
-      };
-    }
-
-    if (Date.now() > record.expiresAt) {
-      return {
-        valid: false,
-        error: 'expired',
-        message: 'This password reset link has expired (links are valid for 1 hour). Please request a new one.',
-      };
-    }
-
-    return {
-      valid: true,
-      email: record.email,
-    };
-  } catch (err: any) {
-    return {
-      valid: false,
-      error: 'server_error',
-      message: err.message || 'Error verifying reset token with database.',
-    };
-  }
+  return {
+    valid: false,
+    error: 'invalid',
+    message: 'Password reset is managed securely by the Firebase email link.',
+  };
 }
 
 /**
- * Submits the new password using the validated one-time token.
- * Validates and marks the token as used across backend and Firestore.
+ * Legacy stub for backward compatibility
  */
 export async function submitPasswordReset(
-  token: string,
-  newPassword: string
+  _token: string,
+  _newPassword: string
 ): Promise<{
   success: boolean;
   email?: string;
   message?: string;
   error?: string;
 }> {
-  const cleanToken = token.trim();
-
-  // 1. Try backend API first
-  const result = await safeFetchJson<any>('/api/reset-password', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      token: cleanToken,
-      newPassword,
-    }),
-  });
-
-  if (result.ok && result.data?.success) {
-    // Also mark used in Firestore
-    markResetTokenUsedInFirestore(cleanToken).catch(() => {});
-    return {
-      success: true,
-      email: result.data.email,
-      message: result.data.message || 'Password successfully updated.',
-    };
-  }
-
-  // 2. Fallback to direct Firestore update (on Netlify live site)
-  try {
-    const record = await getResetTokenFromFirestore(cleanToken);
-    if (!record) {
-      return {
-        success: false,
-        error: 'Invalid reset token.',
-      };
-    }
-
-    if (record.used) {
-      return {
-        success: false,
-        error: 'This password reset link has already been used. Please request a new one.',
-      };
-    }
-
-    if (Date.now() > record.expiresAt) {
-      return {
-        success: false,
-        error: 'This password reset link has expired. Please request a new one.',
-      };
-    }
-
-    // Mark as used in Firestore so it cannot be used again
-    await markResetTokenUsedInFirestore(cleanToken);
-
-    return {
-      success: true,
-      email: record.email,
-      message: 'Password successfully updated.',
-    };
-  } catch (err: any) {
-    return {
-      success: false,
-      error: err.message || 'Failed to update password in database.',
-    };
-  }
+  return {
+    success: false,
+    error: 'Please use the password reset link sent to your email by Firebase.',
+  };
 }
 
 
